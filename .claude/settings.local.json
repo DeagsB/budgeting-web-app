@@ -18,7 +18,16 @@
       "Bash(npx --yes create-next-app@latest ./scaffold-tmp --typescript --tailwind --app --src-dir --eslint --import-alias \"@/*\" --use-npm --no-turbopack --yes)",
       "Bash(npm install *)",
       "Bash(git init *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(choco install *)",
+      "Bash(git rm *)",
+      "Bash(\"/c/ProgramData/chocolatey/bin/gh.exe\" --version)",
+      "Bash(git -c user.email=bespalkodeagan@gmail.com -c 'user.name=Deagan Bespalko' commit -m ' *)",
+      "Bash(/c/Program Files/GitHub CLI/gh.exe auth *)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" repo create budgeting-web-app --private --source=. --remote=origin --push)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" auth setup-git)",
+      "Bash(git push *)",
+      "Bash(git commit *)"
     ]
   }
 }
