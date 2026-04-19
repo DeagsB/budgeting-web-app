@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *2)",
+      "Bash(mkdir -p _extract)",
+      "Bash(unzip -o \"Excel Example.xlsx\" -d _extract/)",
+      "Bash(npm --version)",
+      "Bash(npx --version)",
+      "Bash(pnpm --version)",
+      "Bash(yarn --version)",
+      "Bash(git --version)",
+      "Bash(gh auth *)",
+      "Bash(gh --version)",
+      "Read(//c/Program Files/**)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" --version)",
+      "Bash(npx --yes create-next-app@latest . --typescript --tailwind --app --src-dir --eslint --import-alias \"@/*\" --use-npm --no-turbopack --yes)",
+      "Bash(npx --yes create-next-app@latest ./_scaffold --typescript --tailwind --app --src-dir --eslint --import-alias \"@/*\" --use-npm --no-turbopack --yes)",
+      "Bash(npx --yes create-next-app@latest ./scaffold-tmp --typescript --tailwind --app --src-dir --eslint --import-alias \"@/*\" --use-npm --no-turbopack --yes)",
+      "Bash(npm install *)",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ]
+  }
+}
