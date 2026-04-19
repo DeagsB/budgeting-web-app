@@ -27,7 +27,10 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" repo create budgeting-web-app --private --source=. --remote=origin --push)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" auth setup-git)",
       "Bash(git push *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(git -c user.email=\"bespalkodeagan@gmail.com\" -c user.name=\"Deagan Bespalko\" commit -m \"docs: add workbook structural spec \\(first-pass\\)\")",
+      "Bash(npx tsc *)",
+      "Bash(npx eslint *)"
     ]
   }
 }

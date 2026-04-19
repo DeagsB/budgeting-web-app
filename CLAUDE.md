@@ -12,10 +12,12 @@ A web app that replicates the structure and formulas of a personal-finance Excel
 
 - **Next.js 16** (App Router) + **TypeScript** + **Tailwind v4** — scaffolded via `create-next-app` with `src/`, ESLint, `@/*` alias
 - **React 19**
-- **Supabase** for Postgres + auth (to be added)
+- **Supabase** for Postgres + auth — `@supabase/supabase-js` + `@supabase/ssr` installed; server + browser + proxy clients at `src/lib/supabase/`
 - **Vercel** for hosting, **GitHub** for source
 
 **Next.js 16 and React 19 are post-training-cutoff.** APIs, file conventions, and caching rules differ from earlier versions. Consult `node_modules/next/dist/docs/` (and React 19 release notes) before writing any Next.js or React code — do not rely on memory of App Router patterns from Next 13/14/15.
+
+**Next 16 breaking rename:** what Next 13/14/15 called `middleware.ts` is now `proxy.ts` with an exported `proxy()` function. Lives at `src/proxy.ts`. Supabase's published SSR docs still say "middleware" — the file/function rename is the only Next-side difference.
 
 ## Commands
 
@@ -23,6 +25,40 @@ A web app that replicates the structure and formulas of a personal-finance Excel
 - `npm run build` — production build
 - `npm run start` — serve production build
 - `npm run lint` — ESLint
+
+## Architecture
+
+- `src/app/` — App Router routes.
+  - `page.tsx` — public landing; reflects auth state.
+  - `dashboard/page.tsx` — authed-user home (stub).
+  - `(auth)/` — sign-in + sign-up pages (route group, doesn't affect URL).
+  - `(auth)/actions.ts` — `signIn`, `signUp`, `signOut` Server Actions.
+  - `auth/confirm/route.ts` — email-confirmation callback (Supabase `verifyOtp`).
+- `src/lib/supabase/` — three client builders:
+  - `client.ts` → `createBrowserClient` for Client Components.
+  - `server.ts` → `createServerClient` for Server Components / Server Actions / Route Handlers.
+  - `proxy.ts` → `updateSession` helper that runs inside the Next proxy to refresh the Supabase session on every request. Wired up by `src/proxy.ts`.
+- `supabase/migrations/` — SQL migrations. Apply via `supabase db push` or paste into the dashboard SQL editor. Every table has RLS enabled; access is gated by `is_household_member()`.
+- `docs/workbook-spec.md` — structural spec extracted from the source workbook. Sanitised (no personal data).
+- `docs/DECISIONS.md` — running log of scope/architecture choices. Append new decisions here, don't ask for each one.
+
+## Environment
+
+Required env vars (copy `.env.example` → `.env.local`):
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+Without these the app will crash on first request — sign up for a Supabase project, paste the URL and anon key.
+
+## Auth model
+
+- Supabase email+password, with email confirmation enabled.
+- `getUser()` (or `getClaims()`) for any authorization decision. **Never use `getSession()`** — the user inside is unverified and spoofable.
+- Proxy runs on every non-asset request and refreshes the session cookie when needed. If you add an unauthenticated route, update the `isAuthRoute` check in `src/lib/supabase/proxy.ts`.
+
+## Money
+
+All monetary amounts are stored as **`bigint` minor units (cents)**. Never use `numeric`/`float` for money. UI formats with `Intl.NumberFormat`.
 
 ## The source spreadsheet is a *formula spec*, not seed data
 
