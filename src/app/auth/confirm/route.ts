@@ -2,23 +2,32 @@ import { type NextRequest, NextResponse } from 'next/server'
 import type { EmailOtpType } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 
-// Supabase email-confirmation lands here with ?token_hash=...&type=signup&next=...
+// Supabase's email-confirmation link can land here in two shapes:
+//   1. PKCE flow:         ?code=<uuid>[&next=/path]
+//   2. Legacy OTP flow:   ?token_hash=<hash>&type=<email-otp-type>[&next=/path]
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
+  const next = searchParams.get('next') ?? '/dashboard'
+  const supabase = await createClient()
+
+  const code = searchParams.get('code')
+  if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    if (error) {
+      return NextResponse.redirect(`${origin}/sign-in?error=${encodeURIComponent(error.message)}`)
+    }
+    return NextResponse.redirect(`${origin}${next}`)
+  }
+
   const token_hash = searchParams.get('token_hash')
   const type = searchParams.get('type') as EmailOtpType | null
-  const next = searchParams.get('next') ?? '/dashboard'
-
-  if (!token_hash || !type) {
-    return NextResponse.redirect(`${origin}/sign-in?error=missing_token`)
+  if (token_hash && type) {
+    const { error } = await supabase.auth.verifyOtp({ type, token_hash })
+    if (error) {
+      return NextResponse.redirect(`${origin}/sign-in?error=${encodeURIComponent(error.message)}`)
+    }
+    return NextResponse.redirect(`${origin}${next}`)
   }
 
-  const supabase = await createClient()
-  const { error } = await supabase.auth.verifyOtp({ type, token_hash })
-
-  if (error) {
-    return NextResponse.redirect(`${origin}/sign-in?error=${encodeURIComponent(error.message)}`)
-  }
-
-  return NextResponse.redirect(`${origin}${next}`)
+  return NextResponse.redirect(`${origin}/sign-in?error=missing_token`)
 }

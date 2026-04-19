@@ -30,7 +30,13 @@
       "Bash(git commit *)",
       "Bash(git -c user.email=\"bespalkodeagan@gmail.com\" -c user.name=\"Deagan Bespalko\" commit -m \"docs: add workbook structural spec \\(first-pass\\)\")",
       "Bash(npx tsc *)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Bash(git check-ignore *)",
+      "Bash(npm run *)",
+      "WebSearch",
+      "WebFetch(domain:supabase.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(claude mcp *)"
     ]
   }
 }

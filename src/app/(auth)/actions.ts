@@ -31,7 +31,7 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
   if (typeof v === 'string') return { error: v }
 
   const supabase = await createClient()
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email: v.email,
     password: v.password,
     options: {
@@ -40,6 +40,9 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
   })
   if (error) return { error: error.message }
 
+  revalidatePath('/', 'layout')
+  // Email-confirmation off → session is live immediately; skip the "check email" page.
+  if (data.session) redirect('/onboarding')
   redirect('/sign-up/check-email')
 }
 
