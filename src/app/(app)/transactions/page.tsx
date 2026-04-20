@@ -11,8 +11,14 @@ type Txn = {
   amount_cents: number
   description: string | null
   account_id: string
-  category_id: string | null
   member_id: string | null
+}
+
+type Split = {
+  transaction_id: string
+  category_id: string | null
+  amount_cents: number
+  sort_order: number
 }
 
 export default async function TransactionsPage({
@@ -51,7 +57,7 @@ export default async function TransactionsPage({
 
   let q = supabase
     .from('transactions')
-    .select('id, occurred_on, amount_cents, description, account_id, category_id, member_id')
+    .select('id, occurred_on, amount_cents, description, account_id, member_id')
     .eq('household_id', ctx.householdId)
     .gte('occurred_on', month)
     .lt('occurred_on', nextMonth)
@@ -59,12 +65,38 @@ export default async function TransactionsPage({
     .order('created_at', { ascending: false })
 
   if (params.account) q = q.eq('account_id', params.account)
-  if (params.category) q = q.eq('category_id', params.category)
   if (params.member === 'shared') q = q.is('member_id', null)
   else if (params.member) q = q.eq('member_id', params.member)
 
   const { data: rows } = await q
-  const transactions = (rows ?? []) as Txn[]
+  let transactions = (rows ?? []) as Txn[]
+
+  // Fetch splits for the returned transactions.
+  const txIds = transactions.map((t) => t.id)
+  let splitsList: Split[] = []
+  if (txIds.length > 0) {
+    const { data: sp } = await supabase
+      .from('transaction_splits')
+      .select('transaction_id, category_id, amount_cents, sort_order')
+      .in('transaction_id', txIds)
+      .order('sort_order')
+    splitsList = (sp ?? []) as Split[]
+  }
+
+  // Apply category filter at the transaction level: a transaction matches
+  // if any split maps to the category.
+  if (params.category) {
+    const matched = new Set(
+      splitsList.filter((s) => s.category_id === params.category).map((s) => s.transaction_id),
+    )
+    transactions = transactions.filter((t) => matched.has(t.id))
+  }
+
+  const splitsByTx = new Map<string, Split[]>()
+  for (const s of splitsList) {
+    if (!splitsByTx.has(s.transaction_id)) splitsByTx.set(s.transaction_id, [])
+    splitsByTx.get(s.transaction_id)!.push(s)
+  }
 
   const outflow = transactions
     .filter((t) => t.amount_cents > 0)
@@ -86,6 +118,12 @@ export default async function TransactionsPage({
           <p className="mt-1 text-sm text-gray-500">{monthLabel(month)}</p>
         </div>
         <div className="flex items-center gap-3 text-sm">
+          <Link
+            href="/transactions/import"
+            className="rounded border border-gray-300 px-3 py-1 font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Import CSV
+          </Link>
           <Link
             href={{ pathname: '/transactions', query: { ...params, month: addMonths(month, -1) } }}
             className="text-gray-500 hover:text-gray-900"
@@ -147,31 +185,49 @@ export default async function TransactionsPage({
           <p className="px-6 py-6 text-sm text-gray-500">No transactions this month.</p>
         ) : (
           <ul className="divide-y divide-gray-100">
-            {transactions.map((t) => (
-              <TransactionRow
-                key={t.id}
-                transaction={{
-                  id: t.id,
-                  occurred_on: t.occurred_on,
-                  occurredLabel: formatDate(t.occurred_on),
-                  amount_cents: t.amount_cents,
-                  description: t.description,
-                  account_id: t.account_id,
-                  accountName: accountName.get(t.account_id) ?? '—',
-                  category_id: t.category_id,
-                  categoryName: t.category_id ? (categoryName.get(t.category_id) ?? '—') : null,
-                  member_id: t.member_id,
-                  memberName: t.member_id ? (memberName.get(t.member_id) ?? null) : null,
-                }}
-                accounts={(accounts ?? []).map((a) => ({ id: a.id, name: a.name }))}
-                categories={(categories ?? []).map((c) => ({
-                  id: c.id,
-                  parent_id: c.parent_id,
-                  name: c.name,
-                }))}
-                members={(members ?? []).map((m) => ({ id: m.id, name: m.display_name }))}
-              />
-            ))}
+            {transactions.map((t) => {
+              const splits = splitsByTx.get(t.id) ?? []
+              const splitCategories = splits
+                .map((s) => (s.category_id ? (categoryName.get(s.category_id) ?? '—') : 'Uncategorized'))
+                .filter((s, i, arr) => arr.indexOf(s) === i)
+              const categorySummary =
+                splits.length <= 1
+                  ? (splits[0]?.category_id
+                      ? (categoryName.get(splits[0].category_id!) ?? '—')
+                      : 'Uncategorized')
+                  : `Split: ${splitCategories.join(' + ')}`
+              const primaryCategoryId = splits[0]?.category_id ?? null
+              return (
+                <TransactionRow
+                  key={t.id}
+                  transaction={{
+                    id: t.id,
+                    occurred_on: t.occurred_on,
+                    occurredLabel: formatDate(t.occurred_on),
+                    amount_cents: t.amount_cents,
+                    description: t.description,
+                    account_id: t.account_id,
+                    accountName: accountName.get(t.account_id) ?? '—',
+                    primary_category_id: primaryCategoryId,
+                    categorySummary,
+                    isSplit: splits.length > 1,
+                    splits: splits.map((s) => ({
+                      category_id: s.category_id,
+                      amount_cents: s.amount_cents,
+                    })),
+                    member_id: t.member_id,
+                    memberName: t.member_id ? (memberName.get(t.member_id) ?? null) : null,
+                  }}
+                  accounts={(accounts ?? []).map((a) => ({ id: a.id, name: a.name }))}
+                  categories={(categories ?? []).map((c) => ({
+                    id: c.id,
+                    parent_id: c.parent_id,
+                    name: c.name,
+                  }))}
+                  members={(members ?? []).map((m) => ({ id: m.id, name: m.display_name }))}
+                />
+              )
+            })}
           </ul>
         )}
       </section>

@@ -28,13 +28,16 @@ export default async function ContributionsPage({
   const supabase = await createClient()
   const yearStart = `${year}-01-01`
   const nextYearStart = `${year + 1}-01-01`
+  const priorYearStart = `${year - 1}-01-01`
 
   const [
     { data: members },
     { data: accounts },
     { data: rooms },
+    { data: priorRooms },
     { data: limits },
     { data: transactions },
+    { data: priorTransactions },
   ] = await Promise.all([
     supabase
       .from('members')
@@ -52,6 +55,11 @@ export default async function ContributionsPage({
       .select('member_id, account_type, year, opening_room_cents, annual_allowance_override_cents')
       .eq('household_id', ctx.householdId)
       .eq('year', year),
+    supabase
+      .from('member_contribution_rooms')
+      .select('member_id, account_type, year, opening_room_cents, annual_allowance_override_cents')
+      .eq('household_id', ctx.householdId)
+      .eq('year', year - 1),
     supabase.from('cra_annual_limits').select('year, account_type, annual_limit_cents, note'),
     supabase
       .from('transactions')
@@ -59,13 +67,21 @@ export default async function ContributionsPage({
       .eq('household_id', ctx.householdId)
       .gte('occurred_on', yearStart)
       .lt('occurred_on', nextYearStart),
+    supabase
+      .from('transactions')
+      .select('account_id, amount_cents')
+      .eq('household_id', ctx.householdId)
+      .gte('occurred_on', priorYearStart)
+      .lt('occurred_on', yearStart),
   ])
 
   const memberRows = members ?? []
   const accountRows = accounts ?? []
   const roomRows = rooms ?? []
+  const priorRoomRows = priorRooms ?? []
   const limitRows = limits ?? []
   const txRows = transactions ?? []
+  const priorTxRows = priorTransactions ?? []
 
   const accountsByMemberType = new Map<string, string[]>()
   for (const a of accountRows) {
@@ -75,14 +91,23 @@ export default async function ContributionsPage({
     accountsByMemberType.get(key)!.push(a.id)
   }
 
-  const netByAccount = new Map<string, { contributed: number; withdrawn: number }>()
-  for (const tx of txRows) {
-    const amt = Number(tx.amount_cents)
-    const entry = netByAccount.get(tx.account_id) ?? { contributed: 0, withdrawn: 0 }
-    if (amt > 0) entry.contributed += amt
-    else entry.withdrawn += -amt
-    netByAccount.set(tx.account_id, entry)
+  function netsByAccount(rows: { account_id: string; amount_cents: number }[]): Map<
+    string,
+    { contributed: number; withdrawn: number }
+  > {
+    const out = new Map<string, { contributed: number; withdrawn: number }>()
+    for (const tx of rows) {
+      const amt = Number(tx.amount_cents)
+      const entry = out.get(tx.account_id) ?? { contributed: 0, withdrawn: 0 }
+      if (amt > 0) entry.contributed += amt
+      else entry.withdrawn += -amt
+      out.set(tx.account_id, entry)
+    }
+    return out
   }
+
+  const netThisYear = netsByAccount(txRows)
+  const netPriorYear = netsByAccount(priorTxRows)
 
   const limitByYearType = new Map<string, { amount: number; note: string | null }>()
   for (const l of limitRows)
@@ -104,14 +129,70 @@ export default async function ContributionsPage({
           : null,
     })
 
+  const priorRoomByMemberType = new Map<
+    string,
+    { opening: number; allowanceOverride: number | null }
+  >()
+  for (const r of priorRoomRows)
+    priorRoomByMemberType.set(`${r.member_id}:${r.account_type}`, {
+      opening: Number(r.opening_room_cents),
+      allowanceOverride:
+        r.annual_allowance_override_cents !== null
+          ? Number(r.annual_allowance_override_cents)
+          : null,
+    })
+
+  function sumAcrossAccounts(
+    memberId: string,
+    type: RegisteredType,
+    map: Map<string, { contributed: number; withdrawn: number }>,
+  ): { contributed: number; withdrawn: number } {
+    const accountIds = accountsByMemberType.get(`${memberId}:${type}`) ?? []
+    let contributed = 0
+    let withdrawn = 0
+    for (const aid of accountIds) {
+      const net = map.get(aid)
+      if (!net) continue
+      contributed += net.contributed
+      withdrawn += net.withdrawn
+    }
+    return { contributed, withdrawn }
+  }
+
+  // Compute prior-year closing balance per (member, type), used to seed
+  // current-year opening room for TFSA (withdrawals restore) and FHSA
+  // (withdrawals do NOT restore).
+  function priorYearClosing(memberId: string, type: RegisteredType): number {
+    const key = `${memberId}:${type}`
+    const priorRoom = priorRoomByMemberType.get(key)
+    const priorLimit = limitByYearType.get(`${year - 1}:${type}`)?.amount ?? 0
+    const priorAllowance =
+      priorRoom?.allowanceOverride !== undefined && priorRoom?.allowanceOverride !== null
+        ? priorRoom.allowanceOverride
+        : priorLimit
+    const priorOpening = priorRoom?.opening ?? 0
+    const { contributed, withdrawn } = sumAcrossAccounts(memberId, type, netPriorYear)
+
+    // Prior closing = opening + allowance − contributions
+    const closing = priorOpening + priorAllowance - contributed
+    if (type === 'tfsa') {
+      // TFSA: withdrawals during the year restore room on Jan 1 of the
+      // following year. So add withdrawn to the closing as carried room.
+      return closing + withdrawn
+    }
+    // RRSP + FHSA: no automatic restore from withdrawals.
+    return closing
+  }
+
   type RowVM = {
     member_id: string
     memberName: string
     type: RegisteredType
     opening: number
+    openingIsSuggestion: boolean
+    suggestedOpeningCents: number | null
     allowanceOverride: number | null
     craAllowance: number
-    craNote: string | null
     contributed: number
     withdrawn: number
   }
@@ -121,23 +202,21 @@ export default async function ContributionsPage({
       const key = `${m.id}:${type}`
       const roomEntry = roomByMemberType.get(key)
       const limitEntry = limitByYearType.get(`${year}:${type}`)
-      const accountIds = accountsByMemberType.get(key) ?? []
-      let contributed = 0
-      let withdrawn = 0
-      for (const aid of accountIds) {
-        const net = netByAccount.get(aid)
-        if (!net) continue
-        contributed += net.contributed
-        withdrawn += net.withdrawn
-      }
+      const { contributed, withdrawn } = sumAcrossAccounts(m.id, type, netThisYear)
+
+      const hasPersisted = roomEntry !== undefined
+      const suggested = priorYearClosing(m.id, type)
+      const opening = hasPersisted ? (roomEntry?.opening ?? 0) : suggested
+
       rowsVM.push({
         member_id: m.id,
         memberName: m.display_name,
         type,
-        opening: roomEntry?.opening ?? 0,
+        opening,
+        openingIsSuggestion: !hasPersisted && suggested !== 0,
+        suggestedOpeningCents: !hasPersisted && suggested !== 0 ? suggested : null,
         allowanceOverride: roomEntry?.allowanceOverride ?? null,
         craAllowance: limitEntry?.amount ?? 0,
-        craNote: limitEntry?.note ?? null,
         contributed,
         withdrawn,
       })
@@ -211,13 +290,11 @@ export default async function ContributionsPage({
 
       <p className="text-xs text-gray-500">
         Opening room is the carry-forward balance at Jan 1. For RRSP, paste the number from your
-        latest Notice of Assessment; for TFSA/FHSA, start with any unused room from prior years.
-        Allowance defaults to the CRA annual limit in the database; use the override to paste a
-        personalised figure (essential for RRSP, which depends on earned income).
-        Contributions are summed from positive transactions against your registered accounts this
-        year. Withdrawals are shown for reference but don&apos;t automatically restore room — TFSA
-        withdrawals create new room for the following year, which you&apos;ll enter manually on
-        the next year&apos;s page.
+        latest Notice of Assessment; for TFSA/FHSA, the app suggests next year&apos;s opening based
+        on prior year data (TFSA includes withdrawals that restore on Jan 1; FHSA + RRSP do not).
+        Suggested values appear as placeholders — edit and hit Save to lock them in. Allowance
+        defaults to the CRA annual limit; use the override to paste a personalised figure
+        (essential for RRSP).
       </p>
     </div>
   )

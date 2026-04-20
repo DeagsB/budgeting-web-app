@@ -25,7 +25,7 @@ export default async function PnLPage({
 
   const supabase = await createClient()
 
-  const [{ data: catRows }, { data: txRows }, { data: memberRows }] = await Promise.all([
+  const [{ data: catRows }, { data: txRows }, { data: splitRows }, { data: memberRows }] = await Promise.all([
     supabase
       .from('categories')
       .select('id, parent_id, name')
@@ -33,10 +33,17 @@ export default async function PnLPage({
       .order('sort_order'),
     supabase
       .from('transactions')
-      .select('category_id, amount_cents, member_id')
+      .select('id, amount_cents, member_id')
       .eq('household_id', ctx.householdId)
       .gte('occurred_on', month)
       .lt('occurred_on', nextMonth),
+    supabase
+      .from('transaction_splits')
+      .select('category_id, amount_cents, transaction:transactions!inner(occurred_on)')
+      .eq('household_id', ctx.householdId)
+      .gt('amount_cents', 0)
+      .gte('transaction.occurred_on', month)
+      .lt('transaction.occurred_on', nextMonth),
     supabase
       .from('members')
       .select('id, display_name')
@@ -47,12 +54,10 @@ export default async function PnLPage({
   const categories: Category[] = (catRows ?? []) as Category[]
   const memberName = new Map((memberRows ?? []).map((m) => [m.id, m.display_name]))
 
-  // Income = negative amounts, grouped by member
+  // Income = negative transaction totals, grouped by member (income rarely
+  // benefits from being split by category so we keep the member-level view).
   const incomeByMember: Record<string, number> = {}
   let totalIncome = 0
-  // Expense by category (roll up to parent)
-  const expenseDirect: Record<string, number> = {}
-  const expenseRolled: Record<string, number> = {}
   let totalExpense = 0
 
   for (const tx of txRows ?? []) {
@@ -63,10 +68,15 @@ export default async function PnLPage({
       totalIncome += -amt
     } else if (amt > 0) {
       totalExpense += amt
-      if (tx.category_id) {
-        expenseDirect[tx.category_id] = (expenseDirect[tx.category_id] ?? 0) + amt
-      }
     }
+  }
+
+  // Expense by category (roll up to parent), sourced from splits.
+  const expenseDirect: Record<string, number> = {}
+  const expenseRolled: Record<string, number> = {}
+  for (const s of splitRows ?? []) {
+    if (!s.category_id) continue
+    expenseDirect[s.category_id] = (expenseDirect[s.category_id] ?? 0) + Number(s.amount_cents)
   }
   for (const c of categories) expenseRolled[c.id] = expenseDirect[c.id] ?? 0
   for (const c of categories) {

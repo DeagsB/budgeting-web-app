@@ -80,6 +80,7 @@ export async function updateCategory(fd: FormData): Promise<void> {
   const id = String(fd.get('id') ?? '')
   const name = String(fd.get('name') ?? '').trim().slice(0, 80)
   const code = String(fd.get('code') ?? '').trim().toUpperCase()
+  const rollover_enabled = fd.get('rollover_enabled') === 'on'
   if (!id || !name || !CODE_RE.test(code)) return
 
   const ctx = await getHouseholdContext()
@@ -88,11 +89,12 @@ export async function updateCategory(fd: FormData): Promise<void> {
   const supabase = await createClient()
   await supabase
     .from('categories')
-    .update({ name, code })
+    .update({ name, code, rollover_enabled })
     .eq('id', id)
     .eq('household_id', ctx.householdId)
 
   revalidatePath('/categories')
+  revalidatePath('/budgets')
 }
 
 export async function archiveCategory(fd: FormData): Promise<void> {

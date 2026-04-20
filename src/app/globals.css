@@ -1,8 +1,15 @@
 @import "tailwindcss";
 
+/*
+ * Dark theme strategy: flip Tailwind v4's grayscale palette at the CSS variable
+ * level via prefers-color-scheme. Every `bg-white`, `text-gray-900`, and friend
+ * utility class resolves through `var(--color-*)`, so the whole app adapts
+ * without touching individual JSX. Red/green accents stay unchanged.
+ */
+
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #111827;
 }
 
 @theme inline {
@@ -16,4 +23,42 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Background/foreground tokens */
+    --background: #0b0c0f;
+    --foreground: #ededed;
+
+    /* Invert Tailwind's gray ramp. bg-white becomes dark surface; bg-gray-50
+       stays "just off the page bg"; text-gray-500 stays mid-contrast but
+       readable on dark. */
+    --color-white: #15171c;
+    --color-gray-50: #1b1e24;
+    --color-gray-100: #22252c;
+    --color-gray-200: #2b2f37;
+    --color-gray-300: #3a3f48;
+    --color-gray-400: #7a808a;
+    --color-gray-500: #9097a0;
+    --color-gray-600: #b5bac2;
+    --color-gray-700: #cdd1d7;
+    --color-gray-800: #dee1e5;
+    --color-gray-900: #ededed;
+    --color-gray-950: #f6f7f8;
+  }
+
+  /* Strengthen form-control contrast: default input focus rings assume a
+     white page. Give text inputs a dark surface + light text. */
+  input[type='text'],
+  input[type='email'],
+  input[type='password'],
+  input[type='date'],
+  input[type='number'],
+  input:not([type]),
+  select,
+  textarea {
+    background-color: var(--color-white);
+    color: var(--foreground);
+  }
 }

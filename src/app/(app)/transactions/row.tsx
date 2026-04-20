@@ -4,8 +4,9 @@ import { useState } from 'react'
 import { formatMoney } from '@/lib/format'
 import { updateTransaction, deleteTransaction } from './actions'
 import { CategorySelect } from './category-select'
+import { SplitEditor } from './split-editor'
 
-type Transaction = {
+type TransactionVM = {
   id: string
   occurred_on: string
   occurredLabel: string
@@ -13,8 +14,10 @@ type Transaction = {
   description: string | null
   account_id: string
   accountName: string
-  category_id: string | null
-  categoryName: string | null
+  primary_category_id: string | null
+  categorySummary: string
+  isSplit: boolean
+  splits: { category_id: string | null; amount_cents: number }[]
   member_id: string | null
   memberName: string | null
 }
@@ -25,12 +28,13 @@ export function TransactionRow({
   categories,
   members,
 }: {
-  transaction: Transaction
+  transaction: TransactionVM
   accounts: { id: string; name: string }[]
   categories: { id: string; parent_id: string | null; name: string }[]
   members: { id: string; name: string }[]
 }) {
   const [editing, setEditing] = useState(false)
+  const [showSplits, setShowSplits] = useState(false)
 
   if (editing) {
     const abs = Math.abs(t.amount_cents)
@@ -85,8 +89,14 @@ export function TransactionRow({
             <CategorySelect
               name="category_id"
               categories={categories}
-              defaultValue={t.category_id ?? ''}
+              defaultValue={t.primary_category_id ?? ''}
             />
+            {t.isSplit && (
+              <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                This transaction is split across multiple categories. Editing the category here
+                replaces the splits with a single row.
+              </p>
+            )}
           </div>
 
           <select
@@ -131,42 +141,69 @@ export function TransactionRow({
   const sign = t.amount_cents < 0 ? '+' : ''
 
   return (
-    <li className="flex items-center gap-4 px-6 py-3 text-sm">
-      <div className="w-24 shrink-0 tabular-nums text-gray-500">{t.occurredLabel}</div>
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-medium text-gray-900">{t.description ?? '—'}</div>
-        <div className="truncate text-xs text-gray-500">
-          {t.accountName}
-          {' · '}
-          {t.categoryName ?? 'Uncategorized'}
-          {' · '}
-          {t.memberName ?? 'Shared'}
+    <li className="flex flex-col">
+      <div className="flex items-center gap-4 px-6 py-3 text-sm">
+        <div className="w-24 shrink-0 tabular-nums text-gray-500">{t.occurredLabel}</div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-medium text-gray-900">
+            {t.description ?? '—'}
+            {t.isSplit && (
+              <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-normal text-gray-600">
+                split
+              </span>
+            )}
+          </div>
+          <div className="truncate text-xs text-gray-500">
+            {t.accountName}
+            {' · '}
+            {t.categorySummary}
+            {' · '}
+            {t.memberName ?? 'Shared'}
+          </div>
+        </div>
+        <div className={`w-28 shrink-0 text-right tabular-nums ${color}`}>
+          {sign}
+          {formatMoney(Math.abs(t.amount_cents))}
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowSplits((v) => !v)}
+            className="text-xs text-gray-500 hover:text-gray-900"
+          >
+            {showSplits ? 'Hide splits' : 'Splits'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="text-xs text-gray-500 hover:text-gray-900"
+          >
+            Edit
+          </button>
+          <form
+            action={deleteTransaction}
+            onSubmit={(e) => {
+              if (!confirm('Delete this transaction?')) e.preventDefault()
+            }}
+          >
+            <input type="hidden" name="id" value={t.id} />
+            <button type="submit" className="text-xs text-red-600 hover:text-red-800">
+              Delete
+            </button>
+          </form>
         </div>
       </div>
-      <div className={`w-28 shrink-0 text-right tabular-nums ${color}`}>
-        {sign}
-        {formatMoney(Math.abs(t.amount_cents))}
-      </div>
-      <div className="flex shrink-0 items-center gap-3">
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="text-xs text-gray-500 hover:text-gray-900"
-        >
-          Edit
-        </button>
-        <form
-          action={deleteTransaction}
-          onSubmit={(e) => {
-            if (!confirm('Delete this transaction?')) e.preventDefault()
-          }}
-        >
-          <input type="hidden" name="id" value={t.id} />
-          <button type="submit" className="text-xs text-red-600 hover:text-red-800">
-            Delete
-          </button>
-        </form>
-      </div>
+
+      {showSplits && (
+        <div className="border-t border-gray-100 bg-gray-50 px-6 py-4">
+          <SplitEditor
+            transactionId={t.id}
+            totalAmountCents={t.amount_cents}
+            initialSplits={t.splits}
+            categories={categories}
+          />
+        </div>
+      )}
     </li>
   )
 }

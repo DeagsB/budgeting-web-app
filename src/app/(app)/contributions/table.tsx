@@ -10,6 +10,8 @@ type Row = {
   type: 'tfsa' | 'rrsp' | 'fhsa'
   typeLabel: string
   opening: number
+  openingIsSuggestion: boolean
+  suggestedOpeningCents: number | null
   allowanceOverride: number | null
   craAllowance: number
   contributed: number
@@ -75,8 +77,25 @@ export function ContributionTable({ year, rows }: { year: number; rows: Row[] })
                         name={`opening:${memberId}:${r.type}`}
                         type="text"
                         inputMode="decimal"
-                        defaultValue={(r.opening / 100).toFixed(2)}
-                        className="w-28 rounded border border-gray-300 px-2 py-1 text-right tabular-nums"
+                        defaultValue={
+                          r.openingIsSuggestion ? '' : (r.opening / 100).toFixed(2)
+                        }
+                        placeholder={
+                          r.suggestedOpeningCents !== null
+                            ? (r.suggestedOpeningCents / 100).toFixed(2)
+                            : '0.00'
+                        }
+                        className={
+                          'w-28 rounded border px-2 py-1 text-right tabular-nums ' +
+                          (r.openingIsSuggestion
+                            ? 'border-amber-300 bg-amber-50 dark:border-amber-600 dark:bg-amber-900/20'
+                            : 'border-gray-300')
+                        }
+                        title={
+                          r.openingIsSuggestion
+                            ? `Suggested from prior year (${r.type === 'tfsa' ? 'TFSA withdrawals restore on Jan 1' : 'carries unused room only'})`
+                            : undefined
+                        }
                       />
                     </td>
                     <td className="px-4 py-2 text-right">
@@ -115,7 +134,9 @@ export function ContributionTable({ year, rows }: { year: number; rows: Row[] })
 
       <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-6 py-3">
         <span className="text-xs text-gray-500">
-          {saved ? 'Saved.' : 'Leave allowance blank to use the CRA default.'}
+          {saved
+            ? 'Saved.'
+            : 'Amber inputs are suggested from prior-year data. Leave allowance blank to use the CRA default.'}
         </span>
         <button
           type="submit"

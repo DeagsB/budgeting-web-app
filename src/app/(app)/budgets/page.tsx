@@ -9,6 +9,7 @@ type Category = {
   parent_id: string | null
   name: string
   code: string
+  rollover_enabled: boolean
 }
 
 export default async function BudgetsPage({
@@ -36,7 +37,7 @@ export default async function BudgetsPage({
   ] = await Promise.all([
     supabase
       .from('categories')
-      .select('id, parent_id, name, code')
+      .select('id, parent_id, name, code, rollover_enabled')
       .eq('household_id', ctx.householdId)
       .is('archived_at', null)
       .order('sort_order'),
@@ -46,12 +47,12 @@ export default async function BudgetsPage({
       .eq('household_id', ctx.householdId)
       .eq('month', month),
     supabase
-      .from('transactions')
-      .select('category_id, amount_cents')
+      .from('transaction_splits')
+      .select('category_id, amount_cents, transaction:transactions!inner(occurred_on)')
       .eq('household_id', ctx.householdId)
-      .gte('occurred_on', month)
-      .lt('occurred_on', nextMonth)
-      .gt('amount_cents', 0),
+      .gt('amount_cents', 0)
+      .gte('transaction.occurred_on', month)
+      .lt('transaction.occurred_on', nextMonth),
     supabase
       .from('monthly_budgets')
       .select('category_id, month, amount_cents')
@@ -59,12 +60,12 @@ export default async function BudgetsPage({
       .gte('month', yearStart)
       .lte('month', month),
     supabase
-      .from('transactions')
-      .select('category_id, amount_cents, occurred_on')
+      .from('transaction_splits')
+      .select('category_id, amount_cents, transaction:transactions!inner(occurred_on)')
       .eq('household_id', ctx.householdId)
-      .gte('occurred_on', yearStart)
-      .lt('occurred_on', nextMonth)
-      .gt('amount_cents', 0),
+      .gt('amount_cents', 0)
+      .gte('transaction.occurred_on', yearStart)
+      .lt('transaction.occurred_on', nextMonth),
   ])
 
   const categories: Category[] = (catRows ?? []) as Category[]
@@ -114,6 +115,18 @@ export default async function BudgetsPage({
       c.parent_id,
       (ytdActualRolled.get(c.parent_id) ?? 0) + (ytdActualDirect.get(c.id) ?? 0),
     )
+  }
+
+  // Rollover credit per category: for categories with rollover_enabled, the
+  // prior-months (budget − actual) carries into this month as extra budget.
+  // Negative credit means prior overspend reduces this month's budget.
+  const rolloverCredit = new Map<string, number>()
+  for (const c of categories) {
+    if (!c.rollover_enabled) continue
+    const priorBudget = (ytdBudget.get(c.id) ?? 0) - (budgetByCat.get(c.id) ?? 0)
+    const priorActual = (ytdActualDirect.get(c.id) ?? 0) - (actualDirect.get(c.id) ?? 0)
+    const credit = priorBudget - priorActual
+    if (credit !== 0) rolloverCredit.set(c.id, credit)
   }
 
   const totalBudget = Array.from(budgetByCat.entries())
@@ -193,11 +206,14 @@ export default async function BudgetsPage({
         actualDirect={Object.fromEntries(actualDirect)}
         ytdBudget={Object.fromEntries(ytdBudget)}
         ytdActualRolled={Object.fromEntries(ytdActualRolled)}
+        rolloverCredit={Object.fromEntries(rolloverCredit)}
       />
 
       <p className="text-xs text-gray-500">
-        Actuals count outflows only (positive amounts). Paycheques and other inflows show up on the
-        P&amp;L view (coming). Parent-category actuals include the sum of their children.
+        Actuals count outflows only (positive amounts). Paycheques and other inflows show on the
+        P&amp;L view. Parent-category actuals include their children. Rollover categories (flagged
+        on the Categories page) add prior-month surplus/deficit to this month&apos;s effective
+        budget.
       </p>
     </div>
   )

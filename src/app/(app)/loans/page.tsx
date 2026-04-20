@@ -2,8 +2,9 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { formatMoney, formatDate, monthStartISO } from '@/lib/format'
-import { amortize } from '@/lib/amortization'
+import { amortize, buildRateLookup } from '@/lib/amortization'
 import { LoanForm } from './form'
+import { RateHistory } from './rate-history'
 
 type LoanAccount = {
   id: string
@@ -20,6 +21,14 @@ type LoanDetail = {
   contractual_monthly_payment_cents: number
 }
 
+type RateChange = {
+  id: string
+  account_id: string
+  effective_month: string
+  annual_rate_bps: number
+  note: string | null
+}
+
 export default async function LoansPage() {
   const ctx = await getHouseholdContext()
   if (!ctx) return null
@@ -27,28 +36,42 @@ export default async function LoansPage() {
   const supabase = await createClient()
   const month = monthStartISO()
 
-  const [{ data: loanAccounts }, { data: loanDetails }, { data: snapshots }] = await Promise.all([
-    supabase
-      .from('accounts')
-      .select('id, name, opening_balance_cents, type')
-      .eq('household_id', ctx.householdId)
-      .eq('type', 'loan')
-      .is('archived_at', null)
-      .order('name'),
-    supabase
-      .from('loan_details')
-      .select('account_id, annual_rate_bps, origination_date, original_principal_cents, contractual_monthly_payment_cents')
-      .eq('household_id', ctx.householdId),
-    supabase
-      .from('account_balance_snapshots')
-      .select('account_id, balance_cents, as_of_month')
-      .eq('household_id', ctx.householdId)
-      .order('as_of_month', { ascending: false }),
-  ])
+  const [{ data: loanAccounts }, { data: loanDetails }, { data: snapshots }, { data: rateChanges }] =
+    await Promise.all([
+      supabase
+        .from('accounts')
+        .select('id, name, opening_balance_cents, type')
+        .eq('household_id', ctx.householdId)
+        .eq('type', 'loan')
+        .is('archived_at', null)
+        .order('name'),
+      supabase
+        .from('loan_details')
+        .select(
+          'account_id, annual_rate_bps, origination_date, original_principal_cents, contractual_monthly_payment_cents',
+        )
+        .eq('household_id', ctx.householdId),
+      supabase
+        .from('account_balance_snapshots')
+        .select('account_id, balance_cents, as_of_month')
+        .eq('household_id', ctx.householdId)
+        .order('as_of_month', { ascending: false }),
+      supabase
+        .from('loan_rate_changes')
+        .select('id, account_id, effective_month, annual_rate_bps, note')
+        .eq('household_id', ctx.householdId)
+        .order('effective_month'),
+    ])
 
   const accounts: LoanAccount[] = (loanAccounts ?? []) as LoanAccount[]
   const detailByAccount = new Map<string, LoanDetail>()
   for (const d of loanDetails ?? []) detailByAccount.set(d.account_id, d as LoanDetail)
+
+  const ratesByAccount = new Map<string, RateChange[]>()
+  for (const r of (rateChanges ?? []) as RateChange[]) {
+    if (!ratesByAccount.has(r.account_id)) ratesByAccount.set(r.account_id, [])
+    ratesByAccount.get(r.account_id)!.push(r)
+  }
 
   const latestSnapshot = new Map<string, { balance_cents: number; as_of_month: string }>()
   for (const s of snapshots ?? []) {
@@ -65,8 +88,9 @@ export default async function LoansPage() {
       <header>
         <h1 className="text-2xl font-semibold">Loans</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Enter your loan terms to project payoff date, remaining interest, and per-month
-          principal/interest breakdown.
+          Enter your loan terms and rate history to project payoff date, remaining interest, and
+          per-month principal/interest breakdown. Variable-rate loans pick up each rate change as
+          its effective month arrives.
         </p>
       </header>
 
@@ -84,6 +108,7 @@ export default async function LoansPage() {
             const detail = detailByAccount.get(a.id)
             const snap = latestSnapshot.get(a.id)
             const currentBalance = snap?.balance_cents ?? Number(a.opening_balance_cents)
+            const rates = ratesByAccount.get(a.id) ?? []
 
             return (
               <LoanCard
@@ -93,6 +118,7 @@ export default async function LoansPage() {
                 currentBalanceCents={currentBalance}
                 snapshotDate={snap?.as_of_month ?? null}
                 month={month}
+                rateChanges={rates}
               />
             )
           })}
@@ -108,22 +134,32 @@ function LoanCard({
   currentBalanceCents,
   snapshotDate,
   month,
+  rateChanges,
 }: {
   account: LoanAccount
   detail: LoanDetail | null
   currentBalanceCents: number
   snapshotDate: string | null
   month: string
+  rateChanges: RateChange[]
 }) {
   const amort = detail
     ? amortize({
         principal_cents: currentBalanceCents,
-        annual_rate_bps: detail.annual_rate_bps,
         monthly_payment_cents: detail.contractual_monthly_payment_cents,
+        rateForPeriod: buildRateLookup({
+          baseRateBps: detail.annual_rate_bps,
+          startMonth: month,
+          rateChanges: rateChanges.map((r) => ({
+            effective_month: r.effective_month,
+            annual_rate_bps: r.annual_rate_bps,
+          })),
+        }),
       })
     : null
 
   const ratePct = detail ? (detail.annual_rate_bps / 100).toFixed(3) : ''
+  const hasRateChanges = rateChanges.length > 0
 
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-6">
@@ -159,6 +195,17 @@ function LoanCard({
         />
       </div>
 
+      {detail && (
+        <div className="mt-6">
+          <RateHistory
+            accountId={account.id}
+            baseRateBps={detail.annual_rate_bps}
+            originationDate={detail.origination_date}
+            rateChanges={rateChanges}
+          />
+        </div>
+      )}
+
       {amort && detail && (
         <div className="mt-6 grid gap-4 sm:grid-cols-4">
           <Tile
@@ -168,10 +215,10 @@ function LoanCard({
           <Tile label="Total remaining interest" value={formatMoney(amort.total_interest_cents)} />
           <Tile label="Total remaining payments" value={formatMoney(amort.total_payments_cents)} />
           <Tile
-            label="Next month"
+            label={hasRateChanges ? 'Projection uses rate schedule' : 'Constant rate'}
             value={
               amort.schedule[0]
-                ? `${formatMoney(amort.schedule[0].principal_cents)} principal + ${formatMoney(amort.schedule[0].interest_cents)} interest`
+                ? `${formatMoney(amort.schedule[0].principal_cents)} principal + ${formatMoney(amort.schedule[0].interest_cents)} interest (next month)`
                 : '—'
             }
             small
@@ -185,6 +232,7 @@ function LoanCard({
             <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-4 py-2 font-medium">#</th>
+                <th className="px-4 py-2 text-right font-medium">Rate</th>
                 <th className="px-4 py-2 text-right font-medium">Starting</th>
                 <th className="px-4 py-2 text-right font-medium">Interest</th>
                 <th className="px-4 py-2 text-right font-medium">Principal</th>
@@ -196,6 +244,9 @@ function LoanCard({
               {amort.schedule.slice(0, 12).map((r) => (
                 <tr key={r.index}>
                   <td className="px-4 py-1 text-gray-500">{r.index}</td>
+                  <td className="px-4 py-1 text-right tabular-nums text-gray-500">
+                    {(r.rate_bps / 100).toFixed(3)}%
+                  </td>
                   <td className="px-4 py-1 text-right tabular-nums">
                     {formatMoney(r.starting_cents)}
                   </td>

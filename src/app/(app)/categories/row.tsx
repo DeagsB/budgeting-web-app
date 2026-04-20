@@ -9,6 +9,7 @@ type Cat = {
   name: string
   code: string
   archived_at: string | null
+  rollover_enabled: boolean
 }
 
 export function CategoryRow({
@@ -31,33 +32,43 @@ export function CategoryRow({
             await updateCategory(fd)
             setEditing(false)
           }}
-          className="grid gap-2 sm:grid-cols-[1fr_160px_auto_auto]"
+          className="flex flex-col gap-2"
         >
           <input type="hidden" name="id" value={category.id} />
-          <input
-            name="name"
-            defaultValue={category.name}
-            required
-            maxLength={80}
-            className="rounded border border-gray-300 px-2 py-1 text-sm"
-          />
-          <input
-            name="code"
-            defaultValue={category.code}
-            required
-            maxLength={40}
-            className="rounded border border-gray-300 px-2 py-1 font-mono text-sm uppercase"
-          />
-          <button type="submit" className="text-sm font-medium text-gray-900 underline">
-            Save
-          </button>
-          <button
-            type="button"
-            onClick={() => setEditing(false)}
-            className="text-sm text-gray-500 hover:text-gray-900"
-          >
-            Cancel
-          </button>
+          <div className="grid gap-2 sm:grid-cols-[1fr_160px_auto_auto]">
+            <input
+              name="name"
+              defaultValue={category.name}
+              required
+              maxLength={80}
+              className="rounded border border-gray-300 px-2 py-1 text-sm"
+            />
+            <input
+              name="code"
+              defaultValue={category.code}
+              required
+              maxLength={40}
+              className="rounded border border-gray-300 px-2 py-1 font-mono text-sm uppercase"
+            />
+            <button type="submit" className="text-sm font-medium text-gray-900 underline">
+              Save
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="text-sm text-gray-500 hover:text-gray-900"
+            >
+              Cancel
+            </button>
+          </div>
+          <label className="flex items-center gap-2 text-xs text-gray-600">
+            <input
+              type="checkbox"
+              name="rollover_enabled"
+              defaultChecked={category.rollover_enabled}
+            />
+            <span>Unused budget rolls over to next month</span>
+          </label>
         </form>
       </div>
     )
@@ -75,6 +86,11 @@ export function CategoryRow({
           {category.name}
         </span>
         <span className="font-mono text-xs text-gray-500">{category.code}</span>
+        {category.rollover_enabled && (
+          <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase text-gray-600">
+            rollover
+          </span>
+        )}
       </div>
       <div className="flex items-center gap-3">
         {!archived && (

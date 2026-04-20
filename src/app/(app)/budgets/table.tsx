@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { Fragment, useState, useTransition } from 'react'
 import { formatMoney } from '@/lib/format'
 import { saveBudgets } from './actions'
 
@@ -9,6 +9,7 @@ type Category = {
   parent_id: string | null
   name: string
   code: string
+  rollover_enabled: boolean
 }
 
 export function BudgetTable({
@@ -19,6 +20,7 @@ export function BudgetTable({
   actualDirect,
   ytdBudget,
   ytdActualRolled,
+  rolloverCredit,
 }: {
   month: string
   categories: Category[]
@@ -27,6 +29,7 @@ export function BudgetTable({
   actualDirect: Record<string, number>
   ytdBudget: Record<string, number>
   ytdActualRolled: Record<string, number>
+  rolloverCredit: Record<string, number>
 }) {
   const parents = categories.filter((c) => !c.parent_id)
   const childrenOf = (id: string) => categories.filter((c) => c.parent_id === id)
@@ -51,27 +54,26 @@ export function BudgetTable({
           <tr>
             <th className="px-6 py-3 font-medium">Category</th>
             <th className="px-4 py-3 text-right font-medium">Budgeted</th>
+            <th className="px-4 py-3 text-right font-medium">Rollover</th>
             <th className="px-4 py-3 text-right font-medium">Actual</th>
             <th className="px-4 py-3 text-right font-medium">Variance</th>
             <th className="px-4 py-3 text-right font-medium">YTD variance</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {parents.map((p) => {
-            const kids = childrenOf(p.id)
-            return (
-              <Section
-                key={p.id}
-                parent={p}
-                kids={kids}
-                budgetByCat={budgetByCat}
-                actualRolled={actualRolled}
-                actualDirect={actualDirect}
-                ytdBudget={ytdBudget}
-                ytdActualRolled={ytdActualRolled}
-              />
-            )
-          })}
+          {parents.map((p) => (
+            <Section
+              key={p.id}
+              parent={p}
+              kids={childrenOf(p.id)}
+              budgetByCat={budgetByCat}
+              actualRolled={actualRolled}
+              actualDirect={actualDirect}
+              ytdBudget={ytdBudget}
+              ytdActualRolled={ytdActualRolled}
+              rolloverCredit={rolloverCredit}
+            />
+          ))}
         </tbody>
       </table>
 
@@ -99,6 +101,7 @@ function Section({
   actualDirect,
   ytdBudget,
   ytdActualRolled,
+  rolloverCredit,
 }: {
   parent: Category
   kids: Category[]
@@ -107,20 +110,25 @@ function Section({
   actualDirect: Record<string, number>
   ytdBudget: Record<string, number>
   ytdActualRolled: Record<string, number>
+  rolloverCredit: Record<string, number>
 }) {
   const pBudget = budgetByCat[parent.id] ?? 0
   const pActual = actualRolled[parent.id] ?? 0
-  const pVar = pActual - pBudget
+  const pRollover = rolloverCredit[parent.id] ?? 0
+  const pEffective = pBudget + pRollover
+  const pVar = pActual - pEffective
   const pYtdVar = (ytdActualRolled[parent.id] ?? 0) - (ytdBudget[parent.id] ?? 0)
 
   return (
-    <>
+    <Fragment>
       <Row
         name={parent.name}
         code={parent.code}
         depth={0}
         categoryId={parent.id}
         budget={pBudget}
+        rollover={pRollover}
+        rolloverEnabled={parent.rollover_enabled}
         actual={pActual}
         variance={pVar}
         ytdVariance={pYtdVar}
@@ -128,6 +136,7 @@ function Section({
       {kids.map((c) => {
         const b = budgetByCat[c.id] ?? 0
         const a = actualDirect[c.id] ?? 0
+        const r = rolloverCredit[c.id] ?? 0
         return (
           <Row
             key={c.id}
@@ -136,15 +145,17 @@ function Section({
             depth={1}
             categoryId={c.id}
             budget={b}
+            rollover={r}
+            rolloverEnabled={c.rollover_enabled}
             actual={a}
-            variance={a - b}
+            variance={a - (b + r)}
             ytdVariance={
               (ytdActualRolled[c.id] ?? actualDirect[c.id] ?? 0) - (ytdBudget[c.id] ?? 0)
             }
           />
         )
       })}
-    </>
+    </Fragment>
   )
 }
 
@@ -154,6 +165,8 @@ function Row({
   depth,
   categoryId,
   budget,
+  rollover,
+  rolloverEnabled,
   actual,
   variance,
   ytdVariance,
@@ -163,6 +176,8 @@ function Row({
   depth: number
   categoryId: string
   budget: number
+  rollover: number
+  rolloverEnabled: boolean
   actual: number
   variance: number
   ytdVariance: number
@@ -171,11 +186,20 @@ function Row({
   const varColor = variance > 0 ? 'text-red-700' : variance < 0 ? 'text-green-700' : 'text-gray-900'
   const ytdColor =
     ytdVariance > 0 ? 'text-red-700' : ytdVariance < 0 ? 'text-green-700' : 'text-gray-900'
+  const rolloverColor =
+    rollover > 0 ? 'text-green-700' : rollover < 0 ? 'text-red-700' : 'text-gray-400'
 
   return (
     <tr className={depth === 0 ? 'bg-gray-50/50' : ''}>
       <td className={`py-2 pr-4 ${padLeft}`}>
-        <div className={depth === 0 ? 'font-medium text-gray-900' : 'text-gray-800'}>{name}</div>
+        <div className={depth === 0 ? 'font-medium text-gray-900' : 'text-gray-800'}>
+          {name}
+          {rolloverEnabled && (
+            <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase text-gray-600">
+              rollover
+            </span>
+          )}
+        </div>
         <div className="font-mono text-xs text-gray-400">{code}</div>
       </td>
       <td className="py-2 pr-4 text-right">
@@ -186,6 +210,9 @@ function Row({
           defaultValue={(budget / 100).toFixed(2)}
           className="w-28 rounded border border-gray-300 px-2 py-1 text-right tabular-nums"
         />
+      </td>
+      <td className={`py-2 pr-4 text-right tabular-nums text-xs ${rolloverColor}`}>
+        {rolloverEnabled ? formatMoney(rollover) : '—'}
       </td>
       <td className="py-2 pr-4 text-right tabular-nums">{formatMoney(actual)}</td>
       <td className={`py-2 pr-4 text-right tabular-nums ${varColor}`}>{formatMoney(variance)}</td>
