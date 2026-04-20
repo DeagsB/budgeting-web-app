@@ -44,3 +44,6 @@ next-env.d.ts
 # source workbook + extracted XML contain personal financial data — keep local only
 /spec/
 
+# Playwright MCP scratch (snapshots, console logs) — regenerated per run
+/.playwright-mcp/
+

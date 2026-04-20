@@ -36,7 +36,12 @@
       "WebSearch",
       "WebFetch(domain:supabase.com)",
       "WebFetch(domain:github.com)",
-      "Bash(claude mcp *)"
+      "Bash(claude mcp *)",
+      "Bash(git -c user.email=\"bespalkodeagan@gmail.com\" -c user.name=\"Deagan Bespalko\" commit -m \"chore: add Playwright + Context7 MCP servers to .mcp.json\")"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "supabase"
+  ]
 }

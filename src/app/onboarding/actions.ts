@@ -24,38 +24,14 @@ export async function createHousehold(
   } = await supabase.auth.getUser()
   if (!user) return { error: 'Not signed in.' }
 
-  // Create household. RLS: allowed because auth.uid() is set.
-  const { data: household, error: hhError } = await supabase
-    .from('households')
-    .insert({ name: householdName })
-    .select('id')
-    .single()
-
-  if (hhError || !household) {
-    return { error: hhError?.message ?? 'Failed to create household.' }
-  }
-
-  // Link the user. Without this, subsequent RLS checks for the household fail.
-  const { error: linkError } = await supabase.from('household_users').insert({
-    household_id: household.id,
-    user_id: user.id,
-    role: 'owner',
+  // Atomic RPC: creates household, links caller as owner, adds first member,
+  // seeds categories. Runs as security definer to avoid RLS chicken-and-egg
+  // (user can't be household_member until the household exists).
+  const { error } = await supabase.rpc('create_household_with_member', {
+    household_name: householdName,
+    member_name: memberName,
   })
-  if (linkError) return { error: linkError.message }
-
-  // First member (the signed-in user). More can be added later.
-  const { error: memberError } = await supabase.from('members').insert({
-    household_id: household.id,
-    display_name: memberName,
-    sort_order: 0,
-  })
-  if (memberError) return { error: memberError.message }
-
-  // Seed the default category tree.
-  const { error: seedError } = await supabase.rpc('seed_default_categories', {
-    h_id: household.id,
-  })
-  if (seedError) return { error: seedError.message }
+  if (error) return { error: error.message }
 
   revalidatePath('/', 'layout')
   redirect('/dashboard')
