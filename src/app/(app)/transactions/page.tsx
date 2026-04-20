@@ -74,13 +74,18 @@ export default async function TransactionsPage({
   // Fetch splits for the returned transactions.
   const txIds = transactions.map((t) => t.id)
   let splitsList: Split[] = []
+  let sharedTxIds = new Set<string>()
   if (txIds.length > 0) {
-    const { data: sp } = await supabase
-      .from('transaction_splits')
-      .select('transaction_id, category_id, amount_cents, sort_order')
-      .in('transaction_id', txIds)
-      .order('sort_order')
+    const [{ data: sp }, { data: sh }] = await Promise.all([
+      supabase
+        .from('transaction_splits')
+        .select('transaction_id, category_id, amount_cents, sort_order')
+        .in('transaction_id', txIds)
+        .order('sort_order'),
+      supabase.from('transaction_shares').select('transaction_id').in('transaction_id', txIds),
+    ])
     splitsList = (sp ?? []) as Split[]
+    sharedTxIds = new Set((sh ?? []).map((r) => r.transaction_id))
   }
 
   // Apply category filter at the transaction level: a transaction matches
@@ -211,6 +216,7 @@ export default async function TransactionsPage({
                     primary_category_id: primaryCategoryId,
                     categorySummary,
                     isSplit: splits.length > 1,
+                    isShared: sharedTxIds.has(t.id),
                     splits: splits.map((s) => ({
                       category_id: s.category_id,
                       amount_cents: s.amount_cents,

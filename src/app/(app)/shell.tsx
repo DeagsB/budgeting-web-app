@@ -8,6 +8,8 @@ const NAV = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/accounts', label: 'Accounts' },
   { href: '/transactions', label: 'Transactions' },
+  { href: '/shared', label: 'Shared' },
+  { href: '/settlements', label: 'Settlements' },
   { href: '/budgets', label: 'Budgets' },
   { href: '/pnl', label: 'P&L' },
   { href: '/balance-sheet', label: 'Balance sheet' },

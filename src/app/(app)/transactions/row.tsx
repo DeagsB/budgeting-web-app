@@ -17,6 +17,7 @@ type TransactionVM = {
   primary_category_id: string | null
   categorySummary: string
   isSplit: boolean
+  isShared: boolean
   splits: { category_id: string | null; amount_cents: number }[]
   member_id: string | null
   memberName: string | null
@@ -150,6 +151,11 @@ export function TransactionRow({
             {t.isSplit && (
               <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-normal text-gray-600">
                 split
+              </span>
+            )}
+            {t.isShared && (
+              <span className="ml-2 rounded bg-blue-100 px-1.5 py-0.5 text-xs font-normal text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
+                shared
               </span>
             )}
           </div>
