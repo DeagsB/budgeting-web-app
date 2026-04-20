@@ -12,6 +12,8 @@ const NAV = [
   { href: '/pnl', label: 'P&L' },
   { href: '/balance-sheet', label: 'Balance sheet' },
   { href: '/loans', label: 'Loans' },
+  { href: '/contributions', label: 'Contributions' },
+  { href: '/time-off', label: 'Time off' },
   { href: '/goals', label: 'Goals' },
   { href: '/categories', label: 'Categories' },
   { href: '/members', label: 'Members' },
