@@ -47,3 +47,15 @@ next-env.d.ts
 # Playwright MCP scratch (snapshots, console logs) — regenerated per run
 /.playwright-mcp/
 
+# Screenshots dropped in the repo root by browser_take_screenshot (they go
+# here when the tool is given a bare filename; keep them local, not in git)
+/iphone-*.png
+/budgets-*.png
+/pnl.png
+/balance-sheet.png
+/contributions.png
+/settlements*.png
+/shared-*.png
+/dashboard-*.png
+/figma-*.png
+
