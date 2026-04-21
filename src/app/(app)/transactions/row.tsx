@@ -143,60 +143,63 @@ export function TransactionRow({
 
   return (
     <li className="flex flex-col">
-      <div className="flex items-center gap-4 px-6 py-3 text-sm">
-        <div className="w-24 shrink-0 tabular-nums text-gray-500">{t.occurredLabel}</div>
+      <div className="flex items-start gap-3 px-4 py-3 text-sm sm:items-center sm:gap-4 sm:px-6">
         <div className="min-w-0 flex-1">
-          <div className="truncate font-medium text-gray-900">
-            {t.description ?? '—'}
-            {t.isSplit && (
-              <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-normal text-gray-600">
-                split
-              </span>
-            )}
-            {t.isShared && (
-              <span className="ml-2 rounded bg-blue-100 px-1.5 py-0.5 text-xs font-normal text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
-                shared
-              </span>
-            )}
+          <div className="flex items-baseline justify-between gap-3">
+            <div className="min-w-0 truncate font-medium text-gray-900">
+              {t.description ?? '—'}
+              {t.isSplit && (
+                <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-normal text-gray-600">
+                  split
+                </span>
+              )}
+              {t.isShared && (
+                <span className="ml-2 rounded bg-blue-100 px-1.5 py-0.5 text-xs font-normal text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
+                  shared
+                </span>
+              )}
+            </div>
+            <div className={`shrink-0 tabular-nums ${color}`}>
+              {sign}
+              {formatMoney(Math.abs(t.amount_cents))}
+            </div>
           </div>
-          <div className="truncate text-xs text-gray-500">
+          <div className="mt-0.5 truncate text-xs text-gray-500">
+            {t.occurredLabel}
+            {' · '}
             {t.accountName}
             {' · '}
             {t.categorySummary}
             {' · '}
             {t.memberName ?? 'Shared'}
           </div>
-        </div>
-        <div className={`w-28 shrink-0 text-right tabular-nums ${color}`}>
-          {sign}
-          {formatMoney(Math.abs(t.amount_cents))}
-        </div>
-        <div className="flex shrink-0 items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setShowSplits((v) => !v)}
-            className="text-xs text-gray-500 hover:text-gray-900"
-          >
-            {showSplits ? 'Hide splits' : 'Splits'}
-          </button>
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="text-xs text-gray-500 hover:text-gray-900"
-          >
-            Edit
-          </button>
-          <form
+          <div className="mt-2 flex flex-wrap items-center gap-4 text-xs">
+            <button
+              type="button"
+              onClick={() => setShowSplits((v) => !v)}
+              className="text-gray-500 hover:text-gray-900"
+            >
+              {showSplits ? 'Hide splits' : 'Splits'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="text-gray-500 hover:text-gray-900"
+            >
+              Edit
+            </button>
+            <form
             action={deleteTransaction}
             onSubmit={(e) => {
               if (!confirm('Delete this transaction?')) e.preventDefault()
             }}
           >
             <input type="hidden" name="id" value={t.id} />
-            <button type="submit" className="text-xs text-red-600 hover:text-red-800">
+            <button type="submit" className="text-red-600 hover:text-red-800">
               Delete
             </button>
           </form>
+          </div>
         </div>
       </div>
 

@@ -38,7 +38,7 @@ export default async function AccountsPage({
 
   return (
     <div className="flex flex-col gap-8">
-      <header className="flex items-baseline justify-between">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-baseline sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Accounts</h1>
           <p className="mt-1 text-sm text-gray-500">

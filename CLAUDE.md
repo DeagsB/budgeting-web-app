@@ -85,3 +85,29 @@ These apply to schema design, UI copy, fixtures, and seed data alike:
 ## Inspecting the workbook
 
 When you need a formula or the structure of a sheet, read the XML in `spec/_extract/` directly — the `.xlsx` is a zip and the XML is already unpacked. `sharedStrings.xml` resolves string indices referenced by `<c t="s"><v>N</v></c>` cells in each sheet.
+
+## Mobile-first UI
+
+Primary target: **iPhone Safari** (375–430px portrait). Desktop is a secondary layout that inherits via `sm:` / `md:` / `lg:` breakpoints.
+
+Hard rules:
+- **Tap targets ≥ 44×44 px.** Buttons, nav items, and row actions need adequate vertical padding. Avoid small `text-xs` link-style actions inside dense rows without a wrapping padded element.
+- **No iOS zoom-on-focus.** Inputs must be ≥ 16px font-size. Set globally in `globals.css` — don't shrink inputs per-component.
+- **Respect safe-area insets.** The root layout adds `env(safe-area-inset-*)` padding so content isn't hidden behind the notch / home indicator.
+- **Wide tables scroll horizontally** inside an `overflow-x-auto` wrapper with `min-w-[XXpx]` on the table. Never allow the page itself to scroll horizontally — that causes the address bar to jiggle on iOS.
+- **Header + action rows stack on mobile.** `flex-col gap-3 sm:flex-row sm:items-baseline sm:justify-between` — not the other way around.
+- **Nav collapses on mobile.** The shell exposes a hamburger / sheet pattern below `md:`; the horizontal tab bar is desktop-only.
+
+When adding new screens, mobile-first means writing the mobile layout first and using `sm:` / `md:` to adjust upward — not writing desktop and hoping.
+
+## MCP servers
+
+Project `.mcp.json` wires five servers. When planning or implementing, prefer these over guessing:
+
+- **supabase** — Postgres / auth / migrations via MCP. Use `apply_migration` for DDL (not `execute_sql`). Use `execute_sql` for reads and one-off data fixes. `get_logs` for auth/postgres/edge debugging. `get_advisors` after DDL changes.
+- **playwright** — headed browser for end-to-end verification. After any UI change, navigate the dev server (`npm run dev` at :3000), reproduce the change, and screenshot it. Use the test user `playwright-test@budgeting-app.local` — see `memory/reference_playwright_test_users.md` for the direct-insert pattern that bypasses Supabase signup validation.
+- **context7** — fetch current library docs on demand. Use it before writing Next 16 / React 19 / Supabase SSR / Tailwind v4 code — training data is stale.
+- **figma** — design-to-code. Trigger when the user pastes a `figma.com/design/...` URL or explicitly says they want a screen redesigned from Figma. `get_design_context` is the primary tool. Output is *reference*; always adapt to the project's token system + existing components, don't paste raw hex.
+- **shadcn** — component library. Use when the user asks for a specific pattern (dialog, combobox, date picker, toast, sheet, etc.). `search_items_in_registries` to find the right primitive, `get_item_examples_from_registries` for usage, `get_add_command_for_items` to get the `npx shadcn add ...` command. Prefer shadcn primitives over hand-rolling once the user greenlights a UI polish pass.
+
+UI polish rule of thumb: hand-rolled Tailwind first (cheap, flexible), shadcn for anything interactive enough to warrant a headless-UI primitive (menus, dialogs, sheets, comboboxes). Don't replace simple buttons or cards with shadcn — it adds dependencies without gain.

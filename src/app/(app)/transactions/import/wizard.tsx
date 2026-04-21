@@ -286,7 +286,7 @@ export function ImportWizard({
             </span>
           </div>
           <div className="max-h-96 overflow-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[760px] text-sm">
               <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                 <tr>
                   <th className="px-4 py-2 font-medium">Date</th>

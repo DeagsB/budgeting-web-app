@@ -49,7 +49,8 @@ export function BudgetTable({
     >
       <input type="hidden" name="month" value={month} />
 
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[720px] text-sm">
         <thead className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500">
           <tr>
             <th className="px-6 py-3 font-medium">Category</th>
@@ -76,6 +77,7 @@ export function BudgetTable({
           ))}
         </tbody>
       </table>
+      </div>
 
       <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-6 py-3">
         <span className="text-xs text-gray-500">

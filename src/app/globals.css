@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 /*
- * Dark theme strategy: flip Tailwind v4's grayscale palette at the CSS variable
- * level via prefers-color-scheme. Every `bg-white`, `text-gray-900`, and friend
+ * Dark theme: flip Tailwind v4's grayscale palette at the CSS variable level
+ * via prefers-color-scheme. Every `bg-white`, `text-gray-900`, and friend
  * utility class resolves through `var(--color-*)`, so the whole app adapts
  * without touching individual JSX. Red/green accents stay unchanged.
  */
@@ -23,17 +23,56 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  /* iPhone safe-area insets — notch on the top, home indicator at the bottom,
+     and landscape rotation bumpers on the sides. Without this, fixed chrome
+     hides behind system UI. */
+  padding-top: env(safe-area-inset-top);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+}
+
+/* Mobile-friendly form controls: 16px is the iOS zoom-on-focus threshold.
+   Inputs below that trigger the Safari auto-zoom, which is universally
+   annoying. Enforce it globally; override to smaller only where absolutely
+   necessary (and never on touch devices). */
+input,
+select,
+textarea,
+button {
+  font-size: 16px;
+}
+
+@media (min-width: 640px) {
+  input,
+  select,
+  textarea,
+  button {
+    font-size: inherit; /* desktop can use Tailwind size classes freely */
+  }
+}
+
+/* Default tap highlight on iOS is an ugly blue box on every press. Replace
+   with a subtle opacity flash that respects dark mode. */
+a,
+button,
+[role='button'] {
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+}
+
+/* Keep the page from horizontally scrolling even if a child overflows — the
+   address bar jiggle on iOS is jarring. Children should use their own
+   overflow-x-auto wrappers. */
+html,
+body {
+  overflow-x: hidden;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    /* Background/foreground tokens */
     --background: #0b0c0f;
     --foreground: #ededed;
 
-    /* Invert Tailwind's gray ramp. bg-white becomes dark surface; bg-gray-50
-       stays "just off the page bg"; text-gray-500 stays mid-contrast but
-       readable on dark. */
     --color-white: #15171c;
     --color-gray-50: #1b1e24;
     --color-gray-100: #22252c;
@@ -48,8 +87,6 @@ body {
     --color-gray-950: #f6f7f8;
   }
 
-  /* Strengthen form-control contrast: default input focus rings assume a
-     white page. Give text inputs a dark surface + light text. */
   input[type='text'],
   input[type='email'],
   input[type='password'],

@@ -71,7 +71,8 @@ function Section({ title, accounts }: { title: string; accounts: AccountRow[] })
         <h2 className="text-sm font-medium uppercase tracking-wide text-gray-500">{title}</h2>
         <span className="text-sm tabular-nums text-gray-900">{formatMoney(sum)}</span>
       </div>
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[640px] text-sm">
         <thead className="text-left text-xs uppercase tracking-wide text-gray-500">
           <tr>
             <th className="px-6 py-2 font-medium">Account</th>
@@ -119,6 +120,7 @@ function Section({ title, accounts }: { title: string; accounts: AccountRow[] })
           })}
         </tbody>
       </table>
+      </div>
     </section>
   )
 }

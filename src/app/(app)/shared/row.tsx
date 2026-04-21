@@ -40,14 +40,14 @@ export function SharedRow({
 
   return (
     <li className="flex flex-col">
-      <div className="flex items-center gap-4 px-6 py-3 text-sm">
+      <div className="flex items-start gap-3 px-4 py-3 text-sm sm:gap-4 sm:px-6">
         <form
           action={(fd) =>
             startTransition(async () => {
               await toggleShared(fd)
             })
           }
-          className="shrink-0"
+          className="shrink-0 pt-0.5"
         >
           <input type="hidden" name="transaction_id" value={t.id} />
           <button
@@ -55,7 +55,7 @@ export function SharedRow({
             disabled={pending}
             aria-label={isShared ? 'Unshare' : 'Share'}
             className={
-              'flex h-5 w-5 items-center justify-center rounded border transition-colors ' +
+              'flex h-6 w-6 items-center justify-center rounded border transition-colors ' +
               (isShared
                 ? 'border-gray-900 bg-gray-900 text-white'
                 : 'border-gray-300 bg-white hover:border-gray-500')
@@ -65,49 +65,52 @@ export function SharedRow({
           </button>
         </form>
 
-        <div className="w-24 shrink-0 tabular-nums text-gray-500">{t.occurredLabel}</div>
         <div className="min-w-0 flex-1">
-          <div className="truncate font-medium text-gray-900">{t.description ?? '—'}</div>
-          <div className="truncate text-xs text-gray-500">
+          <div className="flex items-baseline justify-between gap-3">
+            <div className="truncate font-medium text-gray-900">{t.description ?? '—'}</div>
+            <div className={`shrink-0 tabular-nums ${color}`}>
+              {sign}
+              {formatMoney(totalAbs)}
+            </div>
+          </div>
+          <div className="mt-0.5 truncate text-xs text-gray-500">
+            {t.occurredLabel}
+            {' · '}
             {t.payerName ? `${t.payerName} paid` : 'Shared account'}
             {isShared && ` · split ${shares.length + (t.payer_id ? 1 : 0)}-way`}
           </div>
+          {isShared && (
+            <div className="mt-2 flex items-center gap-4 text-xs">
+              <button
+                type="button"
+                onClick={() => setEditing((v) => !v)}
+                className="text-gray-500 hover:text-gray-900"
+              >
+                {editing ? 'Hide split' : 'Edit split'}
+              </button>
+              <form
+                action={(fd) =>
+                  startTransition(async () => {
+                    await clearShares(fd)
+                  })
+                }
+              >
+                <input type="hidden" name="transaction_id" value={t.id} />
+                <button
+                  type="submit"
+                  disabled={pending}
+                  className="text-red-600 hover:text-red-800"
+                >
+                  Clear
+                </button>
+              </form>
+            </div>
+          )}
         </div>
-        <div className={`w-28 shrink-0 text-right tabular-nums ${color}`}>
-          {sign}
-          {formatMoney(totalAbs)}
-        </div>
-        {isShared && (
-          <button
-            type="button"
-            onClick={() => setEditing((v) => !v)}
-            className="text-xs text-gray-500 hover:text-gray-900"
-          >
-            {editing ? 'Hide split' : 'Edit split'}
-          </button>
-        )}
-        {isShared && (
-          <form
-            action={(fd) =>
-              startTransition(async () => {
-                await clearShares(fd)
-              })
-            }
-          >
-            <input type="hidden" name="transaction_id" value={t.id} />
-            <button
-              type="submit"
-              disabled={pending}
-              className="text-xs text-red-600 hover:text-red-800"
-            >
-              Clear
-            </button>
-          </form>
-        )}
       </div>
 
       {isShared && editing && (
-        <div className="border-t border-gray-100 bg-gray-50 px-6 py-4">
+        <div className="border-t border-gray-100 bg-gray-50 px-4 py-4 sm:px-6">
           <SplitEditor
             transactionId={t.id}
             totalAbs={totalAbs}
@@ -121,7 +124,7 @@ export function SharedRow({
       )}
 
       {isShared && !editing && (
-        <div className="border-t border-gray-100 bg-gray-50/70 px-6 py-2 text-xs text-gray-500">
+        <div className="border-t border-gray-100 bg-gray-50/70 px-4 py-2 text-xs text-gray-500 sm:px-6">
           {t.payerName && (
             <>
               <strong className="text-gray-700">{t.payerName}</strong> keeps{' '}

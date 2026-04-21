@@ -142,7 +142,7 @@ export default async function SharedPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex items-baseline justify-between">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-baseline sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Shared expenses</h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -171,15 +171,15 @@ export default async function SharedPage({
         </div>
       </header>
 
-      <section className="flex flex-wrap items-end justify-between gap-4 rounded-lg border border-gray-200 bg-white p-4">
-        <form className="flex items-end gap-3" method="get">
+      <section className="flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-4 sm:flex-row sm:items-end sm:justify-between">
+        <form className="flex flex-col gap-3 sm:flex-row sm:items-end" method="get">
           <input type="hidden" name="month" value={month} />
-          <label className="flex flex-col gap-1 text-sm">
+          <label className="flex flex-col gap-1 text-sm sm:max-w-xs">
             <span className="text-gray-700">Source account</span>
             <select
               name="account"
               defaultValue={selectedAccountId}
-              className="rounded border border-gray-300 px-3 py-2"
+              className="w-full rounded border border-gray-300 px-3 py-2"
             >
               {accountRows.map((a) => {
                 const owner = a.member_id

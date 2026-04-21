@@ -227,8 +227,8 @@ function LoanCard({
       )}
 
       {amort && amort.schedule.length > 0 && (
-        <div className="mt-6 overflow-hidden rounded-lg border border-gray-200">
-          <table className="w-full text-sm">
+        <div className="mt-6 overflow-x-auto rounded-lg border border-gray-200">
+          <table className="w-full min-w-[680px] text-sm">
             <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-4 py-2 font-medium">#</th>
