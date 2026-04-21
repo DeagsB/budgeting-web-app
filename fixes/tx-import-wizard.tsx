@@ -92,17 +92,14 @@ export function ImportWizard({
   const [defaultDirection, setDefaultDirection] = useState<'auto' | 'out' | 'in'>('auto')
 
   const parsed = useMemo(() => (raw.trim() ? parseCSV(raw) : []), [raw])
-  const headers = useMemo(() => parsed[0] ?? [], [parsed])
-  const bodyRows = useMemo(() => parsed.slice(1), [parsed])
+  const headers = parsed[0] ?? []
+  const bodyRows = parsed.slice(1)
 
   const [mapping, setMapping] = useState<FieldKey[]>([])
 
-  // Re-seed mapping whenever the header row changes length (new paste). The
-  // setState-in-effect is deliberate here — auto-detect has to react to
-  // *parsed* input, not to a direct user action.
+  // Re-seed mapping whenever the header row changes length (new paste).
   useEffect(() => {
     if (headers.length > 0 && mapping.length !== headers.length) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMapping(autoDetect(headers))
     } else if (headers.length === 0 && mapping.length > 0) {
       setMapping([])
