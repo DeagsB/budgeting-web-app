@@ -14,7 +14,19 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Design reference bundle — JSX-in-browser prototypes, not app code.
     "design_handoff_maple/**",
+    // Drop-in replacement files; the copies under src/ are what runs.
+    "fixes/**",
   ]),
+  {
+    // Allow leading-underscore to signal "received but intentionally unused"
+    // (matches the convention used in the Maple fix-pack).
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;
