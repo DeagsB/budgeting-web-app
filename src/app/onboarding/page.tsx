@@ -5,9 +5,8 @@ import { OnboardingForm } from './form'
 
 export default async function OnboardingPage() {
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data } = await supabase.auth.getUser()
+  const user = data?.user
   if (!user) redirect('/sign-in')
 
   const ctx = await getHouseholdContext()

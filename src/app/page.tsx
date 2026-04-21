@@ -3,9 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 
 export default async function Home() {
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data } = await supabase.auth.getUser()
+  const user = data?.user
 
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-8 px-6">

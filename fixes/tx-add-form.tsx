@@ -35,11 +35,6 @@ export function AddTransactionForm({
   useEffect(() => {
     if (!pending && !state?.error && state !== undefined) {
       formRef.current?.reset()
-      // Resetting local state after a successful server action is the
-      // canonical post-submit flow; the alternative (keying the inputs) is
-      // more disruptive to the visible controls. Safe here because the
-      // effect only fires on state transitions, not on every render.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAmount('')
       setDirection('out')
     }
