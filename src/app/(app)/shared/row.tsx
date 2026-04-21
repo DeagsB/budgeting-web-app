@@ -28,8 +28,10 @@ export function SharedRow({
   const [editing, setEditing] = useState(false)
   const isShared = shares.length > 0
 
-  const color =
-    t.amount_cents > 0 ? 'text-red-700' : t.amount_cents < 0 ? 'text-green-700' : 'text-gray-900'
+  // Positive amount = expense (outflow). Sign in the list follows the Maple
+  // convention on transactions.
+  const isExpense = t.amount_cents > 0
+  const amountColor = isExpense ? 'var(--color-ink)' : 'var(--color-leaf)'
   const sign = t.amount_cents < 0 ? '+' : ''
   const totalAbs = Math.abs(t.amount_cents)
 
@@ -37,10 +39,12 @@ export function SharedRow({
   const payerShareCents = totalAbs - shareSum
   const nonPayerMembers = members.filter((m) => m.id !== t.payer_id)
   const amountByMember = new Map(shares.map((s) => [s.member_id, s.amount_cents]))
+  const splitCount = shares.length + (t.payer_id ? 1 : 0)
 
   return (
     <li className="flex flex-col">
-      <div className="flex items-start gap-3 px-4 py-3 text-sm sm:gap-4 sm:px-6">
+      <div className="flex items-start gap-3 px-5 py-4 text-[14px] sm:gap-4">
+        {/* Maple-branded tick checkbox */}
         <form
           action={(fd) =>
             startTransition(async () => {
@@ -55,39 +59,59 @@ export function SharedRow({
             disabled={pending}
             aria-label={isShared ? 'Unshare' : 'Share'}
             className={
-              'flex h-6 w-6 items-center justify-center rounded border transition-colors ' +
+              'flex h-6 w-6 items-center justify-center rounded-[7px] border transition-all active:scale-90 ' +
               (isShared
-                ? 'border-gray-900 bg-gray-900 text-white'
-                : 'border-gray-300 bg-white hover:border-gray-500')
+                ? 'border-[var(--color-leaf)] bg-[var(--color-leaf)] text-white shadow-[0_1px_3px_rgba(24,98,56,0.25)]'
+                : 'border-[var(--color-hair)] bg-[var(--color-paper)] hover:border-[var(--color-ink-3)]')
             }
           >
-            {isShared ? '✓' : ''}
+            {isShared && (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+            )}
           </button>
         </form>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-3">
-            <div className="truncate font-medium text-gray-900">{t.description ?? '—'}</div>
-            <div className={`shrink-0 tabular-nums ${color}`}>
+            <div className="truncate font-medium text-[var(--color-ink)]">
+              {t.description ?? '—'}
+            </div>
+            <div
+              className="shrink-0 font-serif text-[16px] tabular-nums tracking-[-0.01em]"
+              style={{ color: amountColor }}
+            >
               {sign}
               {formatMoney(totalAbs)}
             </div>
           </div>
-          <div className="mt-0.5 truncate text-xs text-gray-500">
-            {t.occurredLabel}
-            {' · '}
-            {t.payerName ? `${t.payerName} paid` : 'Shared account'}
-            {isShared && ` · split ${shares.length + (t.payer_id ? 1 : 0)}-way`}
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-[var(--color-ink-3)]">
+            <span>{t.occurredLabel}</span>
+            <span>·</span>
+            <span>{t.payerName ? `${t.payerName} paid` : 'Shared account'}</span>
+            {isShared && (
+              <>
+                <span>·</span>
+                <span
+                  className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em]"
+                  style={{ background: 'var(--color-leaf-soft)', color: 'var(--color-leaf)' }}
+                >
+                  Split {splitCount}-way
+                </span>
+              </>
+            )}
           </div>
           {isShared && (
-            <div className="mt-2 flex items-center gap-4 text-xs">
+            <div className="mt-2 flex items-center gap-3 text-[12px]">
               <button
                 type="button"
                 onClick={() => setEditing((v) => !v)}
-                className="text-gray-500 hover:text-gray-900"
+                className="font-semibold text-[var(--color-ink-2)] underline-offset-2 hover:text-[var(--color-ink)] hover:underline"
               >
                 {editing ? 'Hide split' : 'Edit split'}
               </button>
+              <span className="text-[var(--color-ink-3)]">·</span>
               <form
                 action={(fd) =>
                   startTransition(async () => {
@@ -99,7 +123,8 @@ export function SharedRow({
                 <button
                   type="submit"
                   disabled={pending}
-                  className="text-red-600 hover:text-red-800"
+                  className="font-semibold transition-colors hover:underline"
+                  style={{ color: 'var(--color-maple)' }}
                 >
                   Clear
                 </button>
@@ -110,7 +135,7 @@ export function SharedRow({
       </div>
 
       {isShared && editing && (
-        <div className="border-t border-gray-100 bg-gray-50 px-4 py-4 sm:px-6">
+        <div className="border-t border-[var(--color-hair)] bg-[var(--color-cream-2)] px-5 py-5">
           <SplitEditor
             transactionId={t.id}
             totalAbs={totalAbs}
@@ -124,19 +149,21 @@ export function SharedRow({
       )}
 
       {isShared && !editing && (
-        <div className="border-t border-gray-100 bg-gray-50/70 px-4 py-2 text-xs text-gray-500 sm:px-6">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-[var(--color-hair)] bg-[var(--color-cream-2)]/60 px-5 py-2.5 text-[11.5px] text-[var(--color-ink-2)]">
           {t.payerName && (
-            <>
-              <strong className="text-gray-700">{t.payerName}</strong> keeps{' '}
-              {formatMoney(payerShareCents)} ·{' '}
-            </>
+            <span>
+              <strong className="font-semibold text-[var(--color-ink)]">{t.payerName}</strong> keeps{' '}
+              <span className="tabular-nums text-[var(--color-ink)]">{formatMoney(payerShareCents)}</span>
+            </span>
           )}
-          {shares.map((s, i) => {
+          {shares.map((s) => {
             const name = members.find((m) => m.id === s.member_id)?.name ?? 'Removed'
             return (
-              <span key={s.member_id}>
-                {i > 0 && ' · '}
-                <strong className="text-gray-700">{name}</strong> owes {formatMoney(s.amount_cents)}
+              <span key={s.member_id} className="inline-flex items-center gap-1">
+                <span className="text-[var(--color-ink-3)]">·</span>
+                <strong className="font-semibold text-[var(--color-ink)]">{name}</strong>{' '}
+                <span>owes</span>
+                <span className="tabular-nums text-[var(--color-ink)]">{formatMoney(s.amount_cents)}</span>
               </span>
             )
           })}
@@ -172,6 +199,8 @@ function SplitEditor({
 
   const sum = Object.values(amounts).reduce((s, v) => s + v, 0)
   const leftover = totalAbs - sum
+  const overshoot = sum > totalAbs
+  const progress = totalAbs === 0 ? 0 : Math.min(1, sum / totalAbs)
 
   function setEqual() {
     const denom = payerId ? nonPayerMembers.length + 1 : nonPayerMembers.length
@@ -190,71 +219,101 @@ function SplitEditor({
           onClose()
         })
       }
-      className="flex flex-col gap-3"
+      className="flex flex-col gap-4"
     >
       <input type="hidden" name="transaction_id" value={transactionId} />
 
-      <div className="flex items-baseline justify-between text-xs text-gray-500">
-        <span>
-          Total{' '}
-          <strong className="text-gray-900 tabular-nums">{formatMoney(totalAbs)}</strong>
+      {/* Header + equal-split action */}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+            Split editor
+          </div>
+          <div className="mt-0.5 font-serif text-[18px] leading-tight tracking-[-0.01em] text-[var(--color-ink)]">
+            Total <span className="tabular-nums">{formatMoney(totalAbs)}</span>
+          </div>
           {payerName && (
-            <>
-              {' '}· payer <strong className="text-gray-700">{payerName}</strong> keeps{' '}
-              <strong className="tabular-nums text-gray-700">{formatMoney(leftover)}</strong>
-            </>
+            <div className="mt-0.5 text-[12px] text-[var(--color-ink-2)]">
+              <strong className="font-semibold text-[var(--color-ink)]">{payerName}</strong> keeps{' '}
+              <span className="tabular-nums text-[var(--color-ink)]">{formatMoney(leftover)}</span>
+            </div>
           )}
-        </span>
+        </div>
         <button
           type="button"
           onClick={setEqual}
-          className="text-xs font-medium text-gray-700 underline hover:text-gray-900"
+          className="shrink-0 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-1.5 text-[12px] font-semibold text-[var(--color-ink)] transition-colors hover:bg-[var(--color-cream)]"
         >
           Split equally
         </button>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-2">
-        {nonPayerMembers.map((m) => (
-          <label key={m.id} className="flex items-center justify-between gap-3 text-sm">
-            <span className="text-gray-700">{m.name} owes</span>
-            <input
-              name={`share:${m.id}`}
-              type="text"
-              inputMode="decimal"
-              value={amounts[m.id] === 0 ? '' : (amounts[m.id] / 100).toFixed(2)}
-              placeholder="0.00"
-              onChange={(e) => {
-                const cleaned = e.target.value.replace(/[^0-9.]/g, '')
-                const n = Number(cleaned)
-                const cents = Number.isFinite(n) ? Math.round(n * 100) : 0
-                setAmounts((prev) => ({ ...prev, [m.id]: cents }))
-              }}
-              className="w-28 rounded border border-gray-300 px-2 py-1 text-right text-sm tabular-nums"
-            />
-          </label>
-        ))}
+      {/* Progress bar toward total */}
+      <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-paper)]">
+        <div
+          className="h-full rounded-full transition-all duration-300"
+          style={{
+            width: `${Math.round(progress * 100)}%`,
+            background: overshoot ? 'var(--color-maple)' : 'var(--color-leaf)',
+          }}
+        />
       </div>
 
-      {sum > totalAbs && (
-        <p className="text-sm text-red-600">
-          Shares can&apos;t exceed the transaction total ({formatMoney(sum)} &gt;{' '}
-          {formatMoney(totalAbs)}).
+      {/* Share inputs */}
+      <div className="grid gap-2 sm:grid-cols-2">
+        {nonPayerMembers.map((m) => {
+          const cents = amounts[m.id] ?? 0
+          return (
+            <label
+              key={m.id}
+              className="flex items-center justify-between gap-3 rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2.5 text-[13.5px] transition-colors focus-within:border-[var(--color-leaf)]"
+            >
+              <span className="min-w-0 truncate text-[var(--color-ink)]">
+                {m.name} <span className="text-[var(--color-ink-3)]">owes</span>
+              </span>
+              <div className="flex items-center">
+                <span className="text-[12px] text-[var(--color-ink-3)]">$</span>
+                <input
+                  name={`share:${m.id}`}
+                  type="text"
+                  inputMode="decimal"
+                  value={cents === 0 ? '' : (cents / 100).toFixed(2)}
+                  placeholder="0.00"
+                  onChange={(e) => {
+                    const cleaned = e.target.value.replace(/[^0-9.]/g, '')
+                    const n = Number(cleaned)
+                    const nextCents = Number.isFinite(n) ? Math.round(n * 100) : 0
+                    setAmounts((prev) => ({ ...prev, [m.id]: nextCents }))
+                  }}
+                  className="w-20 bg-transparent text-right font-serif text-[15px] tabular-nums text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-3)]"
+                />
+              </div>
+            </label>
+          )
+        })}
+      </div>
+
+      {overshoot && (
+        <p
+          className="rounded-[10px] px-3 py-2 text-[12.5px] font-medium"
+          style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
+        >
+          Shares can&rsquo;t exceed the transaction total ({formatMoney(sum)} &gt; {formatMoney(totalAbs)}).
         </p>
       )}
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 pt-1">
         <button
           type="submit"
-          disabled={pending || sum > totalAbs}
-          className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+          disabled={pending || overshoot}
+          className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-ink)] px-4 py-2.5 text-[13px] font-semibold text-[var(--color-paper)] transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pending ? 'Saving…' : 'Save split'}
         </button>
         <button
           type="button"
           onClick={onClose}
-          className="text-sm text-gray-500 hover:text-gray-900"
+          className="text-[13px] font-semibold text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
         >
           Cancel
         </button>

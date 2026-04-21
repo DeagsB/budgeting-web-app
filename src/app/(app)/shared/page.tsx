@@ -9,6 +9,7 @@ import {
   monthStartISO,
 } from '@/lib/format'
 import { computePairBalances, netUnorderedPairs } from '@/lib/settlement'
+import { MapleLabel } from '@/components/ui/label'
 import { SharedRow } from './row'
 import { BulkActions } from './bulk-actions'
 
@@ -21,12 +22,7 @@ type Txn = {
   description: string | null
   member_id: string | null
 }
-type Share = {
-  id: string
-  transaction_id: string
-  member_id: string
-  amount_cents: number
-}
+type Share = { id: string; transaction_id: string; member_id: string; amount_cents: number }
 
 export default async function SharedPage({
   searchParams,
@@ -60,8 +56,6 @@ export default async function SharedPage({
   const accountRows = (accounts ?? []) as Account[]
   const memberRows = (members ?? []) as Member[]
 
-  // Default account: the account with type credit_card if present, else the
-  // first member-owned account that isn't the caller's, else the first.
   const selectedAccountId =
     params.account ??
     accountRows.find((a) => a.type === 'credit_card')?.id ??
@@ -71,15 +65,22 @@ export default async function SharedPage({
   if (!selectedAccountId || accountRows.length === 0 || memberRows.length === 0) {
     return (
       <div className="flex flex-col gap-6">
-        <header>
-          <h1 className="text-2xl font-semibold">Shared expenses</h1>
-          <p className="mt-1 text-sm text-gray-500">Flag transactions as shared and settle up with household members.</p>
-        </header>
-        <p className="rounded-lg border border-dashed border-gray-300 p-6 text-sm text-gray-500">
-          {memberRows.length === 0
-            ? 'Add at least two members to track shared expenses.'
-            : 'Add at least one account first.'}
-        </p>
+        <PageHeader month={month} />
+        <EmptyState
+          title={
+            memberRows.length === 0 ? 'Add members to share expenses' : 'Add an account to get started'
+          }
+          body={
+            memberRows.length === 0
+              ? 'Shared expenses require at least two members in your household.'
+              : 'Once an account exists, transactions on it can be flagged as shared.'
+          }
+          cta={
+            memberRows.length === 0
+              ? { href: '/members', label: 'Manage members' }
+              : { href: '/accounts', label: 'Add an account' }
+          }
+        />
       </div>
     )
   }
@@ -119,15 +120,12 @@ export default async function SharedPage({
 
   const selectedAccount = accountRows.find((a) => a.id === selectedAccountId)!
 
-  // Stats
   const flaggedCount = transactions.filter((t) => (sharesByTx.get(t.id)?.length ?? 0) > 0).length
   const totalShared = shares.reduce(
     (s, sh) => s + (transactions.find((t) => t.id === sh.transaction_id) ? sh.amount_cents : 0),
     0,
   )
 
-  // Pair balances for just this account + month, to give the user a quick
-  // "if these shares stand, you owe each other X" readout here too.
   const pairs = computePairBalances({
     transactions: transactions.map((t) => ({
       id: t.id,
@@ -140,46 +138,22 @@ export default async function SharedPage({
   const netPairs = netUnorderedPairs(pairs)
   const memberName = new Map(memberRows.map((m) => [m.id, m.display_name]))
 
-  return (
-    <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-baseline sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Shared expenses</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            {monthLabel(month)} · {selectedAccount.name}
-          </p>
-        </div>
-        <div className="flex items-center gap-3 text-sm">
-          <Link
-            href={{ pathname: '/shared', query: { ...params, month: addMonths(month, -1) } }}
-            className="text-gray-500 hover:text-gray-900"
-          >
-            ← Previous
-          </Link>
-          <Link
-            href={{ pathname: '/shared', query: { ...params, month: monthStartISO() } }}
-            className="text-gray-500 hover:text-gray-900"
-          >
-            This month
-          </Link>
-          <Link
-            href={{ pathname: '/shared', query: { ...params, month: addMonths(month, 1) } }}
-            className="text-gray-500 hover:text-gray-900"
-          >
-            Next →
-          </Link>
-        </div>
-      </header>
+  const flaggedRatio = transactions.length === 0 ? 0 : flaggedCount / transactions.length
 
-      <section className="flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-4 sm:flex-row sm:items-end sm:justify-between">
-        <form className="flex flex-col gap-3 sm:flex-row sm:items-end" method="get">
+  return (
+    <div className="flex flex-col gap-6 pb-10">
+      <PageHeader month={month} subtitle={`${selectedAccount.name} · ${monthLabel(month)}`} params={params} />
+
+      {/* Month + account bar */}
+      <div className="flex flex-col gap-3 rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-4 sm:flex-row sm:items-end sm:justify-between md:p-5">
+        <form method="get" className="flex flex-col gap-1.5 sm:max-w-[320px]">
+          <MapleLabel>Source account</MapleLabel>
           <input type="hidden" name="month" value={month} />
-          <label className="flex flex-col gap-1 text-sm sm:max-w-xs">
-            <span className="text-gray-700">Source account</span>
+          <div className="flex gap-2">
             <select
               name="account"
               defaultValue={selectedAccountId}
-              className="w-full rounded border border-gray-300 px-3 py-2"
+              className="maple-select flex-1"
             >
               {accountRows.map((a) => {
                 const owner = a.member_id
@@ -187,66 +161,94 @@ export default async function SharedPage({
                   : 'Shared'
                 return (
                   <option key={a.id} value={a.id}>
-                    {a.name} ({owner})
+                    {a.name} — {owner}
                   </option>
                 )
               })}
             </select>
-          </label>
-          <button
-            type="submit"
-            className="rounded border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Switch
-          </button>
+            <button
+              type="submit"
+              className="rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-paper-2)] px-4 text-[13px] font-semibold text-[var(--color-ink)] transition-colors hover:bg-[var(--color-cream-2)]"
+            >
+              Switch
+            </button>
+          </div>
         </form>
 
         <BulkActions accountId={selectedAccountId} month={month} />
+      </div>
+
+      {/* Month navigation + stats */}
+      <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <StatTile
+          label="Transactions"
+          value={String(transactions.length)}
+          foot={`in ${monthLabel(month)}`}
+        />
+        <StatTile
+          label="Flagged as shared"
+          value={`${flaggedCount} / ${transactions.length || 0}`}
+          progress={flaggedRatio}
+        />
+        <StatTile label="Total shared" value={formatMoney(totalShared)} foot="across this account" />
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-3">
-        <Tile label="Transactions this month" value={String(transactions.length)} />
-        <Tile label="Flagged as shared" value={`${flaggedCount} / ${transactions.length}`} />
-        <Tile label="Total shared" value={formatMoney(totalShared)} />
-      </section>
+      <MonthNav month={month} params={params} />
 
       {netPairs.length > 0 && (
-        <section className="rounded-lg border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-gray-500">
-            Net balance from this month&apos;s shares
-          </h2>
-          <ul className="mt-2 flex flex-wrap gap-4 text-sm">
+        <section className="rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5">
+          <div className="flex items-baseline justify-between">
+            <MapleLabel>Net balance from this month&rsquo;s shares</MapleLabel>
+            <Link
+              href="/settlements"
+              className="text-[12px] font-semibold text-[var(--color-leaf)] hover:underline"
+            >
+              Settlements →
+            </Link>
+          </div>
+          <ul className="mt-3 flex flex-col gap-2">
             {netPairs.map((p) => (
-              <li key={`${p.from_member_id}:${p.to_member_id}`}>
-                <strong className="text-gray-900">
-                  {memberName.get(p.from_member_id) ?? 'Member'}
-                </strong>{' '}
-                owes{' '}
-                <strong className="text-gray-900">
-                  {memberName.get(p.to_member_id) ?? 'Member'}
-                </strong>{' '}
-                <span className="font-semibold text-red-700">{formatMoney(p.net_cents)}</span>
+              <li
+                key={`${p.from_member_id}:${p.to_member_id}`}
+                className="flex items-center justify-between gap-3 rounded-[12px] bg-[var(--color-cream-2)] px-3 py-2.5 text-[13.5px]"
+              >
+                <span className="min-w-0 truncate">
+                  <strong className="font-semibold text-[var(--color-ink)]">
+                    {memberName.get(p.from_member_id) ?? 'Member'}
+                  </strong>{' '}
+                  <span className="text-[var(--color-ink-2)]">owes</span>{' '}
+                  <strong className="font-semibold text-[var(--color-ink)]">
+                    {memberName.get(p.to_member_id) ?? 'Member'}
+                  </strong>
+                </span>
+                <span
+                  className="shrink-0 rounded-full px-2.5 py-1 font-serif text-[14px] tabular-nums"
+                  style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
+                >
+                  {formatMoney(p.net_cents)}
+                </span>
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-xs text-gray-500">
-            Record e-transfers on the{' '}
-            <Link href="/settlements" className="font-medium text-gray-900 underline">
-              Settlements
-            </Link>{' '}
-            page to net them out.
-          </p>
         </section>
       )}
 
-      <section className="rounded-lg border border-gray-200 bg-white">
-        <h2 className="border-b border-gray-200 px-6 py-3 text-sm font-medium uppercase tracking-wide text-gray-500">
-          Transactions on {selectedAccount.name}
-        </h2>
+      {/* Transactions list */}
+      <section className="overflow-hidden rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)]">
+        <header className="flex items-baseline justify-between border-b border-[var(--color-hair)] px-5 py-3.5">
+          <MapleLabel>Transactions on {selectedAccount.name}</MapleLabel>
+          {transactions.length > 0 && (
+            <span className="text-[11px] text-[var(--color-ink-3)]">
+              {flaggedCount}/{transactions.length} shared
+            </span>
+          )}
+        </header>
         {transactions.length === 0 ? (
-          <p className="px-6 py-6 text-sm text-gray-500">No transactions in {monthLabel(month)}.</p>
+          <p className="px-5 py-10 text-center text-[13.5px] text-[var(--color-ink-2)]">
+            No transactions in {monthLabel(month)}.
+          </p>
         ) : (
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-[var(--color-hair)]">
             {transactions.map((t) => {
               const txShares = sharesByTx.get(t.id) ?? []
               const payerId = t.member_id
@@ -277,11 +279,119 @@ export default async function SharedPage({
   )
 }
 
-function Tile({ label, value }: { label: string; value: string }) {
+// ─── subcomponents ────────────────────────────────────────────────────────
+
+function PageHeader({
+  subtitle,
+}: {
+  month: string
+  subtitle?: string
+  params?: { month?: string; account?: string }
+}) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
-      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</div>
-      <div className="mt-1 text-xl font-semibold tabular-nums">{value}</div>
+    <header className="flex flex-col gap-1">
+      <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+        Shared expenses
+      </div>
+      <h1 className="font-serif text-[34px] leading-[1.05] tracking-[-0.02em] text-[var(--color-ink)] md:text-[40px]">
+        Split fairly. Settle quickly.
+      </h1>
+      {subtitle && <p className="text-[14px] text-[var(--color-ink-2)]">{subtitle}</p>}
+    </header>
+  )
+}
+
+function MonthNav({
+  month,
+  params,
+}: {
+  month: string
+  params: { month?: string; account?: string }
+}) {
+  return (
+    <nav className="flex items-center gap-1 text-[13px]">
+      <Link
+        href={{ pathname: '/shared', query: { ...params, month: addMonths(month, -1) } }}
+        className="inline-flex items-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-1.5 font-medium text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
+      >
+        ← Previous
+      </Link>
+      <Link
+        href={{ pathname: '/shared', query: { ...params, month: monthStartISO() } }}
+        className="inline-flex items-center rounded-full px-3 py-1.5 font-medium text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
+      >
+        This month
+      </Link>
+      <Link
+        href={{ pathname: '/shared', query: { ...params, month: addMonths(month, 1) } }}
+        className="inline-flex items-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-1.5 font-medium text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
+      >
+        Next →
+      </Link>
+    </nav>
+  )
+}
+
+function StatTile({
+  label,
+  value,
+  foot,
+  progress,
+}: {
+  label: string
+  value: string
+  foot?: string
+  progress?: number
+}) {
+  return (
+    <div className="rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-4 md:p-5">
+      <MapleLabel>{label}</MapleLabel>
+      <div className="mt-1.5 font-serif text-[24px] leading-tight tracking-[-0.02em] tabular-nums text-[var(--color-ink)]">
+        {value}
+      </div>
+      {progress !== undefined && (
+        <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-[var(--color-paper-2)]">
+          <div
+            className="h-full rounded-full"
+            style={{ width: `${Math.round(progress * 100)}%`, background: 'var(--color-leaf)' }}
+          />
+        </div>
+      )}
+      {foot && !progress && (
+        <div className="mt-1 text-[12px] text-[var(--color-ink-3)]">{foot}</div>
+      )}
+    </div>
+  )
+}
+
+function EmptyState({
+  title,
+  body,
+  cta,
+}: {
+  title: string
+  body: string
+  cta: { href: string; label: string }
+}) {
+  return (
+    <div className="flex flex-col items-start gap-4 rounded-[20px] border border-dashed border-[var(--color-hair)] bg-[var(--color-paper-2)] p-8">
+      <div>
+        <h2 className="font-serif text-[22px] leading-tight tracking-[-0.01em] text-[var(--color-ink)]">
+          {title}
+        </h2>
+        <p className="mt-2 max-w-[440px] text-[14px] leading-relaxed text-[var(--color-ink-2)]">
+          {body}
+        </p>
+      </div>
+      <Link
+        href={cta.href}
+        className="inline-flex items-center gap-2 rounded-full bg-[var(--color-ink)] px-4 py-2.5 text-[13px] font-semibold text-[var(--color-paper)]"
+      >
+        {cta.label}
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+          <path d="M5 12h14M13 6l6 6-6 6" />
+        </svg>
+      </Link>
     </div>
   )
 }

@@ -20,8 +20,11 @@ export function BulkActions({ accountId, month }: { accountId: string; month: st
         <button
           type="submit"
           disabled={pending}
-          className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3.5 py-2 text-[12.5px] font-semibold text-[var(--color-ink)] transition-colors hover:bg-[var(--color-cream-2)] disabled:opacity-50"
         >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
           Share all unflagged
         </button>
       </form>
@@ -38,7 +41,8 @@ export function BulkActions({ accountId, month }: { accountId: string; month: st
         <button
           type="submit"
           disabled={pending}
-          className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+          className="inline-flex items-center rounded-full px-3.5 py-2 text-[12.5px] font-semibold transition-colors disabled:opacity-50"
+          style={{ color: 'var(--color-maple)' }}
         >
           Unshare all
         </button>
