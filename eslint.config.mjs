@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Design reference bundle — JSX-in-browser prototypes, not app code.
+    "design_handoff_maple/**",
   ]),
 ]);
 

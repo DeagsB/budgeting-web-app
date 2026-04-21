@@ -1,9 +1,24 @@
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
-import { addMonths, formatMoney, monthLabel, monthStartISO } from '@/lib/format'
+import { addMonths, monthStartISO } from '@/lib/format'
 import { LIABILITY_TYPES, type AccountType } from '@/lib/domain'
-import { Sparkline, type SparklinePoint } from '@/components/sparkline'
+import { DashboardClient } from './client'
+
+type Account = {
+  id: string
+  name: string
+  type: AccountType
+  ownership: string
+  member_id: string | null
+  opening_balance_cents: number
+  bank?: string | null
+}
+
+type Snapshot = {
+  account_id: string
+  as_of_month: string
+  balance_cents: number
+}
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -11,73 +26,99 @@ export default async function DashboardPage() {
   if (!ctx) return null
 
   const currentMonth = monthStartISO()
-  const earliestMonth = addMonths(currentMonth, -11) // 12-point trend
+  const monthStart12 = addMonths(currentMonth, -11)
+  const currentMonthEnd = addMonths(currentMonth, 1)
 
-  const [{ data: members }, { data: accountRows }, { count: txCount }, { data: snapshots }, { data: txTrend }] =
-    await Promise.all([
-      supabase
-        .from('members')
-        .select('id, display_name')
-        .eq('household_id', ctx.householdId)
-        .order('sort_order'),
-      supabase
-        .from('accounts')
-        .select('id, name, type, opening_balance_cents')
-        .eq('household_id', ctx.householdId)
-        .is('archived_at', null),
-      supabase
-        .from('transactions')
-        .select('id', { count: 'exact', head: true })
-        .eq('household_id', ctx.householdId)
-        .gte('occurred_on', currentMonth),
-      supabase
-        .from('account_balance_snapshots')
-        .select('account_id, balance_cents, as_of_month')
-        .eq('household_id', ctx.householdId)
-        .gte('as_of_month', earliestMonth)
-        .lte('as_of_month', currentMonth),
-      supabase
-        .from('transactions')
-        .select('occurred_on, amount_cents')
-        .eq('household_id', ctx.householdId)
-        .gte('occurred_on', earliestMonth),
-    ])
+  const [
+    { data: householdRow },
+    { data: memberRows },
+    { data: accountRows },
+    { data: snapshotRows },
+    { data: txRows },
+    { data: splitRows },
+    { data: categoryRows },
+  ] = await Promise.all([
+    supabase.from('households').select('name').eq('id', ctx.householdId).single(),
+    supabase
+      .from('members')
+      .select('id, display_name')
+      .eq('household_id', ctx.householdId)
+      .order('sort_order'),
+    supabase
+      .from('accounts')
+      .select('id, name, type, ownership, member_id, opening_balance_cents')
+      .eq('household_id', ctx.householdId)
+      .is('archived_at', null)
+      .order('name'),
+    supabase
+      .from('account_balance_snapshots')
+      .select('account_id, as_of_month, balance_cents')
+      .eq('household_id', ctx.householdId)
+      .gte('as_of_month', monthStart12)
+      .lte('as_of_month', currentMonth)
+      .order('as_of_month', { ascending: true }),
+    supabase
+      .from('transactions')
+      .select('id, amount_cents, member_id')
+      .eq('household_id', ctx.householdId)
+      .gte('occurred_on', currentMonth)
+      .lt('occurred_on', currentMonthEnd),
+    supabase
+      .from('transaction_splits')
+      .select('category_id, amount_cents, transaction:transactions!inner(occurred_on)')
+      .eq('household_id', ctx.householdId)
+      .gte('transaction.occurred_on', currentMonth)
+      .lt('transaction.occurred_on', currentMonthEnd),
+    supabase
+      .from('categories')
+      .select('id, name, parent_id')
+      .eq('household_id', ctx.householdId)
+      .is('archived_at', null),
+  ])
 
-  const accounts = (accountRows ?? []) as {
-    id: string
-    name: string
-    type: AccountType
-    opening_balance_cents: number
-  }[]
-  const openingTotal = accounts.reduce((s, a) => s + Number(a.opening_balance_cents), 0)
+  const household = householdRow ?? { name: 'Household' }
+  const members = (memberRows ?? []) as { id: string; display_name: string }[]
+  const accounts = ((accountRows ?? []) as Account[]).map((a) => ({
+    ...a,
+    opening_balance_cents: Number(a.opening_balance_cents),
+  }))
+  const snapshots = ((snapshotRows ?? []) as Snapshot[]).map((s) => ({
+    ...s,
+    balance_cents: Number(s.balance_cents),
+  }))
+  const transactions = (txRows ?? []).map((t) => ({
+    id: t.id,
+    amount_cents: Number(t.amount_cents),
+    member_id: t.member_id,
+  }))
+  const splits = (splitRows ?? []).map((s) => ({
+    category_id: s.category_id,
+    amount_cents: Number(s.amount_cents),
+  }))
+  const categories = (categoryRows ?? []) as { id: string; name: string; parent_id: string | null }[]
 
-  // Build month list (earliest → current)
-  const months: string[] = []
-  for (let i = 0; i < 12; i += 1) months.push(addMonths(earliestMonth, i))
-
-  // For each month, compute net worth using the latest snapshot ≤ that month
-  // per account, falling back to opening_balance_cents if no snapshot yet.
-  const snapsByAcct = new Map<string, { as_of_month: string; balance_cents: number }[]>()
-  for (const s of snapshots ?? []) {
+  // Build net-worth trail: for each of the last 12 months, sum the latest
+  // snapshot balance per account (fallback to opening_balance_cents).
+  const snapsByAcct = new Map<string, Snapshot[]>()
+  for (const s of snapshots) {
     if (!snapsByAcct.has(s.account_id)) snapsByAcct.set(s.account_id, [])
-    snapsByAcct.get(s.account_id)!.push({
-      as_of_month: s.as_of_month,
-      balance_cents: Number(s.balance_cents),
-    })
+    snapsByAcct.get(s.account_id)!.push(s)
   }
-  for (const arr of snapsByAcct.values()) arr.sort((a, b) => a.as_of_month.localeCompare(b.as_of_month))
 
-  function balanceAt(account: (typeof accounts)[number], month: string): number {
-    const snaps = snapsByAcct.get(account.id) ?? []
+  function balanceAt(acct: Account, month: string): number {
+    const arr = snapsByAcct.get(acct.id) ?? []
     let best: number | null = null
-    for (const s of snaps) {
+    for (const s of arr) {
       if (s.as_of_month <= month) best = s.balance_cents
       else break
     }
-    return best ?? Number(account.opening_balance_cents)
+    return best ?? acct.opening_balance_cents
   }
 
-  const netWorthTrend: SparklinePoint[] = months.map((m) => {
+  const months: string[] = []
+  for (let i = 0; i < 12; i += 1) months.push(addMonths(monthStart12, i))
+
+  const netWorthTrail = months.map((m) => {
     let assets = 0
     let liabilities = 0
     for (const a of accounts) {
@@ -85,96 +126,67 @@ export default async function DashboardPage() {
       if (LIABILITY_TYPES.has(a.type)) liabilities += bal
       else assets += bal
     }
-    const d = new Date(m + 'T00:00:00')
-    const label = d.toLocaleDateString('en-CA', { month: 'short' })
-    return { label, value: assets - liabilities }
+    return { month: m, value: assets - liabilities }
   })
 
-  // Monthly spending trend: total positive (outflow) transactions per month
-  const spendByMonth = new Map<string, number>()
-  for (const tx of txTrend ?? []) {
-    const amt = Number(tx.amount_cents)
-    if (amt <= 0) continue
-    const month = tx.occurred_on.slice(0, 7) + '-01'
-    spendByMonth.set(month, (spendByMonth.get(month) ?? 0) + amt)
+  const netWorth = netWorthTrail[netWorthTrail.length - 1]?.value ?? 0
+  const netWorthPrev = netWorthTrail[netWorthTrail.length - 2]?.value ?? netWorth
+  const netWorthDelta = netWorth - netWorthPrev
+
+  // Current account balances (latest snapshot or opening fallback).
+  const accountsWithBalance = accounts.map((a) => ({
+    id: a.id,
+    name: a.name,
+    type: a.type,
+    ownership: a.ownership,
+    member_id: a.member_id,
+    balance_cents: balanceAt(a, currentMonth),
+  }))
+
+  // Month totals: income (negative txns), expenses (positive), net.
+  let income = 0
+  let expenses = 0
+  for (const tx of transactions) {
+    if (tx.amount_cents < 0) income += -tx.amount_cents
+    else if (tx.amount_cents > 0) expenses += tx.amount_cents
   }
-  const spendTrend: SparklinePoint[] = months.map((m) => {
-    const d = new Date(m + 'T00:00:00')
-    return {
-      label: d.toLocaleDateString('en-CA', { month: 'short' }),
-      value: spendByMonth.get(m) ?? 0,
-    }
-  })
 
-  const currentNetWorth = netWorthTrend[netWorthTrend.length - 1]?.value ?? 0
+  // Spending breakdown by category. Splits only on positive amounts (outflows).
+  // Roll child category spend into the parent so the breakdown bar shows
+  // top-level groups.
+  const parentOf = new Map<string, string | null>(categories.map((c) => [c.id, c.parent_id]))
+  const categoryName = new Map(categories.map((c) => [c.id, c.name]))
+
+  const spendByCategory = new Map<string, number>()
+  for (const s of splits) {
+    if (s.amount_cents <= 0 || !s.category_id) continue
+    const parentId = parentOf.get(s.category_id) ?? s.category_id
+    const rootId = parentId ?? s.category_id
+    spendByCategory.set(rootId, (spendByCategory.get(rootId) ?? 0) + s.amount_cents)
+  }
+
+  const spendingBreakdown = Array.from(spendByCategory.entries())
+    .map(([id, amount]) => ({
+      id,
+      name: categoryName.get(id) ?? 'Uncategorized',
+      amount_cents: amount,
+    }))
+    .sort((a, b) => b.amount_cents - a.amount_cents)
+    .slice(0, 6)
 
   return (
-    <div className="flex flex-col gap-8">
-      <header>
-        <h1 className="text-2xl font-semibold">Overview</h1>
-        <p className="mt-1 text-sm text-gray-500">{monthLabel(currentMonth)}</p>
-      </header>
-
-      <section className="grid gap-4 sm:grid-cols-4">
-        <Tile label="Members" value={String((members ?? []).length)} />
-        <Tile label="Accounts" value={String(accounts.length)} />
-        <Tile label="Transactions this month" value={String(txCount ?? 0)} />
-        <Tile label="Net worth" value={formatMoney(currentNetWorth)} />
-      </section>
-
-      <section className="rounded-lg border border-gray-200 bg-white p-6">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-gray-500">
-            Net worth — trailing 12 months
-          </h2>
-          <Link
-            href="/balance-sheet"
-            className="text-xs text-gray-500 hover:text-gray-900"
-          >
-            Balance sheet →
-          </Link>
-        </div>
-        <div className="mt-3 text-gray-900">
-          <Sparkline points={netWorthTrend} fill ariaLabel="Net worth over time" />
-        </div>
-      </section>
-
-      <section className="rounded-lg border border-gray-200 bg-white p-6">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-gray-500">
-            Monthly spending — trailing 12 months
-          </h2>
-          <Link
-            href="/transactions"
-            className="text-xs text-gray-500 hover:text-gray-900"
-          >
-            Transactions →
-          </Link>
-        </div>
-        <div className="mt-3 text-red-700 dark:text-red-400">
-          <Sparkline points={spendTrend} fill ariaLabel="Monthly spending trend" />
-        </div>
-      </section>
-
-      <section className="rounded-lg border border-gray-200 bg-white p-6">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-gray-500">
-          Opening balances (sum across accounts)
-        </h2>
-        <p className="mt-2 text-2xl font-semibold tabular-nums">{formatMoney(openingTotal)}</p>
-        <p className="mt-1 text-xs text-gray-500">
-          Opening balances are the starting point; current balances update via the balance-sheet
-          snapshot form.
-        </p>
-      </section>
-    </div>
-  )
-}
-
-function Tile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
-      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</div>
-      <div className="mt-1 text-xl font-semibold tabular-nums">{value}</div>
-    </div>
+    <DashboardClient
+      householdName={household.name}
+      members={members.map((m) => ({ id: m.id, name: m.display_name, initial: m.display_name[0] ?? '?' }))}
+      currentMonthISO={currentMonth}
+      netWorth={netWorth}
+      netWorthDelta={netWorthDelta}
+      netWorthTrail={netWorthTrail}
+      income={income}
+      expenses={expenses}
+      net={income - expenses}
+      accounts={accountsWithBalance}
+      spendingBreakdown={spendingBreakdown}
+    />
   )
 }

@@ -1,15 +1,23 @@
 import type { Metadata, Viewport } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import { Inter_Tight, Instrument_Serif, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
+const interTight = Inter_Tight({
   subsets: ['latin'],
+  variable: '--font-sans',
+  weight: ['400', '500', '600', '700', '800'],
 })
 
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
+const instrumentSerif = Instrument_Serif({
   subsets: ['latin'],
+  variable: '--font-serif',
+  weight: '400',
+})
+
+const jetBrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-mono',
+  weight: ['400', '500'],
 })
 
 export const metadata: Metadata = {
@@ -17,17 +25,27 @@ export const metadata: Metadata = {
   description: 'Household budgeting app',
 }
 
-// iPhone-friendly viewport: viewport-fit=cover so safe-area env() values
-// resolve to the notch/home-indicator insets we pad for in globals.css.
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#0b0c0f' },
+    { media: '(prefers-color-scheme: light)', color: '#F6F1E7' },
+    { media: '(prefers-color-scheme: dark)', color: '#181410' },
   ],
 }
+
+// Tiny script runs before hydration to sync the `dark` class on <html> with
+// the user's OS preference. Avoids a one-frame flash of wrong theme. When we
+// add a manual toggle, it'll read from localStorage here too.
+const themeBootstrap = `
+(function(){
+  try {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (prefersDark) document.documentElement.classList.add('dark');
+  } catch (e) {}
+})();
+`
 
 export default function RootLayout({
   children,
@@ -37,8 +55,12 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
+      className={`${interTight.variable} ${instrumentSerif.variable} ${jetBrainsMono.variable} h-full antialiased`}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   )

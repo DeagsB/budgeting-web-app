@@ -1,41 +1,162 @@
 @import "tailwindcss";
 
 /*
- * Dark theme: flip Tailwind v4's grayscale palette at the CSS variable level
- * via prefers-color-scheme. Every `bg-white`, `text-gray-900`, and friend
- * utility class resolves through `var(--color-*)`, so the whole app adapts
- * without touching individual JSX. Red/green accents stay unchanged.
+ * Dark mode: class-based so we can override via a toggle stored in
+ * localStorage later. The layout.tsx bootstrap script syncs `.dark` on <html>
+ * with prefers-color-scheme on load. Any `dark:` Tailwind variant resolves
+ * via this custom variant.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Maple design tokens. Every color surfaces as a Tailwind utility (bg-cream,
+ * text-ink, border-hair, etc.) through @theme inline.
+ *
+ * Light is the default. `.dark` on <html> swaps the values.
  */
 
 :root {
-  --background: #ffffff;
-  --foreground: #111827;
+  /* surfaces */
+  --color-cream: #f6f1e7;
+  --color-cream-2: #efe7d7;
+  --color-paper: #fffdf7;
+  --color-paper-2: #fbf5e9;
+
+  /* ink (text) */
+  --color-ink: #1e1a17;
+  --color-ink-2: #6b5f54;
+  --color-ink-3: #a89b8e;
+
+  /* hairlines */
+  --color-hair: rgba(94, 76, 58, 0.12);
+  --color-hair-2: rgba(94, 76, 58, 0.06);
+
+  /* accents */
+  --color-leaf: #1f5641;
+  --color-leaf-deep: #154031;
+  --color-leaf-soft: #d7e4dc;
+  --color-leaf-tint: #e7f0ea;
+
+  --color-maple: #c83a1f;
+  --color-maple-soft: #f6e0db;
+
+  --color-butter: #e7dccf;
+  --color-honey: #d4a574;
+
+  --color-berry: #8a3a5c;
+
+  /* semantic */
+  --color-up: #2e7d32;
+  --color-down: #c83a1f;
+
+  /* effects */
+  --shadow-card: 0 4px 14px rgba(31, 86, 65, 0.12);
+  --shadow-float: 0 10px 30px rgba(30, 26, 23, 0.22);
+
+  /* easing */
+  --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-ios-in: cubic-bezier(0.17, 0.84, 0.44, 1);
+  --ease-ios-out: cubic-bezier(0.4, 0, 0.68, 0);
 }
 
+.dark {
+  --color-cream: #181410;
+  --color-cream-2: #0f0c09;
+  --color-paper: #221d18;
+  --color-paper-2: #2b2520;
+
+  --color-ink: #f4efe5;
+  --color-ink-2: #b8aa99;
+  --color-ink-3: #7a6e61;
+
+  --color-hair: rgba(244, 239, 229, 0.10);
+  --color-hair-2: rgba(244, 239, 229, 0.05);
+
+  --color-leaf: #7fc9a7;
+  --color-leaf-deep: #9ad8b4;
+  --color-leaf-soft: rgba(127, 201, 167, 0.16);
+  --color-leaf-tint: rgba(127, 201, 167, 0.08);
+
+  --color-maple: #e86a50;
+  --color-maple-soft: rgba(232, 106, 80, 0.14);
+
+  --color-butter: #3b332a;
+  --color-honey: #d4a574;
+
+  --color-berry: #d37aa0;
+
+  --color-up: #7fc9a7;
+  --color-down: #e86a50;
+
+  --shadow-card: 0 4px 14px rgba(0, 0, 0, 0.35);
+  --shadow-float: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+/*
+ * Surface the tokens as Tailwind color utilities. Using @theme inline means
+ * the utilities resolve at runtime via CSS vars, so `.dark` toggling flips
+ * every color without regenerating classes.
+ */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-cream: var(--color-cream);
+  --color-cream-2: var(--color-cream-2);
+  --color-paper: var(--color-paper);
+  --color-paper-2: var(--color-paper-2);
+
+  --color-ink: var(--color-ink);
+  --color-ink-2: var(--color-ink-2);
+  --color-ink-3: var(--color-ink-3);
+
+  --color-hair: var(--color-hair);
+  --color-hair-2: var(--color-hair-2);
+
+  --color-leaf: var(--color-leaf);
+  --color-leaf-deep: var(--color-leaf-deep);
+  --color-leaf-soft: var(--color-leaf-soft);
+  --color-leaf-tint: var(--color-leaf-tint);
+
+  --color-maple: var(--color-maple);
+  --color-maple-soft: var(--color-maple-soft);
+
+  --color-butter: var(--color-butter);
+  --color-honey: var(--color-honey);
+  --color-berry: var(--color-berry);
+
+  --color-up: var(--color-up);
+  --color-down: var(--color-down);
+
+  --font-sans: var(--font-sans), -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-serif: var(--font-serif), Georgia, serif;
+  --font-mono: var(--font-mono), ui-monospace, monospace;
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+
+  --shadow-card: var(--shadow-card);
+  --shadow-float: var(--shadow-float);
+
+  --ease-ios: var(--ease-ios);
+  --ease-ios-in: var(--ease-ios-in);
+  --ease-ios-out: var(--ease-ios-out);
 }
 
+/*
+ * Body + iPhone primitives. Kept from the prior mobile-first pass: safe-area
+ * insets, 16px-min inputs to avoid iOS focus-zoom, no horizontal page scroll,
+ * minimal tap highlight.
+ */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-  /* iPhone safe-area insets — notch on the top, home indicator at the bottom,
-     and landscape rotation bumpers on the sides. Without this, fixed chrome
-     hides behind system UI. */
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   padding-top: env(safe-area-inset-top);
   padding-right: env(safe-area-inset-right);
   padding-bottom: env(safe-area-inset-bottom);
   padding-left: env(safe-area-inset-left);
 }
 
-/* Mobile-friendly form controls: 16px is the iOS zoom-on-focus threshold.
-   Inputs below that trigger the Safari auto-zoom, which is universally
-   annoying. Enforce it globally; override to smaller only where absolutely
-   necessary (and never on touch devices). */
 input,
 select,
 textarea,
@@ -48,54 +169,57 @@ button {
   select,
   textarea,
   button {
-    font-size: inherit; /* desktop can use Tailwind size classes freely */
+    font-size: inherit;
   }
 }
 
-/* Default tap highlight on iOS is an ugly blue box on every press. Replace
-   with a subtle opacity flash that respects dark mode. */
 a,
 button,
 [role='button'] {
   -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
 }
 
-/* Keep the page from horizontally scrolling even if a child overflows — the
-   address bar jiggle on iOS is jarring. Children should use their own
-   overflow-x-auto wrappers. */
 html,
 body {
   overflow-x: hidden;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0b0c0f;
-    --foreground: #ededed;
+.hide-scroll::-webkit-scrollbar {
+  display: none;
+}
+.hide-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
 
-    --color-white: #15171c;
-    --color-gray-50: #1b1e24;
-    --color-gray-100: #22252c;
-    --color-gray-200: #2b2f37;
-    --color-gray-300: #3a3f48;
-    --color-gray-400: #7a808a;
-    --color-gray-500: #9097a0;
-    --color-gray-600: #b5bac2;
-    --color-gray-700: #cdd1d7;
-    --color-gray-800: #dee1e5;
-    --color-gray-900: #ededed;
-    --color-gray-950: #f6f7f8;
-  }
+/*
+ * Legacy greyscale inversion (kept for pages not yet migrated to Maple
+ * tokens). Any `bg-white`, `text-gray-900`, etc. still work under the old
+ * palette-flip strategy so unmigrated routes don't regress.
+ */
+.dark {
+  --color-white: #15171c;
+  --color-gray-50: #1b1e24;
+  --color-gray-100: #22252c;
+  --color-gray-200: #2b2f37;
+  --color-gray-300: #3a3f48;
+  --color-gray-400: #7a808a;
+  --color-gray-500: #9097a0;
+  --color-gray-600: #b5bac2;
+  --color-gray-700: #cdd1d7;
+  --color-gray-800: #dee1e5;
+  --color-gray-900: #ededed;
+  --color-gray-950: #f6f7f8;
+}
 
-  input[type='text'],
-  input[type='email'],
-  input[type='password'],
-  input[type='date'],
-  input[type='number'],
-  input:not([type]),
-  select,
-  textarea {
-    background-color: var(--color-white);
-    color: var(--foreground);
-  }
+.dark input[type='text'],
+.dark input[type='email'],
+.dark input[type='password'],
+.dark input[type='date'],
+.dark input[type='number'],
+.dark input:not([type]),
+.dark select,
+.dark textarea {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
 }
