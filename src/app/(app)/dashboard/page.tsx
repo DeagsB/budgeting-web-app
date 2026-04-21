@@ -4,6 +4,8 @@ import { addMonths, monthStartISO } from '@/lib/format'
 import { LIABILITY_TYPES, type AccountType } from '@/lib/domain'
 import { DashboardClient } from './client'
 
+export const dynamic = 'force-dynamic'
+
 type Account = {
   id: string
   name: string
@@ -30,15 +32,15 @@ export default async function DashboardPage() {
   const currentMonthEnd = addMonths(currentMonth, 1)
 
   const [
-    { data: householdRow },
-    { data: memberRows },
-    { data: accountRows },
-    { data: snapshotRows },
-    { data: txRows },
-    { data: splitRows },
-    { data: categoryRows },
+    householdRes,
+    membersRes,
+    accountsRes,
+    snapshotsRes,
+    transactionsRes,
+    splitsRes,
+    categoriesRes,
   ] = await Promise.all([
-    supabase.from('households').select('name').eq('id', ctx.householdId).single(),
+    supabase.from('households').select('name').eq('id', ctx.householdId).maybeSingle(),
     supabase
       .from('members')
       .select('id, display_name')
@@ -76,26 +78,26 @@ export default async function DashboardPage() {
       .is('archived_at', null),
   ])
 
-  const household = householdRow ?? { name: 'Household' }
-  const members = (memberRows ?? []) as { id: string; display_name: string }[]
-  const accounts = ((accountRows ?? []) as Account[]).map((a) => ({
+  const household = householdRes.data ?? { name: 'Household' }
+  const members = (membersRes.data ?? []) as { id: string; display_name: string }[]
+  const accounts = ((accountsRes.data ?? []) as Account[]).map((a) => ({
     ...a,
     opening_balance_cents: Number(a.opening_balance_cents),
   }))
-  const snapshots = ((snapshotRows ?? []) as Snapshot[]).map((s) => ({
+  const snapshots = ((snapshotsRes.data ?? []) as Snapshot[]).map((s) => ({
     ...s,
     balance_cents: Number(s.balance_cents),
   }))
-  const transactions = (txRows ?? []).map((t) => ({
+  const transactions = (transactionsRes.data ?? []).map((t) => ({
     id: t.id,
     amount_cents: Number(t.amount_cents),
     member_id: t.member_id,
   }))
-  const splits = (splitRows ?? []).map((s) => ({
+  const splits = (splitsRes.data ?? []).map((s) => ({
     category_id: s.category_id,
     amount_cents: Number(s.amount_cents),
   }))
-  const categories = (categoryRows ?? []) as { id: string; name: string; parent_id: string | null }[]
+  const categories = (categoriesRes.data ?? []) as { id: string; name: string; parent_id: string | null }[]
 
   // Build net-worth trail: for each of the last 12 months, sum the latest
   // snapshot balance per account (fallback to opening_balance_cents).

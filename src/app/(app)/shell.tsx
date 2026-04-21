@@ -26,6 +26,7 @@ const NAV_PRIMARY = [
 const NAV_SECONDARY = [
   { href: '/pnl', label: 'Profit & Loss' },
   { href: '/balance-sheet', label: 'Balance sheet' },
+  { href: '/net-worth', label: 'Net worth' },
   { href: '/loans', label: 'Loans' },
   { href: '/contributions', label: 'Contributions' },
   { href: '/goals', label: 'Goals' },
@@ -33,8 +34,7 @@ const NAV_SECONDARY = [
 ] as const
 
 const NAV_META = [
-  { href: '/categories', label: 'Categories' },
-  { href: '/members', label: 'Members' },
+  { href: '/setup', label: 'Setup' },
 ] as const
 
 function isActive(pathname: string, href: string) {

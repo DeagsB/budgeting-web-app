@@ -30,7 +30,7 @@ export default async function PnlPage({
       .gte('transaction.occurred_on', yearStart),
     supabase
       .from('transactions')
-      .select('amount_cents, occurred_on')
+      .select('amount_cents, occurred_on, direction')
       .eq('household_id', ctx.householdId)
       .gte('occurred_on', yearStart),
     supabase
@@ -50,14 +50,12 @@ export default async function PnlPage({
   const idx = (iso: string) =>
     buckets.findIndex((b) => b.month.slice(0, 7) === iso.slice(0, 7))
 
-  // No `direction` column — sign convention is amount_cents > 0 means an
-  // outflow (expense) and amount_cents < 0 means an inflow (income).
   for (const t of txs ?? []) {
     const i = idx(t.occurred_on as string)
     if (i < 0) continue
-    const raw = Number(t.amount_cents)
-    if (raw > 0) buckets[i].expense += raw
-    else if (raw < 0) buckets[i].income += -raw
+    const cents = Math.abs(Number(t.amount_cents))
+    if (t.direction === 'income') buckets[i].income += cents
+    else if (t.direction === 'expense') buckets[i].expense += cents
   }
 
   // Category breakdown for selected month

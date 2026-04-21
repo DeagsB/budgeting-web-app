@@ -21,10 +21,10 @@ export default async function BalanceSheetPage() {
       .is('archived_at', null)
       .order('name'),
     supabase
-      .from('account_balance_snapshots')
-      .select('account_id, balance_cents, as_of_month')
+      .from('account_snapshots')
+      .select('account_id, balance_cents, as_of')
       .eq('household_id', ctx.householdId)
-      .order('as_of_month', { ascending: false }),
+      .order('as_of', { ascending: false }),
     supabase
       .from('members')
       .select('id, display_name')

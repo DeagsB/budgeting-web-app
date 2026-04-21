@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { OnboardingForm } from './form'
 
+export const dynamic = 'force-dynamic'
+
 export default async function OnboardingPage() {
   const supabase = await createClient()
   const { data } = await supabase.auth.getUser()

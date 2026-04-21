@@ -5,6 +5,10 @@ export async function proxy(request: NextRequest) {
   return updateSession(request)
 }
 
+export async function middleware(request: NextRequest) {
+  return updateSession(request)
+}
+
 export const config = {
   // Skip static assets and image-optimisation requests. Everything else runs
   // through the proxy so the Supabase session stays fresh.

@@ -25,7 +25,7 @@ export default function CheckEmailPage() {
           Check your inbox.
         </h1>
         <p className="mt-3 text-[14px] leading-relaxed text-[var(--color-ink-2)]">
-          We sent you a confirmation link. Click it, and we&rsquo;ll set up your household.
+          We sent you a confirmation link. Click it, and we'll set up your household.
         </p>
         <Link
           href="/sign-in"
