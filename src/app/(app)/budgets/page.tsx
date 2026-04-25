@@ -121,16 +121,42 @@ export default async function BudgetsPage({
   const totalActual = categories
     .filter((c) => !c.parent_id)
     .reduce((s, c) => s + (actualRolled.get(c.id) ?? 0), 0)
-  const totalYtdBudget = Array.from(ytdBudget.entries())
-    .filter(([id]) => !parentOf.get(id))
-    .reduce((s, [, v]) => s + v, 0)
-  const totalYtdActual = categories
-    .filter((c) => !c.parent_id)
-    .reduce((s, c) => s + (ytdActualRolled.get(c.id) ?? 0), 0)
-
   const monthVariance = totalActual - totalBudget
-  const ytdVariance = totalYtdActual - totalYtdBudget
   const pctUsed = totalBudget > 0 ? Math.min(1.2, totalActual / totalBudget) : 0
+
+  // Compact "X of N budgeted" + top-spending categories for the hero peek.
+  // Uses top-level (parent) categories so we don't double-count children.
+  const topLevel = categories.filter((c) => !c.parent_id)
+  const budgetedTopLevel = topLevel.filter((c) => (budgetByCat.get(c.id) ?? 0) > 0)
+  const topCategories = budgetedTopLevel
+    .map((c) => {
+      const budget = budgetByCat.get(c.id) ?? 0
+      const actual = actualRolled.get(c.id) ?? 0
+      return { id: c.id, name: c.name, budget, actual }
+    })
+    .sort((a, b) => b.actual - a.actual)
+    .slice(0, 4)
+
+  // Month-focused stats: how many budgeted categories are already over,
+  // and a pace-based projection of where this month is headed.
+  const categoriesOver = budgetedTopLevel.filter(
+    (c) => (actualRolled.get(c.id) ?? 0) > (budgetByCat.get(c.id) ?? 0),
+  ).length
+
+  const monthDate = new Date(month + 'T00:00:00')
+  const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate()
+  const today = new Date()
+  // daysElapsed treats past months as fully elapsed and future months as 0.
+  let daysElapsed: number
+  if (today < monthDate) daysElapsed = 0
+  else if (today.getFullYear() === monthDate.getFullYear() && today.getMonth() === monthDate.getMonth()) {
+    daysElapsed = today.getDate()
+  } else {
+    daysElapsed = daysInMonth
+  }
+  const dailyPace = daysElapsed > 0 ? totalActual / daysElapsed : 0
+  const projectedMonth = Math.round(dailyPace * daysInMonth)
+  const projectedVsBudget = totalBudget > 0 ? projectedMonth - totalBudget : 0
 
   return (
     <div className="flex flex-col gap-6 pb-10">
@@ -173,6 +199,12 @@ export default async function BudgetsPage({
               {formatMoney(totalActual)}{' '}
               <span className="text-[var(--color-ink-3)]">of {formatMoney(totalBudget)}</span>
             </div>
+            <div className="mt-1 text-[12.5px] text-[var(--color-ink-2)]">
+              <span className="font-semibold tabular-nums text-[var(--color-ink)]">
+                {budgetedTopLevel.length}
+              </span>{' '}
+              of <span className="tabular-nums">{topLevel.length}</span> categories budgeted
+            </div>
           </div>
           <span
             className="rounded-full px-3 py-1.5 text-[12px] font-semibold tabular-nums"
@@ -195,32 +227,100 @@ export default async function BudgetsPage({
             }}
           />
         </div>
+
+        {/* Top-spending budgeted categories — quick glance before the full
+            table. Mini bars match the hero's tone: leaf when within budget,
+            maple when over. */}
+        {topCategories.length > 0 && (
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {topCategories.map((c) => {
+              const pct = c.budget > 0 ? Math.min(1.2, c.actual / c.budget) : 0
+              const over = c.actual > c.budget
+              return (
+                <div key={c.id} className="rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-paper-2)] p-3">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div className="truncate text-[12.5px] font-semibold text-[var(--color-ink)]">
+                      {c.name}
+                    </div>
+                    <div
+                      className="shrink-0 text-[11px] font-semibold tabular-nums"
+                      style={{ color: over ? 'var(--color-maple)' : 'var(--color-ink-2)' }}
+                    >
+                      {Math.round(pct * 100)}%
+                    </div>
+                  </div>
+                  <div className="mt-1.5 h-[6px] overflow-hidden rounded-full bg-[var(--color-paper)]">
+                    <div
+                      className="h-full rounded-full transition-all duration-300"
+                      style={{
+                        width: `${Math.min(100, Math.round(pct * 100))}%`,
+                        background: over ? 'var(--color-maple)' : 'var(--color-leaf)',
+                      }}
+                    />
+                  </div>
+                  <div className="mt-1.5 text-[11.5px] tabular-nums text-[var(--color-ink-3)]">
+                    <span style={{ color: over ? 'var(--color-maple)' : 'var(--color-ink)' }}>
+                      {formatMoney(c.actual)}
+                    </span>{' '}
+                    of {formatMoney(c.budget)}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2">
         <Tile
-          label="YTD budgeted"
-          value={formatMoney(totalYtdBudget)}
+          label="Pace"
+          value={daysElapsed > 0 ? `${formatMoney(dailyPace)}/day` : '—'}
           tone="ink"
+          hint={
+            daysElapsed === 0
+              ? 'Future month'
+              : daysElapsed >= daysInMonth
+                ? 'Month complete'
+                : `Projected ${formatMoney(projectedMonth)} (${projectedVsBudget > 0 ? `${formatMoney(projectedVsBudget)} over` : projectedVsBudget < 0 ? `${formatMoney(-projectedVsBudget)} under` : 'on target'})`
+          }
         />
         <Tile
-          label="YTD variance"
-          value={formatMoney(ytdVariance)}
-          tone={ytdVariance > 0 ? 'maple' : ytdVariance < 0 ? 'leaf' : 'ink'}
-          hint={ytdVariance <= 0 ? 'Under budget year-to-date' : 'Over budget year-to-date'}
+          label="Over budget"
+          value={`${categoriesOver} of ${budgetedTopLevel.length}`}
+          tone={categoriesOver > 0 ? 'maple' : 'leaf'}
+          hint={
+            budgetedTopLevel.length === 0
+              ? 'No budgets configured yet'
+              : categoriesOver === 0
+                ? 'Every category on track this month'
+                : `${categoriesOver} categor${categoriesOver === 1 ? 'y' : 'ies'} need${categoriesOver === 1 ? 's' : ''} attention`
+          }
         />
       </section>
 
-      <BudgetTable
-        month={month}
-        categories={categories}
-        budgetByCat={Object.fromEntries(budgetByCat)}
-        actualRolled={Object.fromEntries(actualRolled)}
-        actualDirect={Object.fromEntries(actualDirect)}
-        ytdBudget={Object.fromEntries(ytdBudget)}
-        ytdActualRolled={Object.fromEntries(ytdActualRolled)}
-        rolloverCredit={Object.fromEntries(rolloverCredit)}
-      />
+      <details className="group rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] [&_summary]:list-none [&_summary::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer items-center justify-between px-5 py-3.5 md:px-6">
+          <div className="flex items-center gap-2">
+            <MapleLabel>Categories</MapleLabel>
+            <span className="text-[11.5px] text-[var(--color-ink-3)]">
+              {budgetedTopLevel.length} of {topLevel.length} budgeted
+            </span>
+          </div>
+          <Chevron />
+        </summary>
+        <div className="border-t border-[var(--color-hair)]">
+          <BudgetTable
+            month={month}
+            categories={categories}
+            budgetByCat={Object.fromEntries(budgetByCat)}
+            actualRolled={Object.fromEntries(actualRolled)}
+            actualDirect={Object.fromEntries(actualDirect)}
+            ytdBudget={Object.fromEntries(ytdBudget)}
+            ytdActualRolled={Object.fromEntries(ytdActualRolled)}
+            rolloverCredit={Object.fromEntries(rolloverCredit)}
+          />
+        </div>
+      </details>
 
       <p className="rounded-[14px] border border-[var(--color-hair)] bg-[var(--color-paper-2)] px-4 py-3 text-[12.5px] leading-relaxed text-[var(--color-ink-2)]">
         Actuals count outflows only. Paycheques and other inflows appear on P&amp;L. Parent-category
@@ -255,5 +355,26 @@ function Tile({
       </div>
       {hint && <div className="mt-1 text-[12px] text-[var(--color-ink-3)]">{hint}</div>}
     </div>
+  )
+}
+
+// Used inside the collapsible <summary>; rotates 180° when the parent
+// <details> opens via group-open:rotate-180.
+function Chevron() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="text-[var(--color-ink-3)] transition-transform group-open:rotate-180"
+      aria-hidden
+    >
+      <path d="M6 9l6 6 6-6" />
+    </svg>
   )
 }
