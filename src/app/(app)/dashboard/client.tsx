@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { formatMoney, monthLabel } from '@/lib/format'
+import { formatMoney, formatDate, monthLabel } from '@/lib/format'
 import { smoothPath, seriesToPoints } from '@/lib/maple'
 import { accountTypeLabel, LIABILITY_TYPES, type AccountType } from '@/lib/domain'
 import { MapleLabel } from '@/components/ui/label'
@@ -16,11 +16,16 @@ import { colorForCategory } from '@/lib/category-colors'
 // and in what order via the Edit modal; their choice persists in localStorage.
 
 const WIDGETS = [
-  { id: 'greeting',    label: 'Greeting',     description: 'Month + name + member chips' },
-  { id: 'net-worth',   label: 'Net worth',    description: 'Hero number + chart + range selector' },
-  { id: 'month-stats', label: 'Month stats',  description: 'Income, Spent, Saved tiles' },
-  { id: 'accounts',    label: 'Accounts',     description: 'Horizontal scroll of flippable cards' },
-  { id: 'spending',    label: 'Where it went', description: 'Top categories breakdown bar' },
+  { id: 'greeting',        label: 'Greeting',        description: 'Month + name + member chips' },
+  { id: 'net-worth',       label: 'Net worth',       description: 'Hero number + chart + range selector' },
+  { id: 'month-stats',     label: 'Month stats',     description: 'Income, Spent, Saved tiles' },
+  { id: 'budget-progress', label: 'Budget progress', description: 'This month spent vs budgeted' },
+  { id: 'pace',            label: 'Pace',            description: 'Daily spend + projected month-end' },
+  { id: 'accounts',        label: 'Accounts',        description: 'Horizontal scroll of flippable cards' },
+  { id: 'spending',        label: 'Where it went',   description: 'Top categories breakdown bar' },
+  { id: 'recurring',       label: 'Recurring',       description: 'Subscriptions + bills detected from last 3 months' },
+  { id: 'goals',           label: 'Goals',           description: 'Progress towards your savings goals' },
+  { id: 'recent-activity', label: 'Recent activity', description: 'Latest transactions across all accounts' },
 ] as const
 type WidgetId = (typeof WIDGETS)[number]['id']
 const DEFAULT_LAYOUT: WidgetId[] = ['greeting', 'net-worth', 'month-stats', 'accounts', 'spending']
@@ -56,6 +61,16 @@ type AccountVM = {
 }
 type TrailPoint = { month: string; value: number }
 type SpendBucket = { id: string; name: string; amount_cents: number }
+type GoalVM = { id: string; name: string; target: number; current: number; target_date: string | null }
+type RecurringVM = { description: string; amount_cents: number; monthsSeen: number }
+type RecentTxVM = {
+  id: string
+  amount_cents: number
+  occurred_on: string
+  description: string
+  account_name: string
+}
+type PaceVM = { dailyPace: number; projectedMonth: number; daysElapsed: number; daysInMonth: number }
 
 const RANGES = [
   { id: '1M', months: 1 },
@@ -101,6 +116,12 @@ export function DashboardClient({
   net,
   accounts,
   spendingBreakdown,
+  totalBudget,
+  goals,
+  recurring,
+  recurringTotal,
+  recentActivity,
+  pace,
 }: {
   householdName: string
   members: MemberVM[]
@@ -113,6 +134,12 @@ export function DashboardClient({
   net: number
   accounts: AccountVM[]
   spendingBreakdown: SpendBucket[]
+  totalBudget: number
+  goals: GoalVM[]
+  recurring: RecurringVM[]
+  recurringTotal: number
+  recentActivity: RecentTxVM[]
+  pace: PaceVM
 }) {
   const [hidden, setHidden] = useState(false)
   const [range, setRange] = useState<RangeId>('1Y')
@@ -542,6 +569,247 @@ export function DashboardClient({
             </>
           )}
         </div>
+      </section>
+    ),
+
+    'budget-progress': (() => {
+      const pct = totalBudget > 0 ? Math.min(1.2, expenses / totalBudget) : 0
+      const over = pct > 1
+      const breakpoint = over ? 100 / pct : null
+      return (
+        <section
+          key="budget-progress"
+          className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6"
+        >
+          <div className="flex items-baseline justify-between gap-2">
+            <MapleLabel>Budget</MapleLabel>
+            <a
+              href="/budgets"
+              className="text-[12px] font-semibold text-[var(--color-leaf)] hover:underline"
+            >
+              See all →
+            </a>
+          </div>
+          {totalBudget === 0 ? (
+            <div className="mt-2 text-[13.5px] text-[var(--color-ink-2)]">
+              No budgets set this month.{' '}
+              <a href="/budgets" className="font-semibold text-[var(--color-leaf)] underline">
+                Add some
+              </a>
+              .
+            </div>
+          ) : (
+            <>
+              <div className="mt-1.5 font-serif text-[24px] leading-tight tracking-[-0.02em] tabular-nums text-[var(--color-ink)] md:text-[28px]">
+                <PrivacyBlur hidden={hidden}>
+                  {fmtCAD(expenses)} <span className="text-[var(--color-ink-3)]">of {fmtCAD(totalBudget)}</span>
+                </PrivacyBlur>
+              </div>
+              <div className="relative mt-3 h-2.5 overflow-hidden rounded-full bg-[var(--color-paper-2)]">
+                <div
+                  className="h-full rounded-full transition-all duration-300"
+                  style={{
+                    width: over ? '100%' : `${Math.round(pct * 100)}%`,
+                    background: over
+                      ? `linear-gradient(to right, var(--color-leaf) 0%, var(--color-leaf) ${breakpoint}%, var(--color-maple) ${breakpoint}%, var(--color-maple) 100%)`
+                      : 'var(--color-leaf)',
+                  }}
+                />
+                {breakpoint !== null && (
+                  <div
+                    className="pointer-events-none absolute inset-y-0 w-[2px] bg-[var(--color-paper)]"
+                    style={{ left: `calc(${breakpoint}% - 1px)` }}
+                  />
+                )}
+              </div>
+              <div className="mt-2 text-[12px] text-[var(--color-ink-3)]">
+                {over
+                  ? <span style={{ color: 'var(--color-maple)' }}>{fmtCAD(expenses - totalBudget)} over budget</span>
+                  : `${fmtCAD(totalBudget - expenses)} left`}
+              </div>
+            </>
+          )}
+        </section>
+      )
+    })(),
+
+    pace: (() => {
+      const isCurrentMonth = pace.daysElapsed > 0 && pace.daysElapsed < pace.daysInMonth
+      return (
+        <section
+          key="pace"
+          className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6"
+        >
+          <MapleLabel>Pace</MapleLabel>
+          {!isCurrentMonth ? (
+            <div className="mt-1.5 text-[13.5px] text-[var(--color-ink-2)]">
+              {pace.daysElapsed === 0 ? 'Future month — no pace yet.' : 'Month complete.'}
+            </div>
+          ) : (
+            <>
+              <div className="mt-1.5 font-serif text-[24px] leading-tight tracking-[-0.02em] tabular-nums text-[var(--color-ink)] md:text-[28px]">
+                <PrivacyBlur hidden={hidden}>{fmtCAD(pace.dailyPace)}</PrivacyBlur>
+                <span className="text-[14px] font-normal text-[var(--color-ink-3)]">/day</span>
+              </div>
+              <div className="mt-1 text-[12.5px] text-[var(--color-ink-2)]">
+                Day {pace.daysElapsed} of {pace.daysInMonth} · projected{' '}
+                <span className="font-semibold tabular-nums text-[var(--color-ink)]">
+                  <PrivacyBlur hidden={hidden}>{fmtCAD(pace.projectedMonth)}</PrivacyBlur>
+                </span>{' '}
+                this month
+              </div>
+            </>
+          )}
+        </section>
+      )
+    })(),
+
+    recurring: (
+      <section
+        key="recurring"
+        className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6"
+      >
+        <div className="flex items-baseline justify-between gap-2">
+          <MapleLabel>Recurring</MapleLabel>
+          <span className="text-[10.5px] tabular-nums text-[var(--color-ink-3)]">
+            {recurring.length} item{recurring.length === 1 ? '' : 's'}
+          </span>
+        </div>
+        {recurring.length === 0 ? (
+          <div className="mt-1.5 text-[13.5px] text-[var(--color-ink-2)]">
+            Nothing detected yet — recurring transactions appear here once we see them in 2+ of the last 3 months.
+          </div>
+        ) : (
+          <>
+            <div className="mt-1.5 font-serif text-[24px] leading-tight tracking-[-0.02em] tabular-nums text-[var(--color-ink)] md:text-[28px]">
+              <PrivacyBlur hidden={hidden}>{fmtCAD(recurringTotal)}</PrivacyBlur>
+              <span className="text-[14px] font-normal text-[var(--color-ink-3)]">/mo</span>
+            </div>
+            <ul className="mt-3 flex flex-col gap-1.5 border-t border-[var(--color-hair)] pt-3">
+              {recurring.slice(0, 5).map((g) => (
+                <li
+                  key={g.description + g.amount_cents}
+                  className="flex items-baseline gap-2 text-[12.5px]"
+                >
+                  <span className="min-w-0 flex-1 truncate text-[var(--color-ink)]">
+                    {g.description}
+                  </span>
+                  <span
+                    className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em]"
+                    style={{ background: 'var(--color-paper-2)', color: 'var(--color-ink-3)' }}
+                  >
+                    {g.monthsSeen}/3
+                  </span>
+                  <span className="shrink-0 font-serif text-[13px] tabular-nums text-[var(--color-ink-2)]">
+                    <PrivacyBlur hidden={hidden}>{fmtCAD(g.amount_cents)}</PrivacyBlur>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
+    ),
+
+    goals: (
+      <section key="goals">
+        <div className="mb-3 flex items-baseline justify-between">
+          <MapleLabel>Goals</MapleLabel>
+          <a href="/goals" className="text-[12px] font-semibold text-[var(--color-leaf)] hover:underline">
+            See all →
+          </a>
+        </div>
+        {goals.length === 0 ? (
+          <div className="rounded-[18px] border border-dashed border-[var(--color-hair)] bg-[var(--color-paper-2)] p-6 text-[14px] text-[var(--color-ink-2)]">
+            No active goals.{' '}
+            <a href="/goals" className="font-semibold text-[var(--color-leaf)] underline">
+              Set one
+            </a>
+            .
+          </div>
+        ) : (
+          <ul className="flex flex-col gap-2.5">
+            {goals.slice(0, 4).map((g) => {
+              const pct = g.target > 0 ? Math.min(1, g.current / g.target) : 0
+              return (
+                <li
+                  key={g.id}
+                  className="rounded-[14px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-3.5"
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="truncate text-[13.5px] font-medium text-[var(--color-ink)]">
+                      {g.name}
+                    </span>
+                    <span className="shrink-0 font-serif text-[13px] tabular-nums text-[var(--color-ink-2)]">
+                      <PrivacyBlur hidden={hidden}>
+                        {fmtCAD(g.current)}{' '}
+                        <span className="text-[var(--color-ink-3)]">of {fmtCAD(g.target)}</span>
+                      </PrivacyBlur>
+                    </span>
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--color-paper-2)]">
+                    <div
+                      className="h-full rounded-full transition-all duration-300"
+                      style={{
+                        width: `${Math.round(pct * 100)}%`,
+                        background: 'var(--color-leaf)',
+                      }}
+                    />
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </section>
+    ),
+
+    'recent-activity': (
+      <section key="recent-activity">
+        <div className="mb-3 flex items-baseline justify-between">
+          <MapleLabel>Recent activity</MapleLabel>
+          <a href="/transactions" className="text-[12px] font-semibold text-[var(--color-leaf)] hover:underline">
+            See all →
+          </a>
+        </div>
+        {recentActivity.length === 0 ? (
+          <div className="rounded-[18px] border border-dashed border-[var(--color-hair)] bg-[var(--color-paper-2)] p-6 text-[14px] text-[var(--color-ink-2)]">
+            No transactions yet.
+          </div>
+        ) : (
+          <ul className="overflow-hidden rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)]">
+            {recentActivity.slice(0, 5).map((t, i) => {
+              const isOut = t.amount_cents > 0
+              return (
+                <li
+                  key={t.id}
+                  className={
+                    'flex items-center gap-3 px-4 py-2.5 ' +
+                    (i > 0 ? 'border-t border-[var(--color-hair)]' : '')
+                  }
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13.5px] font-medium text-[var(--color-ink)]">
+                      {t.description}
+                    </div>
+                    <div className="truncate text-[11.5px] text-[var(--color-ink-3)]">
+                      {formatDate(t.occurred_on)} · {t.account_name}
+                    </div>
+                  </div>
+                  <div
+                    className="shrink-0 font-serif text-[14.5px] tabular-nums"
+                    style={{ color: isOut ? 'var(--color-maple)' : 'var(--color-leaf)' }}
+                  >
+                    <PrivacyBlur hidden={hidden}>
+                      {isOut ? '−' : '+'}
+                      {fmtCAD(Math.abs(t.amount_cents))}
+                    </PrivacyBlur>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
       </section>
     ),
   }

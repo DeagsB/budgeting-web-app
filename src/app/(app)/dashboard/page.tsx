@@ -30,6 +30,7 @@ export default async function DashboardPage() {
   const currentMonth = monthStartISO()
   const monthStart12 = addMonths(currentMonth, -11)
   const currentMonthEnd = addMonths(currentMonth, 1)
+  const recurringStart = addMonths(currentMonth, -3)
 
   const [
     householdRes,
@@ -39,6 +40,10 @@ export default async function DashboardPage() {
     transactionsRes,
     splitsRes,
     categoriesRes,
+    budgetsRes,
+    goalsRes,
+    recurringTxRes,
+    recentTxRes,
   ] = await Promise.all([
     supabase.from('households').select('name').eq('id', ctx.householdId).maybeSingle(),
     supabase
@@ -76,6 +81,33 @@ export default async function DashboardPage() {
       .select('id, name, parent_id')
       .eq('household_id', ctx.householdId)
       .is('archived_at', null),
+    supabase
+      .from('monthly_budgets')
+      .select('category_id, amount_cents')
+      .eq('household_id', ctx.householdId)
+      .eq('month', currentMonth),
+    supabase
+      .from('goals')
+      .select('id, name, target_amount_cents, current_amount_cents, target_date, achieved_at')
+      .eq('household_id', ctx.householdId)
+      .is('archived_at', null)
+      .order('created_at'),
+    // Prior 3 months for recurring detection.
+    supabase
+      .from('transactions')
+      .select('amount_cents, description, occurred_on')
+      .eq('household_id', ctx.householdId)
+      .gt('amount_cents', 0)
+      .gte('occurred_on', recurringStart)
+      .lt('occurred_on', currentMonth),
+    // Last 8 transactions across all accounts (current month, descending).
+    supabase
+      .from('transactions')
+      .select('id, amount_cents, occurred_on, description, account_id')
+      .eq('household_id', ctx.householdId)
+      .order('occurred_on', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(8),
   ])
 
   const household = householdRes.data ?? { name: 'Household' }
@@ -198,6 +230,88 @@ export default async function DashboardPage() {
     .sort((a, b) => b.amount_cents - a.amount_cents)
     .slice(0, 6)
 
+  // Budget hero — total budgeted across top-level categories for the
+  // current month. Spend is `expenses` already computed.
+  const budgetByCat = new Map<string, number>()
+  for (const b of (budgetsRes.data ?? []) as Array<{ category_id: string; amount_cents: number | string }>) {
+    budgetByCat.set(b.category_id, Number(b.amount_cents))
+  }
+  const totalBudget = Array.from(budgetByCat.entries())
+    .filter(([id]) => !parentOf.get(id))
+    .reduce((s, [, v]) => s + v, 0)
+
+  // Goals — active, not yet achieved, with progress.
+  const goals = ((goalsRes.data ?? []) as Array<{
+    id: string
+    name: string
+    target_amount_cents: number | string
+    current_amount_cents: number | string
+    target_date: string | null
+    achieved_at: string | null
+  }>)
+    .filter((g) => !g.achieved_at)
+    .map((g) => ({
+      id: g.id,
+      name: g.name,
+      target: Number(g.target_amount_cents),
+      current: Number(g.current_amount_cents),
+      target_date: g.target_date,
+    }))
+
+  // Recurring detection — same algorithm as the budgets page.
+  type RecurRow = { amount_cents: number | string; description: string | null; occurred_on: string }
+  const recGroups = new Map<string, { description: string; amount: number; months: Set<string> }>()
+  for (const tx of (recurringTxRes.data ?? []) as RecurRow[]) {
+    const desc = (tx.description ?? '').trim()
+    if (!desc) continue
+    const norm = desc.toLowerCase().replace(/\s+/g, ' ').replace(/[#0-9]+$/, '').trim()
+    const amt = Number(tx.amount_cents)
+    if (!Number.isFinite(amt) || amt <= 0) continue
+    const key = `${norm}|${amt}`
+    const monthKey = tx.occurred_on.slice(0, 7)
+    const existing = recGroups.get(key)
+    if (existing) existing.months.add(monthKey)
+    else recGroups.set(key, { description: desc, amount: amt, months: new Set([monthKey]) })
+  }
+  const recurring = Array.from(recGroups.values())
+    .filter((g) => g.months.size >= 2)
+    .map((g) => ({
+      description: g.description,
+      amount_cents: g.amount,
+      monthsSeen: g.months.size,
+    }))
+    .sort((a, b) => b.amount_cents - a.amount_cents)
+  const recurringTotal = recurring.reduce((s, g) => s + g.amount_cents, 0)
+
+  // Recent activity — last 8 transactions overall, with account name resolved.
+  const accountNameById = new Map(accounts.map((a) => [a.id, a.name]))
+  const recentActivity = ((recentTxRes.data ?? []) as Array<{
+    id: string
+    amount_cents: number | string
+    occurred_on: string
+    description: string | null
+    account_id: string
+  }>).map((t) => ({
+    id: t.id,
+    amount_cents: Number(t.amount_cents),
+    occurred_on: t.occurred_on,
+    description: t.description ?? '—',
+    account_name: accountNameById.get(t.account_id) ?? '—',
+  }))
+
+  // Pace — daily spend so far + projected month-end. Skipped in past/future
+  // months by the client when daysElapsed === 0 or === daysInMonth.
+  const monthDate = new Date(currentMonth + 'T00:00:00')
+  const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate()
+  const today = new Date()
+  let daysElapsed: number
+  if (today < monthDate) daysElapsed = 0
+  else if (today.getFullYear() === monthDate.getFullYear() && today.getMonth() === monthDate.getMonth()) {
+    daysElapsed = today.getDate()
+  } else daysElapsed = daysInMonth
+  const dailyPace = daysElapsed > 0 ? expenses / daysElapsed : 0
+  const projectedMonth = Math.round(dailyPace * daysInMonth)
+
   return (
     <DashboardClient
       householdName={household.name}
@@ -211,6 +325,17 @@ export default async function DashboardPage() {
       net={income - expenses}
       accounts={accountsWithBalance}
       spendingBreakdown={spendingBreakdown}
+      totalBudget={totalBudget}
+      goals={goals}
+      recurring={recurring}
+      recurringTotal={recurringTotal}
+      recentActivity={recentActivity}
+      pace={{
+        dailyPace,
+        projectedMonth,
+        daysElapsed,
+        daysInMonth,
+      }}
     />
   )
 }
