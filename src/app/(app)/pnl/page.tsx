@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { formatMoney, monthLabel, monthStartISO, addMonths } from '@/lib/format'
 import { MapleLabel } from '@/components/ui/label'
+import { colorForCategory } from '@/lib/category-colors'
 import Link from 'next/link'
 
 /**
@@ -86,6 +87,7 @@ export default async function PnlPage({
 
   const maxBar = Math.max(1, ...buckets.map((b) => Math.max(b.income, b.expense)))
   const topCatMax = Math.max(1, ...topCats.map((c) => c.cents))
+  const topCatTotal = topCats.reduce((s, c) => s + c.cents, 0)
 
   const prevMonth = addMonths(selected, -1)
   const nextMonth = addMonths(selected, 1)
@@ -197,9 +199,20 @@ export default async function PnlPage({
         </footer>
       </section>
 
-      {/* Category breakdown for selected month */}
+      {/* Category breakdown for selected month. Each row's bar uses the
+          category's Maple-aligned hue; share-of-spend % sits inside the bar
+          when wide enough (>20%) and outside when narrow, so the percentage
+          is always legible. */}
       <section className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6">
-        <MapleLabel>Top categories · {monthLabel(selected)}</MapleLabel>
+        <div className="flex items-baseline justify-between">
+          <MapleLabel>Top categories · {monthLabel(selected)}</MapleLabel>
+          {topCatTotal > 0 && (
+            <span className="text-[11.5px] text-[var(--color-ink-3)]">
+              <span className="tabular-nums text-[var(--color-ink)]">{formatMoney(topCatTotal)}</span>{' '}
+              total
+            </span>
+          )}
+        </div>
         {topCats.length === 0 ? (
           <p className="mt-4 text-[13.5px] text-[var(--color-ink-2)]">
             No expense splits recorded in {monthLabel(selected)}.
@@ -207,15 +220,40 @@ export default async function PnlPage({
         ) : (
           <ol className="mt-4 flex flex-col gap-2.5">
             {topCats.slice(0, 12).map((c) => {
-              const pct = (c.cents / topCatMax) * 100
+              // Bar width is share of the largest category so the biggest
+              // always fills 100%. Share-of-total is a separate stat shown
+              // as a percentage inside the bar.
+              const widthPct = (c.cents / topCatMax) * 100
+              const sharePct = topCatTotal > 0 ? Math.round((c.cents / topCatTotal) * 100) : 0
+              const color = colorForCategory(c.name)
+              const showInsideLabel = widthPct >= 22
               return (
                 <li key={c.id} className="flex items-center gap-3 text-[13.5px]">
-                  <span className="w-[140px] shrink-0 truncate text-[var(--color-ink)]">{c.name}</span>
-                  <div className="relative h-[26px] flex-1 overflow-hidden rounded-[6px] bg-[var(--color-paper-2)]">
+                  <span className="w-[120px] shrink-0 truncate text-[var(--color-ink)] sm:w-[160px]">
+                    {c.name}
+                  </span>
+                  <div className="relative h-[28px] flex-1 overflow-hidden rounded-[8px] bg-[var(--color-paper-2)]">
                     <div
-                      className="h-full rounded-[6px]"
-                      style={{ width: `${pct}%`, background: 'var(--color-maple-soft)' }}
+                      className="h-full rounded-[8px] transition-all duration-300"
+                      style={{ width: `${widthPct}%`, background: color }}
                     />
+                    {showInsideLabel ? (
+                      <span
+                        className="absolute inset-y-0 right-0 flex items-center pr-2 text-[11px] font-semibold tabular-nums text-white/95 mix-blend-luminosity"
+                        style={{ width: `${widthPct}%` }}
+                      >
+                        <span className="ml-auto rounded-full bg-black/15 px-1.5 py-0.5 text-white">
+                          {sharePct}%
+                        </span>
+                      </span>
+                    ) : (
+                      <span
+                        className="absolute inset-y-0 flex items-center pl-1.5 text-[11px] font-semibold tabular-nums text-[var(--color-ink-2)]"
+                        style={{ left: `${widthPct}%` }}
+                      >
+                        {sharePct}%
+                      </span>
+                    )}
                   </div>
                   <span className="w-[100px] shrink-0 text-right font-serif text-[15px] tabular-nums text-[var(--color-ink)]">
                     {formatMoney(c.cents)}

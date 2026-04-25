@@ -8,6 +8,7 @@ import { MapleLabel } from '@/components/ui/label'
 import { Reveal } from '@/components/ui/reveal'
 import { PrivacyBlur } from '@/components/ui/privacy-blur'
 import { useCountUp } from '@/components/ui/count-up'
+import { colorForCategory } from '@/lib/category-colors'
 
 type MemberVM = { id: string; name: string; initial: string }
 type AccountVM = {
@@ -32,25 +33,6 @@ const RANGES = [
   { id: 'ALL', months: 999 },
 ] as const
 type RangeId = (typeof RANGES)[number]['id']
-
-// Maple-aligned category palette. Tokens drive the semantic ones (housing →
-// leaf, food → maple, etc.); warm earthy fills cover the rest. All chosen
-// to read against both the light cream and dark paper surfaces without
-// per-mode re-tinting.
-const CATEGORY_COLORS: Record<string, string> = {
-  Housing:                'var(--color-leaf)',
-  Transportation:         'var(--color-honey)',
-  Food:                   'var(--color-maple)',
-  Health:                 '#3F8B5C',
-  Personal:               'var(--color-berry)',
-  Subscriptions:          '#7A8B9C',
-  Entertainment:          '#B85A8A',
-  'Savings contribution': 'var(--color-leaf-deep)',
-  Taxes:                  '#5D4E37',
-  'Debt payment':         '#8B2A1C',
-  Miscellaneous:          'var(--color-ink-3)',
-}
-const colorForCategory = (n: string) => CATEGORY_COLORS[n] ?? 'var(--color-ink-2)'
 
 /**
  * Full CAD formatter — always show the real number on the hero. Abbreviation

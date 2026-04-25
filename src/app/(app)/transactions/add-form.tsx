@@ -49,7 +49,7 @@ export function AddTransactionForm({
     <form ref={formRef} action={formAction} className="mt-4 flex flex-col gap-4">
       {/* Direction + amount hero */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <div className="flex rounded-full bg-[var(--color-paper-2)] p-1">
+        <div className="flex rounded-full bg-[var(--color-paper-2)] p-1 sm:w-auto">
           <input type="hidden" name="direction" value={direction} />
           <SegmentButton active={direction === 'out'} onClick={() => setDirection('out')}>
             Spent
@@ -155,12 +155,14 @@ function SegmentButton({
   onClick: () => void
   children: React.ReactNode
 }) {
+  // flex-1 makes both segments share the pill's width evenly, so the active
+  // background actually fills its half instead of hugging the label text.
   return (
     <button
       type="button"
       onClick={onClick}
       className={
-        'rounded-full px-4 py-2 text-[12.5px] font-semibold transition-all ' +
+        'flex-1 rounded-full px-4 py-2 text-center text-[12.5px] font-semibold transition-all ' +
         (active
           ? 'bg-[var(--color-paper)] text-[var(--color-ink)] shadow-[0_1px_2px_rgba(0,0,0,0.06)]'
           : 'text-[var(--color-ink-2)] hover:text-[var(--color-ink)]')
