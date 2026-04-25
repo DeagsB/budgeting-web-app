@@ -310,7 +310,7 @@ export function DashboardClient({
       <section className="grid grid-cols-3 gap-3">
         {[
           { label: 'Income', value: income, color: 'var(--color-leaf)' },
-          { label: 'Spent', value: expenses, color: 'var(--color-ink)' },
+          { label: 'Spent', value: expenses, color: 'var(--color-maple)' },
           { label: 'Saved', value: net, color: net >= 0 ? 'var(--color-leaf)' : 'var(--color-maple)', signed: true },
         ].map((s, i) => (
           <Reveal key={s.label} delay={120 + i * 60}>

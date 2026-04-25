@@ -155,7 +155,7 @@ export function TransactionRow({
 
   // ───────── DISPLAY MODE ─────────
   const isExpense = t.amount_cents > 0
-  const amountColor = isExpense ? 'var(--color-ink)' : 'var(--color-leaf)'
+  const amountColor = isExpense ? 'var(--color-maple)' : 'var(--color-leaf)'
   const sign = t.amount_cents < 0 ? '+' : ''
   const totalAbs = Math.abs(t.amount_cents)
 

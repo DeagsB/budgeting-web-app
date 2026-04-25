@@ -184,57 +184,77 @@ export default async function TransactionsPage({
         <StatTile label="Net" value={formatMoney(net)} tone={net >= 0 ? 'leaf' : 'maple'} />
       </section>
 
-      {/* Filters */}
+      {/* Filters — collapsed by default; auto-opens when filters are active so
+          the user always sees what's narrowing the list. */}
       {(accounts ?? []).length > 0 && (
-        <form method="get" className="rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-4 md:p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <MapleLabel>Filters</MapleLabel>
-            {hasFilter && (
-              <Link
-                href={{ pathname: '/transactions', query: clearQuery }}
-                className="text-[12px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline"
+        <details
+          open={hasFilter}
+          className="group rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)] [&_summary]:list-none [&_summary::-webkit-details-marker]:hidden"
+        >
+          <summary className="flex cursor-pointer items-center justify-between px-5 py-3.5">
+            <div className="flex items-center gap-2">
+              <MapleLabel>Filters</MapleLabel>
+              {hasFilter && (
+                <span
+                  className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em]"
+                  style={{ background: 'var(--color-leaf-soft)', color: 'var(--color-leaf)' }}
+                >
+                  Active
+                </span>
+              )}
+            </div>
+            <span className="flex items-center gap-3">
+              {hasFilter && (
+                <Link
+                  href={{ pathname: '/transactions', query: clearQuery }}
+                  className="text-[12px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Clear
+                </Link>
+              )}
+              <Chevron />
+            </span>
+          </summary>
+          <form method="get" className="border-t border-[var(--color-hair)] px-4 pb-4 pt-4 md:px-5 md:pb-5">
+            <input type="hidden" name="month" value={month} />
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Selector label="Account" name="account" defaultValue={params.account}>
+                <option value="">All accounts</option>
+                {(accounts ?? []).map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </Selector>
+              <Selector label="Category" name="category" defaultValue={params.category}>
+                <option value="">All categories</option>
+                {(categories ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.parent_id ? `↳ ${c.name}` : c.name}
+                  </option>
+                ))}
+              </Selector>
+              <Selector label="Member" name="member" defaultValue={params.member}>
+                <option value="">Anyone</option>
+                <option value="shared">Shared account</option>
+                {(members ?? []).map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.display_name}
+                  </option>
+                ))}
+              </Selector>
+            </div>
+            <div className="mt-3 flex justify-end">
+              <button
+                type="submit"
+                className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-ink)] px-4 py-2 text-[12.5px] font-semibold text-[var(--color-paper)] transition-all active:scale-[0.98]"
               >
-                Clear
-              </Link>
-            )}
-          </div>
-          <input type="hidden" name="month" value={month} />
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Selector label="Account" name="account" defaultValue={params.account}>
-              <option value="">All accounts</option>
-              {(accounts ?? []).map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </Selector>
-            <Selector label="Category" name="category" defaultValue={params.category}>
-              <option value="">All categories</option>
-              {(categories ?? []).map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.parent_id ? `↳ ${c.name}` : c.name}
-                </option>
-              ))}
-            </Selector>
-            <Selector label="Member" name="member" defaultValue={params.member}>
-              <option value="">Anyone</option>
-              <option value="shared">Shared account</option>
-              {(members ?? []).map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.display_name}
-                </option>
-              ))}
-            </Selector>
-          </div>
-          <div className="mt-3 flex justify-end">
-            <button
-              type="submit"
-              className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-ink)] px-4 py-2 text-[12.5px] font-semibold text-[var(--color-paper)] transition-all active:scale-[0.98]"
-            >
-              Apply filters
-            </button>
-          </div>
-        </form>
+                Apply filters
+              </button>
+            </div>
+          </form>
+        </details>
       )}
 
       {/* Add transaction */}
@@ -259,15 +279,20 @@ export default async function TransactionsPage({
           </Link>
         </div>
       ) : (
-        <section className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6">
-          <MapleLabel>Add transaction</MapleLabel>
-          <AddTransactionForm
-            defaultDate={monthStartISO()}
-            accounts={(accounts ?? []).map((a) => ({ id: a.id, name: a.name }))}
-            categories={(categories ?? []).map((c) => ({ id: c.id, parent_id: c.parent_id, name: c.name }))}
-            members={(members ?? []).map((m) => ({ id: m.id, name: m.display_name }))}
-          />
-        </section>
+        <details className="group rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] [&_summary]:list-none [&_summary::-webkit-details-marker]:hidden">
+          <summary className="flex cursor-pointer items-center justify-between px-5 py-3.5 md:px-6">
+            <MapleLabel>Add transaction</MapleLabel>
+            <Chevron />
+          </summary>
+          <div className="border-t border-[var(--color-hair)] px-5 pb-5 pt-5 md:px-6 md:pb-6">
+            <AddTransactionForm
+              defaultDate={monthStartISO()}
+              accounts={(accounts ?? []).map((a) => ({ id: a.id, name: a.name }))}
+              categories={(categories ?? []).map((c) => ({ id: c.id, parent_id: c.parent_id, name: c.name }))}
+              members={(members ?? []).map((m) => ({ id: m.id, name: m.display_name }))}
+            />
+          </div>
+        </details>
       )}
 
       {/* Transactions list */}
@@ -404,5 +429,26 @@ function Selector({
         {children}
       </select>
     </label>
+  )
+}
+
+// Chevron used inside <summary> elements — rotates 180° when the parent
+// <details> opens via group-open:rotate-180.
+function Chevron() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="text-[var(--color-ink-3)] transition-transform group-open:rotate-180"
+      aria-hidden
+    >
+      <path d="M6 9l6 6 6-6" />
+    </svg>
   )
 }
