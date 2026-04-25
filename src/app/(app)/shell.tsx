@@ -300,13 +300,27 @@ export function AppShell({
                 />
               )}
               <div className="mt-4 border-t border-[var(--color-hair)] pt-3">
+                <div className="mb-1.5 px-3 text-[10.5px] font-bold uppercase tracking-[0.10em] text-[var(--color-ink-3)]">
+                  Customize
+                </div>
                 <button
                   type="button"
                   onClick={() => { closeMore(); setEditOpen(true) }}
-                  className="flex w-full items-center justify-between rounded-[12px] px-3 py-3 text-[14.5px] font-semibold text-[var(--color-ink)] hover:bg-[var(--color-paper-2)]"
+                  className="flex w-full items-center gap-3 rounded-[12px] px-3 py-3 text-[15px] font-medium text-[var(--color-ink)] transition-colors hover:bg-[var(--color-paper-2)]"
                 >
-                  <span>Customize tabs…</span>
-                  <span className="text-[var(--color-ink-3)]">›</span>
+                  <span
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                    style={{ background: 'var(--color-leaf-soft)', color: 'var(--color-leaf-deep)' }}
+                  >
+                    <GridIcon />
+                  </span>
+                  <span className="flex-1 text-left">
+                    <span className="block">Customize tabs</span>
+                    <span className="block text-[11.5px] font-normal text-[var(--color-ink-3)]">
+                      Pick which destinations live on the bottom bar
+                    </span>
+                  </span>
+                  <span className="text-[18px] text-[var(--color-ink-3)]">›</span>
                 </button>
                 <form action={signOut} className="mt-2 px-3 pt-2">
                   <button type="submit" className="text-[14px] font-semibold text-[var(--color-ink-2)]">
@@ -784,6 +798,16 @@ function ArrowDownIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M12 5v14M5 12l7 7 7-7" />
+    </svg>
+  )
+}
+function GridIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
     </svg>
   )
 }
