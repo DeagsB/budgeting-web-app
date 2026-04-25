@@ -54,7 +54,7 @@ export function AddGoalForm({ accounts }: { accounts: { id: string; name: string
 
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-gray-700">Funding account (optional)</span>
-        <select name="funding_account_id" className="rounded border border-gray-300 px-3 py-2">
+        <select name="funding_account_id" className="maple-select">
           <option value="">—</option>
           {accounts.map((a) => (
             <option key={a.id} value={a.id}>

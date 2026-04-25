@@ -218,15 +218,11 @@ export default async function BudgetsPage({
               : `${formatMoney(monthVariance)} over`}
           </span>
         </div>
-        <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-[var(--color-paper-2)]">
-          <div
-            className="h-full rounded-full transition-all duration-300"
-            style={{
-              width: `${Math.min(100, Math.round(pctUsed * 100))}%`,
-              background: pctUsed > 1 ? 'var(--color-maple)' : 'var(--color-leaf)',
-            }}
-          />
-        </div>
+        {/* Progress bar. When over budget, the bar fills the full track but
+            splits at the budget-100% mark — leaf for the budgeted portion,
+            maple for the overage — with a paper-colored tick line at the
+            boundary so the 100% mark stays visible. */}
+        <ProgressBar pctUsed={pctUsed} />
 
         {/* Top-spending budgeted categories — quick glance before the full
             table. Mini bars match the hero's tone: leaf when within budget,
@@ -354,6 +350,34 @@ function Tile({
         {value}
       </div>
       {hint && <div className="mt-1 text-[12px] text-[var(--color-ink-3)]">{hint}</div>}
+    </div>
+  )
+}
+
+function ProgressBar({ pctUsed }: { pctUsed: number }) {
+  const over = pctUsed > 1
+  // When over, breakpoint% of the bar is the budgeted portion; the rest is
+  // overage. The bar always fills the track when over, so the breakpoint
+  // visually pins the "100% of budget" location.
+  const breakpoint = over ? 100 / pctUsed : null
+  return (
+    <div className="relative mt-4 h-2.5 overflow-hidden rounded-full bg-[var(--color-paper-2)]">
+      <div
+        className="h-full rounded-full transition-all duration-300"
+        style={{
+          width: over ? '100%' : `${Math.round(pctUsed * 100)}%`,
+          background: over
+            ? `linear-gradient(to right, var(--color-leaf) 0%, var(--color-leaf) ${breakpoint}%, var(--color-maple) ${breakpoint}%, var(--color-maple) 100%)`
+            : 'var(--color-leaf)',
+        }}
+      />
+      {breakpoint !== null && (
+        <div
+          className="pointer-events-none absolute inset-y-0 w-[2px] bg-[var(--color-paper)]"
+          style={{ left: `calc(${breakpoint}% - 1px)` }}
+          aria-label="100% of budget"
+        />
+      )}
     </div>
   )
 }

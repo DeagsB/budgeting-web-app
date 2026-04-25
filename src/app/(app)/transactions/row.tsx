@@ -5,6 +5,7 @@ import { formatMoney } from '@/lib/format'
 import { updateTransaction, deleteTransaction } from './actions'
 import { CategorySelect } from './category-select'
 import { SplitEditor } from './split-editor'
+import { ConfirmButton } from '@/components/ui/confirm-button'
 
 type TransactionVM = {
   id: string
@@ -228,21 +229,17 @@ export function TransactionRow({
               Edit
             </button>
             <span className="text-[var(--color-hair)]">·</span>
-            <form
+            <ConfirmButton
               action={deleteTransaction}
-              onSubmit={(e) => {
-                if (!confirm('Delete this transaction?')) e.preventDefault()
-              }}
+              formData={{ id: t.id }}
+              prompt="Delete this transaction?"
+              description="The transaction and its splits will be removed. This can't be undone."
+              confirmLabel="Delete"
+              destructive
+              className="font-semibold transition-colors hover:underline"
             >
-              <input type="hidden" name="id" value={t.id} />
-              <button
-                type="submit"
-                className="font-semibold transition-colors hover:underline"
-                style={{ color: 'var(--color-maple)' }}
-              >
-                Delete
-              </button>
-            </form>
+              <span style={{ color: 'var(--color-maple)' }}>Delete</span>
+            </ConfirmButton>
           </div>
         </div>
       </div>

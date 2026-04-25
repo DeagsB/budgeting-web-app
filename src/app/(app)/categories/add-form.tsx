@@ -43,7 +43,7 @@ export function AddCategoryForm({
 
       <label className="flex flex-col gap-1 text-sm sm:col-span-3">
         <span className="text-gray-700">Parent (optional)</span>
-        <select name="parent_id" className="rounded border border-gray-300 px-3 py-2">
+        <select name="parent_id" className="maple-select">
           <option value="">— top-level —</option>
           {parents.map((p) => (
             <option key={p.id} value={p.id}>

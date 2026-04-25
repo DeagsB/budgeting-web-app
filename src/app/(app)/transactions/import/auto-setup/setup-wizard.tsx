@@ -21,6 +21,7 @@ import {
   type SyncNowState,
 } from './actions'
 import { BANK_PRESETS } from '@/lib/bank-presets'
+import { ConfirmButton } from '@/components/ui/confirm-button'
 
 type Account = { id: string; name: string; last_four: string | null }
 type Member = { id: string; name: string }
@@ -484,7 +485,7 @@ function RulesSection({
   editing: Rule | 'new' | null
   onEdit: (r: Rule | 'new' | null) => void
 }) {
-  const [pending, startTransition] = useTransition()
+  const [, startTransition] = useTransition()
   const [presetPending, setPresetPending] = useState<string | null>(null)
   const [presetError, setPresetError] = useState<string | null>(null)
 
@@ -576,21 +577,17 @@ function RulesSection({
                 >
                   Edit
                 </button>
-                <form
+                <ConfirmButton
                   action={(fd) => startTransition(() => deleteRule(fd))}
-                  onSubmit={(e) => {
-                    if (!confirm(`Delete rule "${r.name}"?`)) e.preventDefault()
-                  }}
+                  formData={{ id: r.id }}
+                  prompt={`Delete rule "${r.name}"?`}
+                  description="Future emails matching this rule will fall through to the next one (if any)."
+                  confirmLabel="Delete"
+                  destructive
+                  className="rounded-full px-3 py-1.5 text-[12px] font-semibold text-[var(--color-maple)] hover:bg-[var(--color-maple-soft)]"
                 >
-                  <input type="hidden" name="id" value={r.id} />
-                  <button
-                    type="submit"
-                    disabled={pending}
-                    className="rounded-full px-3 py-1.5 text-[12px] font-semibold text-[var(--color-maple)] hover:bg-[var(--color-maple-soft)]"
-                  >
-                    Delete
-                  </button>
-                </form>
+                  Delete
+                </ConfirmButton>
               </div>
             </li>
           ))}

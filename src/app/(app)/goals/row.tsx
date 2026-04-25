@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { formatMoney } from '@/lib/format'
 import { updateGoal, toggleAchieved, archiveGoal } from './actions'
+import { ConfirmButton } from '@/components/ui/confirm-button'
 
 type Goal = {
   id: string
@@ -89,7 +90,7 @@ export function GoalRow({
             <select
               name="funding_account_id"
               defaultValue={goal.funding_account_id ?? ''}
-              className="rounded border border-gray-300 px-3 py-2"
+              className="maple-select"
             >
               <option value="">—</option>
               {accounts.map((a) => (
@@ -164,17 +165,17 @@ export function GoalRow({
               {done ? 'Reopen' : 'Mark achieved'}
             </button>
           </form>
-          <form
+          <ConfirmButton
             action={archiveGoal}
-            onSubmit={(e) => {
-              if (!confirm(`Archive "${goal.name}"?`)) e.preventDefault()
-            }}
+            formData={{ id: goal.id }}
+            prompt={`Archive "${goal.name}"?`}
+            description="Archived goals are hidden from the active list but kept in history."
+            confirmLabel="Archive"
+            destructive
+            className="text-red-600 hover:text-red-800"
           >
-            <input type="hidden" name="id" value={goal.id} />
-            <button type="submit" className="text-red-600 hover:text-red-800">
-              Archive
-            </button>
-          </form>
+            Archive
+          </ConfirmButton>
         </div>
       </div>
 

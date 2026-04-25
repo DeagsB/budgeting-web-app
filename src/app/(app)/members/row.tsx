@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { renameMember, deleteMember } from './actions'
+import { ConfirmButton } from '@/components/ui/confirm-button'
 
 export function MemberRow({ id, name }: { id: string; name: string }) {
   const [editing, setEditing] = useState(false)
@@ -47,20 +48,17 @@ export function MemberRow({ id, name }: { id: string; name: string }) {
             >
               Rename
             </button>
-            <form
+            <ConfirmButton
               action={deleteMember}
-              onSubmit={(e) => {
-                if (!confirm(`Remove member "${name}"?`)) e.preventDefault()
-              }}
+              formData={{ id }}
+              prompt={`Remove member "${name}"?`}
+              description="Their accounts and transactions stay; they're just no longer assignable."
+              confirmLabel="Remove"
+              destructive
+              className="text-xs text-red-600 hover:text-red-800"
             >
-              <input type="hidden" name="id" value={id} />
-              <button
-                type="submit"
-                className="text-xs text-red-600 hover:text-red-800"
-              >
-                Remove
-              </button>
-            </form>
+              Remove
+            </ConfirmButton>
           </div>
         </>
       )}

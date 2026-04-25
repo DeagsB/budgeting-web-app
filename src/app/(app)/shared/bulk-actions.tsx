@@ -2,6 +2,7 @@
 
 import { useTransition } from 'react'
 import { shareAllUnflagged, unshareAll } from './actions'
+import { ConfirmButton } from '@/components/ui/confirm-button'
 
 export function BulkActions({ accountId, month }: { accountId: string; month: string }) {
   const [pending, startTransition] = useTransition()
@@ -28,25 +29,17 @@ export function BulkActions({ accountId, month }: { accountId: string; month: st
           Share all unflagged
         </button>
       </form>
-      <form
-        action={(fd) =>
-          startTransition(async () => {
-            if (!confirm('Unshare every transaction on this account this month?')) return
-            await unshareAll(fd)
-          })
-        }
+      <ConfirmButton
+        action={unshareAll}
+        formData={{ account_id: accountId, month }}
+        prompt="Unshare every transaction on this account this month?"
+        description="Each transaction reverts to single-member ownership. The original transactions are not deleted."
+        confirmLabel="Unshare all"
+        destructive
+        className="inline-flex items-center rounded-full px-3.5 py-2 text-[12.5px] font-semibold transition-colors"
       >
-        <input type="hidden" name="account_id" value={accountId} />
-        <input type="hidden" name="month" value={month} />
-        <button
-          type="submit"
-          disabled={pending}
-          className="inline-flex items-center rounded-full px-3.5 py-2 text-[12.5px] font-semibold transition-colors disabled:opacity-50"
-          style={{ color: 'var(--color-maple)' }}
-        >
-          Unshare all
-        </button>
-      </form>
+        <span style={{ color: 'var(--color-maple)' }}>Unshare all</span>
+      </ConfirmButton>
     </div>
   )
 }
