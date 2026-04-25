@@ -17,6 +17,9 @@ type AccountVM = {
   ownership: string
   member_id: string | null
   balance_cents: number
+  month_outflow_cents: number
+  month_inflow_cents: number
+  month_tx_count: number
 }
 type TrailPoint = { month: string; value: number }
 type SpendBucket = { id: string; name: string; amount_cents: number }
@@ -359,7 +362,10 @@ export function DashboardClient({
               const isLiability = LIABILITY_TYPES.has(a.type)
               const display = Math.abs(a.balance_cents)
               const negative = a.balance_cents < 0 || isLiability
-              const last4 = a.id.replace(/-/g, '').slice(-4).toUpperCase()
+              // Month-stat helpers for the card-flip back face. Net change
+              // is positive when more money came in than went out.
+              const monthNet = a.month_inflow_cents - a.month_outflow_cents
+              const isLoan = a.type === 'loan' || a.type === 'credit_card'
               return (
                 <Reveal key={a.id} delay={220 + i * 50}>
                   <button
@@ -402,7 +408,7 @@ export function DashboardClient({
                           {a.ownership === 'shared' ? 'Shared' : 'Personal'} · tap to flip
                         </div>
                       </div>
-                      {/* back — branded */}
+                      {/* back — this-month stats */}
                       <div
                         className="absolute inset-0 flex flex-col justify-between rounded-[18px] p-4 text-white"
                         style={{
@@ -415,22 +421,51 @@ export function DashboardClient({
                       >
                         <div>
                           <div className="text-[10px] font-bold uppercase tracking-[0.10em] opacity-70">
-                            •••• {last4}
+                            This month
                           </div>
-                          <div className="mt-4 font-mono text-[15px] tracking-[0.25em] opacity-95">
-                            •••• •••• •••• {last4}
+                          <div className="mt-1 truncate font-serif text-[16px] tracking-[-0.01em] opacity-95">
+                            {a.name}
                           </div>
                         </div>
-                        <div className="flex items-end justify-between text-[11px]">
+                        <div className="grid grid-cols-2 gap-3 text-[11px]">
                           <div>
-                            <div className="opacity-60">Available</div>
-                            <div className="font-serif text-[18px]">
+                            <div className="opacity-60">{isLoan ? 'Charged' : 'Out'}</div>
+                            <div className="font-serif text-[16px] tabular-nums">
                               <PrivacyBlur hidden={hidden}>
-                                {fmtCAD(Math.max(0, a.balance_cents))}
+                                {fmtCAD(a.month_outflow_cents)}
                               </PrivacyBlur>
                             </div>
                           </div>
-                          <div className="font-serif text-[16px] tracking-[-0.01em]">Maple</div>
+                          <div>
+                            <div className="opacity-60">{isLoan ? 'Paid' : 'In'}</div>
+                            <div className="font-serif text-[16px] tabular-nums">
+                              <PrivacyBlur hidden={hidden}>
+                                {fmtCAD(a.month_inflow_cents)}
+                              </PrivacyBlur>
+                            </div>
+                          </div>
+                          <div className="col-span-2 mt-1 flex items-end justify-between border-t border-white/15 pt-2">
+                            <div>
+                              <div className="opacity-60">Net</div>
+                              <div
+                                className="font-serif text-[18px] tabular-nums"
+                                style={{
+                                  color: monthNet >= 0 ? '#bdf0d2' : '#ffb6a3',
+                                }}
+                              >
+                                <PrivacyBlur hidden={hidden}>
+                                  {monthNet >= 0 ? '+' : '−'}
+                                  {fmtCAD(Math.abs(monthNet))}
+                                </PrivacyBlur>
+                              </div>
+                            </div>
+                            <div className="text-right opacity-70">
+                              <div className="text-[10px] uppercase tracking-[0.08em]">Activity</div>
+                              <div className="font-serif text-[14px] tabular-nums">
+                                {a.month_tx_count} tx
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>

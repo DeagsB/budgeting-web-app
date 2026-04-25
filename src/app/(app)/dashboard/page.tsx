@@ -61,7 +61,7 @@ export default async function DashboardPage() {
       .order('as_of_month', { ascending: true }),
     supabase
       .from('transactions')
-      .select('id, amount_cents, member_id')
+      .select('id, amount_cents, member_id, account_id')
       .eq('household_id', ctx.householdId)
       .gte('occurred_on', currentMonth)
       .lt('occurred_on', currentMonthEnd),
@@ -92,6 +92,7 @@ export default async function DashboardPage() {
     id: t.id,
     amount_cents: Number(t.amount_cents),
     member_id: t.member_id,
+    account_id: t.account_id,
   }))
   const splits = (splitsRes.data ?? []).map((s) => ({
     category_id: s.category_id,
@@ -135,6 +136,24 @@ export default async function DashboardPage() {
   const netWorthPrev = netWorthTrail[netWorthTrail.length - 2]?.value ?? netWorth
   const netWorthDelta = netWorth - netWorthPrev
 
+  // Per-account month stats — power the "useful stat" view on the back of
+  // each card flip. Outflow = positive amounts; inflow = negative amounts.
+  const monthOutByAccount = new Map<string, number>()
+  const monthInByAccount = new Map<string, number>()
+  for (const tx of transactions) {
+    if (!tx.account_id) continue
+    if (tx.amount_cents > 0) {
+      monthOutByAccount.set(tx.account_id, (monthOutByAccount.get(tx.account_id) ?? 0) + tx.amount_cents)
+    } else if (tx.amount_cents < 0) {
+      monthInByAccount.set(tx.account_id, (monthInByAccount.get(tx.account_id) ?? 0) + -tx.amount_cents)
+    }
+  }
+  const monthCountByAccount = new Map<string, number>()
+  for (const tx of transactions) {
+    if (!tx.account_id) continue
+    monthCountByAccount.set(tx.account_id, (monthCountByAccount.get(tx.account_id) ?? 0) + 1)
+  }
+
   // Current account balances (latest snapshot or opening fallback).
   const accountsWithBalance = accounts.map((a) => ({
     id: a.id,
@@ -143,6 +162,9 @@ export default async function DashboardPage() {
     ownership: a.ownership,
     member_id: a.member_id,
     balance_cents: balanceAt(a, currentMonth),
+    month_outflow_cents: monthOutByAccount.get(a.id) ?? 0,
+    month_inflow_cents: monthInByAccount.get(a.id) ?? 0,
+    month_tx_count: monthCountByAccount.get(a.id) ?? 0,
   }))
 
   // Month totals: income (negative txns), expenses (positive), net.
