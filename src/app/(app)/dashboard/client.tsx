@@ -30,20 +30,24 @@ const RANGES = [
 ] as const
 type RangeId = (typeof RANGES)[number]['id']
 
+// Maple-aligned category palette. Tokens drive the semantic ones (housing →
+// leaf, food → maple, etc.); warm earthy fills cover the rest. All chosen
+// to read against both the light cream and dark paper surfaces without
+// per-mode re-tinting.
 const CATEGORY_COLORS: Record<string, string> = {
-  Housing: '#6366F1',
-  Transportation: '#F59E0B',
-  Food: '#10B981',
-  Health: '#14B8A6',
-  Personal: '#EC4899',
-  Subscriptions: '#06B6D4',
-  Entertainment: '#8B5CF6',
-  'Savings contribution': '#8B5CF6',
-  Taxes: '#D4A574',
-  'Debt payment': '#EF4444',
-  Miscellaneous: '#A89B8E',
+  Housing:                'var(--color-leaf)',
+  Transportation:         'var(--color-honey)',
+  Food:                   'var(--color-maple)',
+  Health:                 '#3F8B5C',
+  Personal:               'var(--color-berry)',
+  Subscriptions:          '#7A8B9C',
+  Entertainment:          '#B85A8A',
+  'Savings contribution': 'var(--color-leaf-deep)',
+  Taxes:                  '#5D4E37',
+  'Debt payment':         '#8B2A1C',
+  Miscellaneous:          'var(--color-ink-3)',
 }
-const colorForCategory = (n: string) => CATEGORY_COLORS[n] ?? '#6B5F54'
+const colorForCategory = (n: string) => CATEGORY_COLORS[n] ?? 'var(--color-ink-2)'
 
 /**
  * Full CAD formatter — always show the real number on the hero. Abbreviation
@@ -55,9 +59,16 @@ const CAD_FULL = new Intl.NumberFormat('en-CA', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 })
-const fmtCAD = (cents: number) => CAD_FULL.format(cents / 100)
-const fmtSignedCAD = (cents: number) => {
-  const s = CAD_FULL.format(Math.abs(cents) / 100)
+const CAD_COMPACT = new Intl.NumberFormat('en-CA', {
+  style: 'currency',
+  currency: 'CAD',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+})
+const fmtCAD = (cents: number, compact = false) =>
+  (compact ? CAD_COMPACT : CAD_FULL).format(cents / 100)
+const fmtSignedCAD = (cents: number, compact = false) => {
+  const s = (compact ? CAD_COMPACT : CAD_FULL).format(Math.abs(cents) / 100)
   return cents >= 0 ? `+${s}` : `−${s}`
 }
 
@@ -306,11 +317,18 @@ export function DashboardClient({
             <div className="rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-4 md:p-5">
               <MapleLabel>{s.label}</MapleLabel>
               <div
-                className="mt-1.5 font-serif text-[22px] leading-tight tracking-[-0.02em] tabular-nums md:text-[26px]"
+                className="mt-1.5 whitespace-nowrap font-serif text-[20px] leading-tight tracking-[-0.02em] tabular-nums md:text-[26px]"
                 style={{ color: s.color }}
               >
                 <PrivacyBlur hidden={hidden}>
-                  {s.signed ? fmtSignedCAD(s.value) : fmtCAD(Math.abs(s.value))}
+                  {/* Mobile drops cents so the negative-sign edge case
+                      doesn't push the value past the narrow grid column. */}
+                  <span className="md:hidden">
+                    {s.signed ? fmtSignedCAD(s.value, true) : fmtCAD(Math.abs(s.value), true)}
+                  </span>
+                  <span className="hidden md:inline">
+                    {s.signed ? fmtSignedCAD(s.value) : fmtCAD(Math.abs(s.value))}
+                  </span>
                 </PrivacyBlur>
               </div>
             </div>
