@@ -169,22 +169,22 @@ export default async function BudgetsPage({
         </h1>
       </header>
 
-      <nav className="flex items-center gap-1 text-[13px]">
+      <nav className="grid grid-cols-3 gap-2 text-[13px]">
         <Link
           href={{ pathname: '/budgets', query: { month: addMonths(month, -1) } }}
-          className="inline-flex items-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-1.5 font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
+          className="inline-flex items-center justify-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2 font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
         >
           ← Previous
         </Link>
         <Link
           href={{ pathname: '/budgets', query: { month: monthStartISO() } }}
-          className="inline-flex items-center rounded-full px-3 py-1.5 font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
+          className="inline-flex items-center justify-center rounded-full border border-[var(--color-hair)] bg-[var(--color-paper-2)] px-3 py-2 font-semibold text-[var(--color-ink)]"
         >
           This month
         </Link>
         <Link
           href={{ pathname: '/budgets', query: { month: addMonths(month, 1) } }}
-          className="inline-flex items-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-1.5 font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
+          className="inline-flex items-center justify-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2 font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
         >
           Next →
         </Link>

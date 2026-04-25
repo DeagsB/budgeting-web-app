@@ -151,9 +151,12 @@ body {
   background: var(--color-cream);
   color: var(--color-ink);
   font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  padding-top: env(safe-area-inset-top);
+  /* Horizontal safe-area only. Vertical insets are handled by the components
+     that need to react to them (mobile top bar, bottom tab bar) — applying
+     them on body would stack with the header's own safe-area padding when
+     running as a PWA without Safari's URL bar, leaving a fat empty band at
+     the top of every page. */
   padding-right: env(safe-area-inset-right);
-  padding-bottom: env(safe-area-inset-bottom);
   padding-left: env(safe-area-inset-left);
 }
 

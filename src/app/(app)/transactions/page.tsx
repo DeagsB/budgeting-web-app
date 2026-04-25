@@ -155,23 +155,24 @@ export default async function TransactionsPage({
         </div>
       </header>
 
-      {/* Month nav */}
-      <nav className="flex items-center gap-1 text-[13px]">
+      {/* Month nav — three equal-width buttons spanning the page so each
+          tap target is large and the row is balanced. */}
+      <nav className="grid grid-cols-3 gap-2 text-[13px]">
         <Link
           href={{ pathname: '/transactions', query: { ...params, month: addMonths(month, -1) } }}
-          className="inline-flex items-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-1.5 font-medium text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
+          className="inline-flex items-center justify-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2 font-medium text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
         >
           ← Previous
         </Link>
         <Link
           href={{ pathname: '/transactions', query: { ...params, month: monthStartISO() } }}
-          className="inline-flex items-center rounded-full px-3 py-1.5 font-medium text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
+          className="inline-flex items-center justify-center rounded-full border border-[var(--color-hair)] bg-[var(--color-paper-2)] px-3 py-2 font-semibold text-[var(--color-ink)] transition-colors"
         >
           This month
         </Link>
         <Link
           href={{ pathname: '/transactions', query: { ...params, month: addMonths(month, 1) } }}
-          className="inline-flex items-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-1.5 font-medium text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
+          className="inline-flex items-center justify-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2 font-medium text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
         >
           Next →
         </Link>
