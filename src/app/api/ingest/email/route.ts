@@ -66,16 +66,24 @@ export async function POST(request: NextRequest) {
   }
   const rawExcerpt = email.body.slice(0, 500)
 
-  const { data: ruleRows } = await service
-    .from('bank_email_rules')
-    .select(
-      'id, name, enabled, match_from, match_subject, amount_regex, description_regex, date_regex, direction, inflow_regex, default_account_id, default_member_id, default_category_id',
-    )
-    .eq('household_id', householdId)
-    .order('sort_order', { ascending: true })
+  const [{ data: ruleRows }, { data: accountRows }] = await Promise.all([
+    service
+      .from('bank_email_rules')
+      .select(
+        'id, name, enabled, match_from, match_subject, amount_regex, description_regex, date_regex, direction, inflow_regex, account_router_regex, default_account_id, default_member_id, default_category_id',
+      )
+      .eq('household_id', householdId)
+      .order('sort_order', { ascending: true }),
+    service
+      .from('accounts')
+      .select('id, last_four')
+      .eq('household_id', householdId)
+      .is('archived_at', null),
+  ])
 
   const rules = (ruleRows ?? []) as IngestRule[]
-  const outcome = parseEmail(rules, email)
+  const accounts = (accountRows ?? []) as { id: string; last_four: string | null }[]
+  const outcome = parseEmail(rules, email, accounts)
 
   if (!outcome.ok) {
     await service.from('email_ingestion_log').insert({

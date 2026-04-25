@@ -5,6 +5,7 @@ import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { suggestRule, type SampleEmail, type SuggestedRule } from '@/lib/email-suggest'
+import { BANK_PRESETS } from '@/lib/bank-presets'
 
 export type RotateSecretState =
   | { ok: true; secret: string }
@@ -36,6 +37,7 @@ type RuleInput = {
   date_regex: string | null
   direction: 'outflow' | 'inflow' | 'auto'
   inflow_regex: string | null
+  account_router_regex: string | null
   default_account_id: string | null
   default_member_id: string | null
   default_category_id: string | null
@@ -52,6 +54,12 @@ function readRuleFromForm(fd: FormData): RuleInput | { error: string } {
   if (!['outflow', 'inflow', 'auto'].includes(direction)) {
     return { error: 'Direction must be outflow, inflow, or auto.' }
   }
+  const accountRouterRegex = String(fd.get('account_router_regex') ?? '').trim()
+  if (accountRouterRegex) {
+    try { new RegExp(accountRouterRegex) } catch {
+      return { error: 'Account router regex is invalid.' }
+    }
+  }
   const idRaw = fd.get('id')
   return {
     id: typeof idRaw === 'string' && idRaw ? idRaw : undefined,
@@ -64,6 +72,7 @@ function readRuleFromForm(fd: FormData): RuleInput | { error: string } {
     date_regex: (String(fd.get('date_regex') ?? '').trim() || null),
     direction,
     inflow_regex: (String(fd.get('inflow_regex') ?? '').trim() || null),
+    account_router_regex: accountRouterRegex || null,
     default_account_id: (String(fd.get('default_account_id') ?? '').trim() || null),
     default_member_id: (String(fd.get('default_member_id') ?? '').trim() || null),
     default_category_id: (String(fd.get('default_category_id') ?? '').trim() || null),
@@ -107,6 +116,51 @@ export async function deleteRule(formData: FormData): Promise<void> {
     .eq('id', id)
     .eq('household_id', ctx.householdId)
   revalidatePath('/transactions/import/auto-setup')
+}
+
+// ─── Bank presets ────────────────────────────────────────────────────────
+
+export type AddPresetState = { ok: true; ruleId: string } | { error: string } | undefined
+
+export async function addBankPreset(presetId: string): Promise<AddPresetState> {
+  const ctx = await getHouseholdContext()
+  if (!ctx) return { error: 'Not authorized.' }
+
+  const preset = BANK_PRESETS.find((p) => p.id === presetId)
+  if (!preset) return { error: 'Unknown bank preset.' }
+
+  const supabase = await createClient()
+
+  // Pick a sensible fallback account: first non-archived account in the
+  // household. The user can edit the rule afterwards if they want a
+  // different fallback. Required because schema needs a non-null FK or
+  // we'd insert a half-baked rule.
+  const { data: accounts } = await supabase
+    .from('accounts')
+    .select('id')
+    .eq('household_id', ctx.householdId)
+    .is('archived_at', null)
+    .order('created_at', { ascending: true })
+    .limit(1)
+
+  const fallbackAccountId = accounts?.[0]?.id ?? null
+  if (!fallbackAccountId) {
+    return { error: 'Add at least one account first — every rule needs a fallback account.' }
+  }
+
+  const { data, error } = await supabase
+    .from('bank_email_rules')
+    .insert({
+      household_id: ctx.householdId,
+      ...preset.rule,
+      default_account_id: fallbackAccountId,
+    })
+    .select('id')
+    .single()
+  if (error || !data) return { error: error?.message ?? 'Failed to create rule.' }
+
+  revalidatePath('/transactions/import/auto-setup')
+  return { ok: true, ruleId: data.id }
 }
 
 // ─── Smart suggester ─────────────────────────────────────────────────────
@@ -191,6 +245,75 @@ export async function sendTestEmail(): Promise<TestEmailState> {
     }
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Test request failed.' }
+  }
+}
+
+// ─── Gmail sync URL + on-demand trigger ──────────────────────────────────
+
+export type SaveSyncUrlState = { ok: true } | { error: string } | undefined
+
+export async function saveSyncUrl(_prev: SaveSyncUrlState, fd: FormData): Promise<SaveSyncUrlState> {
+  const ctx = await getHouseholdContext()
+  if (!ctx) return { error: 'Not authorized.' }
+  const raw = String(fd.get('url') ?? '').trim()
+  // Accept blank → clears the URL. Otherwise must look like an Apps Script /exec link.
+  if (raw && !/^https:\/\/script\.google\.com\/.+\/exec(?:\?.*)?$/.test(raw)) {
+    return { error: 'That doesn’t look like an Apps Script Web App URL (should end with /exec).' }
+  }
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('households')
+    .update({ gmail_sync_url: raw || null })
+    .eq('id', ctx.householdId)
+  if (error) return { error: error.message }
+  revalidatePath('/transactions/import/auto-setup')
+  return { ok: true }
+}
+
+export type SyncNowState =
+  | { ok: true; imported: number; skipped: number }
+  | { error: string }
+  | undefined
+
+export async function triggerGmailSync(): Promise<SyncNowState> {
+  const ctx = await getHouseholdContext()
+  if (!ctx) return { error: 'Not authorized.' }
+  const supabase = await createClient()
+  const { data: household } = await supabase
+    .from('households')
+    .select('gmail_sync_url')
+    .eq('id', ctx.householdId)
+    .single()
+  if (!household?.gmail_sync_url) {
+    return { error: 'No sync URL configured. Deploy the Apps Script as a Web App and paste the /exec URL in step 5.' }
+  }
+  try {
+    // Apps Script /exec endpoints redirect through Google's auth chain even
+    // when "Anyone with the link" — fetch follows by default. 30s timeout
+    // since hourly batches can run a little long after a backlog.
+    const res = await fetch(household.gmail_sync_url, {
+      method: 'GET',
+      cache: 'no-store',
+    })
+    if (!res.ok) return { error: `Apps Script returned HTTP ${res.status}.` }
+    const text = await res.text()
+    let imported = 0
+    let skipped = 0
+    try {
+      const parsed = JSON.parse(text)
+      imported = Number(parsed?.result?.imported ?? 0)
+      skipped = Number(parsed?.result?.skipped ?? 0)
+    } catch {
+      // Apps Script can return HTML on error. Treat unparseable as success
+      // with unknown counts — the webhook log on Maple's side will show
+      // whatever actually landed.
+    }
+    revalidatePath('/transactions/import/auto-setup')
+    revalidatePath('/transactions')
+    revalidatePath('/dashboard')
+    return { ok: true, imported, skipped }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Sync request failed.' }
   }
 }
 

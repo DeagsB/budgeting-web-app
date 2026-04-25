@@ -23,7 +23,7 @@ export default async function AccountsPage({
   const [{ data: accounts }, { data: members }] = await Promise.all([
     supabase
       .from('accounts')
-      .select('id, name, type, ownership, member_id, opening_balance_cents, archived_at')
+      .select('id, name, type, ownership, member_id, opening_balance_cents, last_four, archived_at')
       .eq('household_id', ctx.householdId)
       .order('name'),
     supabase
@@ -94,6 +94,7 @@ export default async function AccountsPage({
                 member_id: a.member_id,
                 memberName: a.member_id ? (memberName.get(a.member_id) ?? null) : null,
                 opening_balance_cents: Number(a.opening_balance_cents),
+                last_four: a.last_four ?? null,
                 archived: !!a.archived_at,
               }}
               members={(members ?? []).map((m) => ({ id: m.id, name: m.display_name }))}

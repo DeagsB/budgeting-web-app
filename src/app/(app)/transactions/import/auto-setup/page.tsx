@@ -15,12 +15,12 @@ export default async function AutoImportSetupPage() {
     await Promise.all([
       supabase
         .from('households')
-        .select('id, email_ingest_secret')
+        .select('id, email_ingest_secret, gmail_sync_url')
         .eq('id', ctx.householdId)
         .single(),
       supabase
         .from('accounts')
-        .select('id, name')
+        .select('id, name, last_four')
         .eq('household_id', ctx.householdId)
         .is('archived_at', null)
         .order('name'),
@@ -39,7 +39,7 @@ export default async function AutoImportSetupPage() {
       supabase
         .from('bank_email_rules')
         .select(
-          'id, name, enabled, match_from, match_subject, amount_regex, description_regex, date_regex, direction, inflow_regex, default_account_id, default_member_id, default_category_id',
+          'id, name, enabled, match_from, match_subject, amount_regex, description_regex, date_regex, direction, inflow_regex, account_router_regex, default_account_id, default_member_id, default_category_id',
         )
         .eq('household_id', ctx.householdId)
         .order('sort_order')
@@ -124,7 +124,8 @@ export default async function AutoImportSetupPage() {
       <SetupWizard
         webhookUrl={webhookUrl}
         hasSecret={hasSecret}
-        accounts={(accounts ?? []).map((a) => ({ id: a.id, name: a.name }))}
+        gmailSyncUrl={household?.gmail_sync_url ?? null}
+        accounts={(accounts ?? []).map((a) => ({ id: a.id, name: a.name, last_four: a.last_four ?? null }))}
         members={(members ?? []).map((m) => ({ id: m.id, name: m.display_name }))}
         categories={(categories ?? []).map((c) => ({
           id: c.id,
@@ -143,6 +144,7 @@ export default async function AutoImportSetupPage() {
           date_regex: r.date_regex,
           direction: r.direction,
           inflow_regex: r.inflow_regex,
+          account_router_regex: r.account_router_regex ?? null,
           default_account_id: r.default_account_id,
           default_member_id: r.default_member_id,
           default_category_id: r.default_category_id,

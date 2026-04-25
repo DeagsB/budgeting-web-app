@@ -12,9 +12,20 @@ export type IngestRule = {
   date_regex: string | null
   direction: 'outflow' | 'inflow' | 'auto'
   inflow_regex: string | null
+  // When set, the engine runs this regex against the body and uses capture
+  // group 1 to look up an account by last_four. Falls back to default_account_id
+  // if the regex doesn't match or no account has that last_four.
+  account_router_regex: string | null
   default_account_id: string | null
   default_member_id: string | null
   default_category_id: string | null
+}
+
+// Tiny lookup of a household's accounts so the engine can resolve the
+// router regex's captured discriminator into an account id.
+export type AccountLookup = {
+  id: string
+  last_four: string | null
 }
 
 export type IngestEmail = {
@@ -82,7 +93,11 @@ function normalizeDate(raw: string, fallbackISO: string): string {
   return fallbackISO.slice(0, 10)
 }
 
-export function parseEmail(rules: IngestRule[], email: IngestEmail): ParseOutcome {
+export function parseEmail(
+  rules: IngestRule[],
+  email: IngestEmail,
+  accounts: AccountLookup[] = [],
+): ParseOutcome {
   const enabledRules = rules.filter((r) => r.enabled)
   const candidates = enabledRules.filter((r) => ruleMatches(r, email))
   if (candidates.length === 0) return { ok: false, reason: 'no_match' }
@@ -125,13 +140,30 @@ export function parseEmail(rules: IngestRule[], email: IngestEmail): ParseOutcom
       signedCents = isInflow ? -Math.abs(absCents) : Math.abs(absCents)
     }
 
+    // Account routing — try the rule's router regex first, then fall back
+    // to the rule's default. This is what lets one RBC rule serve chequing,
+    // savings, and credit cards: the body says "ending in 1234" and we look
+    // up the account whose last_four matches.
+    let routedAccountId = rule.default_account_id
+    if (rule.account_router_regex) {
+      const routerRe = safeRegex(rule.account_router_regex)
+      const m = routerRe ? email.body.match(routerRe) : null
+      const captured = m && m[1] ? m[1].trim() : null
+      if (captured) {
+        const matched = accounts.find(
+          (a) => a.last_four && a.last_four === captured,
+        )
+        if (matched) routedAccountId = matched.id
+      }
+    }
+
     return {
       ok: true,
       tx: {
         occurred_on: occurredOn,
         amount_cents: signedCents,
         description,
-        account_id: rule.default_account_id,
+        account_id: routedAccountId,
         member_id: rule.default_member_id,
         category_id: rule.default_category_id,
         external_id: email.message_id,

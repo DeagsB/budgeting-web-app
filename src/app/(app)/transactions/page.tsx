@@ -5,6 +5,7 @@ import { addMonths, monthLabel, monthStartISO, formatMoney, formatDate } from '@
 import { MapleLabel } from '@/components/ui/label'
 import { AddTransactionForm } from './add-form'
 import { TransactionRow } from './row'
+import { SyncNowButton } from './sync-button'
 
 type Txn = {
   id: string
@@ -36,7 +37,7 @@ export default async function TransactionsPage({
 
   const supabase = await createClient()
 
-  const [{ data: accounts }, { data: categories }, { data: members }] = await Promise.all([
+  const [{ data: accounts }, { data: categories }, { data: members }, { data: household }] = await Promise.all([
     supabase
       .from('accounts')
       .select('id, name, type')
@@ -54,7 +55,13 @@ export default async function TransactionsPage({
       .select('id, display_name')
       .eq('household_id', ctx.householdId)
       .order('sort_order'),
+    supabase
+      .from('households')
+      .select('gmail_sync_url')
+      .eq('id', ctx.householdId)
+      .single(),
   ])
+  const hasSyncUrl = !!household?.gmail_sync_url
 
   let q = supabase
     .from('transactions')
@@ -131,17 +138,20 @@ export default async function TransactionsPage({
           <h1 className="font-serif text-[34px] leading-[1.05] tracking-[-0.02em] text-[var(--color-ink)] md:text-[40px]">
             Every dollar, accounted for.
           </h1>
-          <Link
-            href="/transactions/import"
-            className="hidden items-center gap-1.5 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3.5 py-2 text-[12.5px] font-semibold text-[var(--color-ink)] transition-colors hover:bg-[var(--color-cream-2)] sm:inline-flex"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            Import CSV
-          </Link>
+          <div className="flex shrink-0 items-center gap-2">
+            <SyncNowButton hasSyncUrl={hasSyncUrl} />
+            <Link
+              href="/transactions/import"
+              className="hidden items-center gap-1.5 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3.5 py-2 text-[12.5px] font-semibold text-[var(--color-ink)] transition-colors hover:bg-[var(--color-cream-2)] sm:inline-flex"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              Import CSV
+            </Link>
+          </div>
         </div>
       </header>
 

@@ -17,6 +17,7 @@ type AccountInput = {
   ownership: AccountOwnership
   member_id: string | null
   opening_balance_cents: number
+  last_four: string | null
 }
 
 type ParseResult = { error: string; ok?: never } | { ok: AccountInput; error?: never }
@@ -29,6 +30,14 @@ function parseForm(fd: FormData): ParseResult {
   const openingRaw = String(fd.get('opening_balance') ?? '0')
   const member_id = memberRaw || null
   const opening_balance_cents = parseMoneyToCents(openingRaw) ?? 0
+  const lastFourRaw = String(fd.get('last_four') ?? '').trim()
+  let last_four: string | null = null
+  if (lastFourRaw) {
+    if (!/^\d{4}$/.test(lastFourRaw)) {
+      return { error: 'Last 4 digits must be exactly 4 digits.' }
+    }
+    last_four = lastFourRaw
+  }
 
   if (!name) return { error: 'Name is required.' }
   if (!TYPES.has(type)) return { error: 'Invalid account type.' }
@@ -37,7 +46,7 @@ function parseForm(fd: FormData): ParseResult {
     return { error: 'Pick a member for a member-owned account.' }
   }
 
-  return { ok: { name, type, ownership, member_id, opening_balance_cents } }
+  return { ok: { name, type, ownership, member_id, opening_balance_cents, last_four } }
 }
 
 export async function createAccount(_prev: AccountState, fd: FormData): Promise<AccountState> {

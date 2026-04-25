@@ -11,12 +11,18 @@ import {
   suggestFromSample,
   sendTestEmail,
   getRecentLog,
+  addBankPreset,
+  saveSyncUrl,
+  triggerGmailSync,
   type RotateSecretState,
   type RuleFormState,
   type TestEmailState,
+  type SaveSyncUrlState,
+  type SyncNowState,
 } from './actions'
+import { BANK_PRESETS } from '@/lib/bank-presets'
 
-type Account = { id: string; name: string }
+type Account = { id: string; name: string; last_four: string | null }
 type Member = { id: string; name: string }
 type Category = { id: string; name: string; code: string; parent_id: string | null }
 
@@ -31,6 +37,7 @@ type Rule = {
   date_regex: string | null
   direction: 'outflow' | 'inflow' | 'auto'
   inflow_regex: string | null
+  account_router_regex: string | null
   default_account_id: string | null
   default_member_id: string | null
   default_category_id: string | null
@@ -97,6 +104,7 @@ const STARTER_TEMPLATES: Array<{
 export function SetupWizard({
   webhookUrl,
   hasSecret,
+  gmailSyncUrl,
   accounts,
   members,
   categories,
@@ -105,6 +113,7 @@ export function SetupWizard({
 }: {
   webhookUrl: string
   hasSecret: boolean
+  gmailSyncUrl: string | null
   accounts: Account[]
   members: Member[]
   categories: Category[]
@@ -139,7 +148,7 @@ export function SetupWizard({
       </Step>
 
       <Step n={5} title="Watch alerts arrive">
-        <VerifyLog log={log} />
+        <VerifyLog log={log} gmailSyncUrl={gmailSyncUrl} />
       </Step>
     </div>
   )
@@ -348,9 +357,16 @@ function GmailScriptCard({ webhookUrl }: { webhookUrl: string }) {
         </li>
         <li>
           Click <b>Triggers</b> (clock icon) → <b>Add trigger</b>: function
-          {' '}<code className="rounded bg-[var(--color-cream-2)] px-1.5 py-0.5 font-mono text-[11.5px]">forwardBankAlerts</code>, time-driven, every 5 minutes.
+          {' '}<code className="rounded bg-[var(--color-cream-2)] px-1.5 py-0.5 font-mono text-[11.5px]">forwardBankAlerts</code>, time-driven, <b>every hour</b>.
+          {' '}<span className="text-[var(--color-ink-3)]">(Hourly is plenty for budgeting; you can pull right now from the app whenever you want.)</span>
         </li>
         <li>Run it once manually to authorize Gmail access.</li>
+        <li>
+          <b>For on-demand sync:</b> click <b>Deploy → New deployment</b> → type <b>Web app</b>,
+          execute as <i>Me</i>, who has access <i>Anyone with the link</i>. Copy the resulting
+          <code className="rounded bg-[var(--color-cream-2)] mx-1 px-1.5 py-0.5 font-mono text-[11.5px]">/exec</code> URL and paste it into Maple in step 5 — that&rsquo;s what
+          powers the &ldquo;Sync now&rdquo; button.
+        </li>
       </ol>
 
       <div className="overflow-hidden rounded-[14px] border border-[var(--color-hair)]">
@@ -382,8 +398,13 @@ function GmailScriptCard({ webhookUrl }: { webhookUrl: string }) {
 
 function appsScriptCode(webhookUrl: string): string {
   return `// Forwards Gmail messages labelled "bank-alerts" to Maple.
-// Set the script properties: SECRET (from step 1) and optionally
-// LABEL_NAME (defaults to "bank-alerts").
+// Script properties:
+//   SECRET      (required)  — your Maple webhook secret from step 1
+//   LABEL_NAME  (optional)  — defaults to "bank-alerts"
+//
+// Triggers: an hourly time-driven trigger keeps things fresh without
+// burning Apps Script quota. The doGet() entry point lets Maple's
+// "Sync now" button invoke this script on demand.
 
 const WEBHOOK_URL = '${webhookUrl}';
 
@@ -398,11 +419,15 @@ function forwardBankAlerts() {
   const processed = GmailApp.getUserLabelByName('maple-imported')
     || GmailApp.createLabel('maple-imported');
 
-  const threads = label.getThreads(0, 20);
+  let imported = 0;
+  let skipped = 0;
+  const threads = label.getThreads(0, 50);
   for (const thread of threads) {
     for (const msg of thread.getMessages()) {
-      if (msg.getLabels().some((l) => l.getName() === 'maple-imported')) continue;
-
+      if (msg.getLabels().some((l) => l.getName() === 'maple-imported')) {
+        skipped++;
+        continue;
+      }
       const payload = {
         secret: secret,
         from: msg.getFrom(),
@@ -423,9 +448,21 @@ function forwardBankAlerts() {
         // 200 = handled (inserted/duplicate/no_match). 401 = bad secret —
         // we still mark to stop spamming; user must fix and rotate.
         thread.addLabel(processed);
+        imported++;
       }
     }
   }
+  return { imported: imported, skipped: skipped };
+}
+
+// HTTP entry point — deploy this script as a Web App (Deploy → New
+// deployment → type: Web App, execute as Me, who has access: Anyone with
+// the link). Maple's "Sync now" button calls the resulting URL.
+function doGet() {
+  const result = forwardBankAlerts();
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: true, result: result }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 `
 }
@@ -448,14 +485,63 @@ function RulesSection({
   onEdit: (r: Rule | 'new' | null) => void
 }) {
   const [pending, startTransition] = useTransition()
+  const [presetPending, setPresetPending] = useState<string | null>(null)
+  const [presetError, setPresetError] = useState<string | null>(null)
+
+  function addPreset(presetId: string) {
+    setPresetError(null)
+    setPresetPending(presetId)
+    startTransition(async () => {
+      const result = await addBankPreset(presetId)
+      setPresetPending(null)
+      if (result && 'error' in result) setPresetError(result.error)
+    })
+  }
 
   return (
     <div className="flex flex-col gap-3">
       <p className="text-[13.5px] leading-relaxed text-[var(--color-ink-2)]">
-        Each rule says: <i>“when an email matches X, pull amount Y and merchant Z out of
-        it.”</i> Start with the generic template and tweak it once you see real alerts
-        arrive in step 5.
+        One rule per bank routes to all your accounts there — set the last 4
+        digits on each account in <Link href="/accounts" className="font-semibold text-[var(--color-ink)] underline-offset-2 hover:underline">Accounts</Link>{' '}
+        and the engine sends each alert to the right one.
       </p>
+
+      <div
+        className="rounded-[14px] border p-4"
+        style={{ borderColor: 'var(--color-leaf)', background: 'var(--color-leaf-tint)' }}
+      >
+        <div
+          className="text-[10.5px] font-bold uppercase tracking-[0.08em]"
+          style={{ color: 'var(--color-leaf-deep)' }}
+        >
+          Quick start: pick your bank
+        </div>
+        <p className="mt-1 text-[12.5px] text-[var(--color-ink-2)]">
+          One click installs a tuned rule for that bank. You can tweak it after.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {BANK_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => addPreset(p.id)}
+              disabled={presetPending !== null}
+              title={p.hint}
+              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-leaf)] bg-[var(--color-paper)] px-3.5 py-1.5 text-[12.5px] font-semibold text-[var(--color-leaf-deep)] transition-transform active:scale-[0.97] disabled:opacity-50"
+            >
+              {presetPending === p.id ? 'Adding…' : `+ ${p.label}`}
+            </button>
+          ))}
+        </div>
+        {presetError && (
+          <p
+            className="mt-2 rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
+            style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
+          >
+            {presetError}
+          </p>
+        )}
+      </div>
 
       {rules.length > 0 && (
         <ul className="flex flex-col gap-2">
@@ -593,6 +679,7 @@ function RuleForm({
                 description_regex: suggestion.description_regex ?? prev.description_regex ?? null,
                 direction: suggestion.direction,
                 inflow_regex: suggestion.inflow_regex,
+                account_router_regex: suggestion.account_router_regex ?? prev.account_router_regex ?? null,
                 name: prev.name || 'Auto-suggested rule',
               }))
             }}
@@ -711,10 +798,43 @@ function RuleForm({
             />
           </FormField>
         )}
+
+        <FormField
+          label="Account router regex"
+          hint="Captured group 1 is matched against each account's last 4. Routes one rule across many accounts."
+        >
+          <input
+            name="account_router_regex"
+            value={draft.account_router_regex ?? ''}
+            onChange={(e) => field('account_router_regex', e.target.value)}
+            className="maple-input font-mono text-[12.5px]"
+            placeholder="ending\s+(?:in|with)\s+(\d{4})"
+          />
+        </FormField>
       </div>
 
+      {accounts.some((a) => a.last_four) && (
+        <div
+          className="rounded-[10px] border px-3 py-2 text-[11.5px] leading-relaxed text-[var(--color-ink-2)]"
+          style={{ borderColor: 'var(--color-leaf)', background: 'var(--color-leaf-tint)' }}
+        >
+          <b style={{ color: 'var(--color-leaf-deep)' }}>Will route to:</b>{' '}
+          {accounts
+            .filter((a) => a.last_four)
+            .map((a) => `${a.name} (····${a.last_four})`)
+            .join(', ')}
+          {accounts.some((a) => !a.last_four) && (
+            <>
+              {' · '}<span style={{ color: 'var(--color-ink-3)' }}>
+                accounts without a last-4 won&rsquo;t auto-route — set them in Accounts.
+              </span>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-3">
-        <FormField label="Default account (required)">
+        <FormField label="Fallback account (required)" hint="Used when the router regex doesn't match — e.g. an e-transfer with no card number.">
           <select
             name="default_account_id"
             required
@@ -724,7 +844,9 @@ function RuleForm({
           >
             <option value="">Choose…</option>
             {accounts.map((a) => (
-              <option key={a.id} value={a.id}>{a.name}</option>
+              <option key={a.id} value={a.id}>
+                {a.name}{a.last_four ? ` ····${a.last_four}` : ''}
+              </option>
             ))}
           </select>
         </FormField>
@@ -807,11 +929,23 @@ function FormField({
 
 // ─── Step 5 — Verify ──────────────────────────────────────────────────────
 
-function VerifyLog({ log: initial }: { log: LogEntry[] }) {
+function VerifyLog({
+  log: initial,
+  gmailSyncUrl,
+}: {
+  log: LogEntry[]
+  gmailSyncUrl: string | null
+}) {
   const [log, setLog] = useState<LogEntry[]>(initial)
   const [polling, setPolling] = useState(true)
   const [testState, setTestState] = useState<TestEmailState>(undefined)
   const [testPending, startTest] = useTransition()
+  const [syncState, setSyncState] = useState<SyncNowState>(undefined)
+  const [syncPending, startSync] = useTransition()
+  const [urlState, urlAction, urlPending] = useActionState<SaveSyncUrlState, FormData>(
+    saveSyncUrl,
+    undefined,
+  )
 
   // Live tail: poll every 5s while the tab is visible. Pause on hidden so we
   // don't burn quota for nothing; resume on visibility change.
@@ -850,8 +984,92 @@ function VerifyLog({ log: initial }: { log: LogEntry[] }) {
     })
   }
 
+  function fireSync() {
+    setSyncState(undefined)
+    startSync(async () => {
+      const result = await triggerGmailSync()
+      setSyncState(result)
+      try { setLog(await getRecentLog()) } catch {}
+    })
+  }
+
   return (
     <div className="flex flex-col gap-3">
+      {/* Sync URL editor + Sync now */}
+      <div
+        className="rounded-[12px] border p-4"
+        style={{ borderColor: 'var(--color-leaf)', background: 'var(--color-leaf-tint)' }}
+      >
+        <div
+          className="text-[10.5px] font-bold uppercase tracking-[0.08em]"
+          style={{ color: 'var(--color-leaf-deep)' }}
+        >
+          On-demand sync
+        </div>
+        <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--color-ink-2)]">
+          Hourly trigger handles steady-state. For when you just bought something and
+          want it in the app now, paste the Apps Script <b>/exec</b> URL here and use
+          the Sync button.
+        </p>
+        <form action={urlAction} className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+          <label className="flex flex-1 flex-col gap-1">
+            <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+              Apps Script Web App URL
+            </span>
+            <input
+              type="url"
+              name="url"
+              defaultValue={gmailSyncUrl ?? ''}
+              placeholder="https://script.google.com/macros/s/AKfy…/exec"
+              className="maple-input font-mono text-[12px]"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={urlPending}
+            className="rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-4 py-2 text-[12.5px] font-semibold text-[var(--color-ink)] disabled:opacity-50"
+          >
+            {urlPending ? 'Saving…' : 'Save URL'}
+          </button>
+          <button
+            type="button"
+            onClick={fireSync}
+            disabled={syncPending || !gmailSyncUrl}
+            title={!gmailSyncUrl ? 'Save the URL first.' : 'Trigger Gmail polling now.'}
+            className="rounded-full bg-[var(--color-leaf)] px-4 py-2 text-[12.5px] font-semibold text-[var(--color-paper)] disabled:opacity-50"
+          >
+            {syncPending ? 'Syncing…' : 'Sync now'}
+          </button>
+        </form>
+        {urlState && 'ok' in urlState && (
+          <p className="mt-2 text-[12px] font-medium text-[var(--color-leaf-deep)]">
+            URL saved.
+          </p>
+        )}
+        {urlState && 'error' in urlState && (
+          <p
+            className="mt-2 rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
+            style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
+          >
+            {urlState.error}
+          </p>
+        )}
+        {syncState && 'ok' in syncState && syncState.ok && (
+          <p className="mt-2 text-[12px] font-medium text-[var(--color-leaf-deep)]">
+            Sync ran — script processed {syncState.imported} message{syncState.imported === 1 ? '' : 's'}
+            {syncState.skipped > 0 && `, skipped ${syncState.skipped} already-imported`}.
+          </p>
+        )}
+        {syncState && 'error' in syncState && (
+          <p
+            className="mt-2 rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
+            style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
+          >
+            {syncState.error}
+          </p>
+        )}
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-cream-2)] px-4 py-3">
         <div className="min-w-0 flex-1">
           <div className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">

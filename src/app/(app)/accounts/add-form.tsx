@@ -77,7 +77,7 @@ export function AddAccountForm({ members }: { members: { id: string; name: strin
           </select>
         </Field>
 
-        <Field label="Opening balance (CAD)" span={2} hint="For loans or credit cards, enter the balance owing as a positive number.">
+        <Field label="Opening balance (CAD)" hint="For loans or credit cards, enter the balance owing as a positive number.">
           <div className="flex items-center rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2.5 transition-colors focus-within:border-[var(--color-leaf)] focus-within:shadow-[0_0_0_3px_var(--color-leaf-soft)]">
             <span className="text-[14px] text-[var(--color-ink-3)]">$</span>
             <input
@@ -89,6 +89,18 @@ export function AddAccountForm({ members }: { members: { id: string; name: strin
               className="w-full bg-transparent pl-1 text-[15px] tabular-nums text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-3)]"
             />
           </div>
+        </Field>
+
+        <Field label="Last 4 digits (optional)" hint="Card or account suffix. Used to auto-route email-imported transactions to the right account.">
+          <input
+            name="last_four"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]{4}"
+            maxLength={4}
+            placeholder="1234"
+            className="maple-input tabular-nums"
+          />
         </Field>
       </div>
 

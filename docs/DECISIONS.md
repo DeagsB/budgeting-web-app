@@ -89,6 +89,36 @@ Email + password via Supabase Auth, with email confirmation enabled. No OAuth (G
 
 ---
 
+## 2026-04-24 — Multi-account routing + bank presets + on-demand sync
+
+User has multiple RBC accounts (chequing + credit card) with $1-threshold transaction alerts on each, and asked for two things: (1) one rule that auto-routes to each account, and (2) hourly default trigger with the ability to fetch on demand.
+
+**Discriminator routing (one rule → N accounts):**
+- `accounts.last_four` text + uniqueness per household
+- `bank_email_rules.account_router_regex` text — captures group 1 from body, looked up against accounts.last_four
+- Engine in `src/lib/email-ingest.ts` falls back to `default_account_id` when nothing matches (e.g. e-transfer received with no card number)
+- Account form + edit row gain a "Last 4" field; rule form gains "Account router regex" + relabels "Default account" → "Fallback account"
+- Smart Suggester auto-detects "ending in NNNN" / "se terminant par NNNN" patterns
+
+**Bank presets:**
+- `src/lib/bank-presets.ts` — tuned rules for RBC, TD, BMO, CIBC, Scotiabank, National Bank
+- "Quick start: pick your bank" chip panel at the top of Step 4; one click installs a rule
+- Universal account_router_regex (`ending\s+(?:in|with)\s+(\d{4})|se terminant par\s+(\d{4})`) covers all big-six formats
+- Fallback account auto-set to the household's first non-archived account; user edits if needed
+
+**Hourly default + on-demand sync:**
+- Apps Script template now includes `doGet()` so the script can be deployed as a Web App (Anyone-with-link, execute as Me)
+- Walkthrough trigger frequency dropped from "every 5 minutes" to "every hour" — combined with on-demand pull this is plenty without burning Apps Script quota
+- New `households.gmail_sync_url` column stores the user's `/exec` URL
+- Server actions `saveSyncUrl` + `triggerGmailSync` (the latter `fetch()`s the script URL and parses its JSON response)
+- "Sync now" button in Step 5 of the auto-setup wizard
+- Smaller "Sync" pill at the top of `/transactions` so power users can pull right after a swipe; degrades to "Set up sync →" link when no URL is configured
+
+**Why hourly + on-demand vs every-5-min:**
+288 invocations/day on a free Google account is fine for quota but feels heavy. Hourly = 24 invocations/day, plus on-demand whenever the user wants freshness. The PWA "Sync" button means it's never more than two taps away.
+
+---
+
 ## 2026-04-24 — Reduce auto-import setup friction
 
 User observed the email auto-import setup was high-touch (deploy a Gmail script, hand-write regex). Considered Gmail OAuth + server-side polling as the biggest unlock, but it's a 1.5–2 day investment requiring a Google OAuth client and Vercel cron — overkill for the first iteration. Shipped two cheap-but-high-impact improvements instead:

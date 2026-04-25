@@ -17,7 +17,10 @@ export type SuggestedRule = {
   description_regex: string | null
   direction: 'outflow' | 'inflow' | 'auto'
   inflow_regex: string | null
-  notes: string[]   // human-readable hints about what we found / didn't find
+  // Captures group 1 from the body — the engine looks it up against
+  // accounts.last_four to route automatically.
+  account_router_regex: string | null
+  notes: string[]
 }
 
 const INFLOW_KEYWORDS =
@@ -117,6 +120,11 @@ function guessDirection(sample: SampleEmail): {
   }
 }
 
+// Universal Canadian-bank "ending in NNNN" / French "se terminant par NNNN".
+// Capture group 1 is the last 4 digits.
+const ROUTER_DETECT = /\bending\s+(?:in|with)\s+(\d{4})\b|\bse\s+terminant\s+par\s+(\d{4})\b/i
+const ROUTER_REGEX = 'ending\\s+(?:in|with)\\s+(\\d{4})|se terminant par\\s+(\\d{4})'
+
 export function suggestRule(sample: SampleEmail): SuggestedRule {
   const notes: string[] = []
   const match_from = buildFromRegex(sample.from)
@@ -137,6 +145,15 @@ export function suggestRule(sample: SampleEmail): SuggestedRule {
   if (dir.direction === 'auto') notes.push('Direction was ambiguous — using auto-mode with an inflow keyword regex.')
   else notes.push(`Direction: ${dir.direction}.`)
 
+  const routerMatch = sample.body.match(ROUTER_DETECT)
+  const last4 = routerMatch ? (routerMatch[1] || routerMatch[2]) : null
+  const account_router_regex = last4 ? ROUTER_REGEX : null
+  if (last4) {
+    notes.push(`Detected account discriminator: ····${last4}. Auto-routing wired up — set the same last-4 on the matching account in Accounts.`)
+  } else {
+    notes.push('No “ending in NNNN” pattern in the body — auto-routing left off; everything will land in the fallback account.')
+  }
+
   return {
     match_from,
     match_subject,
@@ -144,6 +161,7 @@ export function suggestRule(sample: SampleEmail): SuggestedRule {
     description_regex: description?.regex ?? null,
     direction: dir.direction,
     inflow_regex: dir.inflow_regex,
+    account_router_regex,
     notes,
   }
 }

@@ -14,6 +14,7 @@ type Account = {
   member_id: string | null
   memberName: string | null
   opening_balance_cents: number
+  last_four: string | null
   archived: boolean
 }
 
@@ -110,7 +111,7 @@ export function AccountRow({
                 )}
               </select>
             </EditField>
-            <EditField label="Opening balance" span={2}>
+            <EditField label="Opening balance">
               <div className="flex items-center rounded-[10px] border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-1.5 transition-colors focus-within:border-[var(--color-leaf)]">
                 <span className="text-[12px] text-[var(--color-ink-3)]">$</span>
                 <input
@@ -121,6 +122,18 @@ export function AccountRow({
                   className="w-full bg-transparent pl-1 text-[13px] tabular-nums text-[var(--color-ink)] outline-none"
                 />
               </div>
+            </EditField>
+            <EditField label="Last 4 digits (auto-routing)">
+              <input
+                name="last_four"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]{4}"
+                maxLength={4}
+                defaultValue={account.last_four ?? ''}
+                placeholder="1234"
+                className="maple-input sm tabular-nums"
+              />
             </EditField>
           </div>
           <div className="flex items-center gap-3 pt-1">
@@ -175,6 +188,12 @@ export function AccountRow({
             <span>
               {account.ownership === 'shared' ? 'Shared' : (account.memberName ?? 'Member removed')}
             </span>
+            {account.last_four && (
+              <>
+                <span>·</span>
+                <span className="tabular-nums">····{account.last_four}</span>
+              </>
+            )}
           </div>
         </div>
         <div className="text-right">
