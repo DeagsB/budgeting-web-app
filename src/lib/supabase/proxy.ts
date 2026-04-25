@@ -49,7 +49,18 @@ export async function updateSession(request: NextRequest) {
   const isAuthRoute =
     pathname.startsWith('/sign-in') ||
     pathname.startsWith('/sign-up') ||
-    pathname.startsWith('/auth')
+    pathname.startsWith('/auth') ||
+    // Public ingestion webhooks authenticate via per-household secret in the
+    // request body, not via cookies — don't bounce unauth callers to /sign-in.
+    pathname.startsWith('/api/ingest') ||
+    // PWA install assets must be reachable without a session. Browsers and
+    // OS install prompts fetch these with no cookies attached.
+    pathname === '/manifest.webmanifest' ||
+    pathname === '/sw.js' ||
+    pathname === '/offline.html' ||
+    pathname === '/icon' ||
+    pathname === '/apple-icon' ||
+    pathname === '/favicon.ico'
 
   // Unauthenticated users hitting a protected route → redirect to sign-in.
   if (!user && !isAuthRoute && pathname !== '/') {

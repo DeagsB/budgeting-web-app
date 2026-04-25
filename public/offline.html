@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Maple — offline</title>
+    <meta name="theme-color" content="#F6F1E7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#181410" media="(prefers-color-scheme: dark)" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --cream: #f6f1e7;
+        --paper: #fffdf7;
+        --ink: #1e1a17;
+        --ink-2: #6b5f54;
+        --leaf: #1f5641;
+        --hair: rgba(94, 76, 58, 0.12);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --cream: #181410;
+          --paper: #221d18;
+          --ink: #f4efe5;
+          --ink-2: #b8aa99;
+          --leaf: #7fc9a7;
+          --hair: rgba(244, 239, 229, 0.10);
+        }
+      }
+      html, body {
+        height: 100%;
+        margin: 0;
+        background: var(--cream);
+        color: var(--ink);
+        font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      }
+      .wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+      .card {
+        max-width: 360px; width: 100%;
+        background: var(--paper);
+        border: 1px solid var(--hair);
+        border-radius: 20px;
+        padding: 28px 24px;
+        text-align: center;
+      }
+      .logo {
+        width: 56px; height: 56px;
+        border-radius: 16px;
+        background: var(--leaf);
+        color: var(--paper);
+        margin: 0 auto 16px;
+        display: flex; align-items: center; justify-content: center;
+        font-family: Georgia, serif; font-size: 32px;
+        letter-spacing: -0.02em;
+      }
+      h1 {
+        font-family: Georgia, serif;
+        font-size: 28px;
+        line-height: 1.1;
+        letter-spacing: -0.02em;
+        margin: 0 0 8px;
+      }
+      p {
+        font-size: 14px;
+        line-height: 1.5;
+        color: var(--ink-2);
+        margin: 0 0 20px;
+      }
+      button {
+        appearance: none;
+        border: 0;
+        background: var(--ink);
+        color: var(--paper);
+        font-size: 14px;
+        font-weight: 600;
+        padding: 12px 20px;
+        border-radius: 999px;
+        cursor: pointer;
+        font-family: inherit;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <div class="logo" aria-hidden>M</div>
+        <h1>You&rsquo;re offline.</h1>
+        <p>Maple needs the network to read your transactions. Reconnect and try again.</p>
+        <button onclick="location.reload()">Try again</button>
+      </div>
+    </div>
+  </body>
+</html>

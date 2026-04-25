@@ -4,7 +4,10 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 
-export type ImportState = { error: string } | { ok: true; count: number } | undefined
+export type ImportState =
+  | { error: string }
+  | { ok: true; count: number; skipped: number }
+  | undefined
 
 export type StagedTx = {
   occurred_on: string // YYYY-MM-DD
@@ -13,6 +16,8 @@ export type StagedTx = {
   account_id: string
   category_id: string | null
   member_id: string | null
+  external_id?: string | null   // OFX FITID for dedup
+  source?: 'csv_import' | 'ofx_import'
 }
 
 export async function commitImport(
@@ -36,6 +41,7 @@ export async function commitImport(
   const supabase = await createClient()
 
   const inserted: { id: string; amount_cents: number; category_id: string | null }[] = []
+  let skipped = 0
   for (const r of rows) {
     if (!r.occurred_on || !/^\d{4}-\d{2}-\d{2}$/.test(r.occurred_on)) continue
     if (!r.account_id) continue
@@ -50,11 +56,18 @@ export async function commitImport(
         member_id: r.member_id,
         description: r.description,
         amount_cents: r.amount_cents,
+        source: r.source ?? 'csv_import',
+        external_id: r.external_id ?? null,
       })
       .select('id')
       .single()
 
-    if (error || !data) continue
+    if (error || !data) {
+      // 23505 = unique_violation → row already imported (FITID match). Count
+      // it as skipped, not failed.
+      if (error?.code === '23505') skipped += 1
+      continue
+    }
     inserted.push({ id: data.id, amount_cents: r.amount_cents, category_id: r.category_id })
   }
 
@@ -74,5 +87,5 @@ export async function commitImport(
   revalidatePath('/dashboard')
   revalidatePath('/budgets')
   revalidatePath('/pnl')
-  return { ok: true, count: inserted.length }
+  return { ok: true, count: inserted.length, skipped }
 }

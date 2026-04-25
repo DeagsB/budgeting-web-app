@@ -177,11 +177,54 @@ a,
 button,
 [role='button'] {
   -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+  /* Stop iOS from showing the long-press preview popover on links and buttons —
+     it makes hand-rolled UI feel like a website instead of an app. */
+  -webkit-touch-callout: none;
 }
 
 html,
 body {
   overflow-x: hidden;
+}
+
+/* iOS standalone mode: the html element should fill the viewport so swipe
+   gestures land on the right surface and the safe-area insets resolve
+   against the actual screen, not a 0-height document. */
+html {
+  height: 100%;
+  /* Prevent the rubber-band overscroll on body — we still allow it inside
+     scroll containers, but the page itself should feel anchored. */
+  overscroll-behavior-y: none;
+}
+
+body {
+  /* Momentum scrolling on iOS for any scroll container that inherits this
+     (most do) — tables, modals, the activity feed. */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Suppress the iOS text-selection callout on UI chrome (nav, headers, badges).
+   The .maple-chrome class opts a region into "I'm app furniture, not content."
+   Body text and inputs aren't affected. */
+.maple-chrome,
+.maple-chrome * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* When installed as a PWA, push the bottom of every page above the iOS home
+   indicator. Pages that have their own bottom-fixed UI (tab bar) opt out
+   with .has-tabbar — the tab bar handles its own safe-area padding. */
+@media (display-mode: standalone) {
+  body:not(.has-tabbar) main {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Hide the desktop scrollbar in standalone mode — iOS apps don't show one. */
+@media (display-mode: standalone) {
+  ::-webkit-scrollbar { width: 0; height: 0; }
 }
 
 .hide-scroll::-webkit-scrollbar {

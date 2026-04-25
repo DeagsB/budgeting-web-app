@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter_Tight, Instrument_Serif, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
+import { ServiceWorkerRegistrar } from '@/components/pwa/sw-registrar'
+import { IOSInstallHint } from '@/components/pwa/ios-install-hint'
 
 const interTight = Inter_Tight({
   subsets: ['latin'],
@@ -21,8 +23,21 @@ const jetBrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Budgeting',
-  description: 'Household budgeting app',
+  title: 'Maple',
+  description: 'Multi-member household budgeting with Canadian tax-advantaged accounts.',
+  applicationName: 'Maple',
+  appleWebApp: {
+    capable: true,
+    title: 'Maple',
+    // black-translucent lets our cream/dark backgrounds bleed under the
+    // iOS status bar instead of getting a solid bar of system chrome.
+    statusBarStyle: 'black-translucent',
+  },
+  formatDetection: {
+    telephone: false,
+    email: false,
+    address: false,
+  },
 }
 
 export const viewport: Viewport = {
@@ -61,7 +76,11 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <ServiceWorkerRegistrar />
+        <IOSInstallHint />
+      </body>
     </html>
   )
 }

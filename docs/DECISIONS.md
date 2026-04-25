@@ -89,6 +89,99 @@ Email + password via Supabase Auth, with email confirmation enabled. No OAuth (G
 
 ---
 
+## 2026-04-24 — Reduce auto-import setup friction
+
+User observed the email auto-import setup was high-touch (deploy a Gmail script, hand-write regex). Considered Gmail OAuth + server-side polling as the biggest unlock, but it's a 1.5–2 day investment requiring a Google OAuth client and Vercel cron — overkill for the first iteration. Shipped two cheap-but-high-impact improvements instead:
+
+1. **Smart suggester** — a green-tinted panel at the top of the rule form. User pastes a real bank-alert email (from / subject / body), heuristics in `src/lib/email-suggest.ts` extract the dollar amount, merchant phrase, and direction; the form fields fill in. Includes friendly notes about what was detected vs. what's a guess. Eliminates ~70% of regex friction without any new dependencies.
+
+2. **Send test email + live tail** — Step 5 has a "Test the pipeline now" panel with a button that POSTs a synthetic alert to the household's own webhook (using `headers()` to build the absolute URL). The verify table is now a polling client component (5s interval, paused on `visibilityState=hidden`) so the test result and any real Gmail-script ingestions land in the table without manual refresh. Pipes through clean error messages on 503 etc.
+
+**Deferred:** Gmail OAuth + server polling (replaces the Apps Script entirely) and an auto-categorization rule engine. Both are documented in conversation context for the next iteration if friction stays bothersome.
+
+---
+
+## 2026-04-24 — Pivot to PWA (no native rewrite)
+
+User wants the app to feel like an iOS app, not a web app. Considered:
+1. **PWA** — add manifest, SW, iOS meta tags. ~1 day, zero throwaway, $0/yr.
+2. **Capacitor wrapper** — bundle Next.js in iOS shell. App Store + native APIs but $99/yr Apple Dev + a Mac.
+3. **React Native rewrite** — reuse Supabase, throw away every screen. Weeks-to-months.
+4. **SwiftUI rewrite** — months, throw away everything except DB.
+
+**Chose PWA.** Single-user app, no App Store distribution needed, no push-notification requirement. The existing site is already mobile-first (44px tap targets, safe-area insets, 16px inputs, mobile-first breakpoints). PWA gets us "icon on home screen, no browser chrome, splash screen" with everything we've already built intact. If we ever need push / Face ID / App Store, Capacitor wraps the same Next.js bundle — small migration.
+
+**What ships:**
+- `app/manifest.ts` (start_url=/dashboard, display=standalone, theme_color=cream)
+- `app/icon.tsx` (512x512, leaf-green tile, cream serif M) + `app/apple-icon.tsx` (180x180) — both generated at runtime via `next/og`'s `ImageResponse`, no binary commits
+- `app/layout.tsx` — apple-mobile-web-app-* meta, format-detection=no for money strings, per-scheme theme colors
+- `public/sw.js` — minimal hand-written SW: cache-first for `/_next/static/*`, network-first for navigations with `/offline.html` fallback, never caches `/api/*`/`/auth/*`/`/rest/v1/*` (financial data must stay live)
+- `public/offline.html` — standalone fallback page with Maple chrome
+- `next.config.ts` — `Cache-Control: no-cache` on `/sw.js`
+- `src/lib/supabase/proxy.ts` — whitelist `/manifest.webmanifest`, `/sw.js`, `/icon`, `/apple-icon`, `/offline.html`, `/favicon.ico` so OS install prompts can fetch them without a session
+- `src/components/pwa/sw-registrar.tsx` — registers SW on load (production-only by default; opt into dev with `NEXT_PUBLIC_SW_IN_DEV`)
+- `src/components/pwa/ios-install-hint.tsx` — bottom card shown once to Safari iOS users with "Tap Share → Add to Home Screen" (iOS gives no `beforeinstallprompt` event)
+- `src/app/(app)/shell.tsx` — replaced mobile hamburger with a fixed bottom tab bar (Home / Activity / Budgets / Accounts / More). Five tabs is the iOS native cap; secondary nav (Reports, Setup) lives in the More sheet
+- `src/app/globals.css` — momentum scrolling, `overscroll-behavior: none` on html, `-webkit-touch-callout: none` on tappables, `.maple-chrome` opt-in to disable selection on UI furniture, standalone-mode-only padding adjustments
+
+**Considered + rejected:**
+- *Workbox / Serwist*: more capable but adds build-step complexity. Hand-rolled SW is ~80 lines and does what we need.
+- *next-pwa*: unmaintained for the App Router; documented Next 16 path is hand-rolled.
+- *Push notifications*: skipped for v1. iOS PWA push requires VAPID + iOS 16.4+ + a backend store for subscriptions. Email auto-import is already the "tell me about transactions" path.
+- *Splash screen images*: iOS requires per-device-size PNGs (~10 different files). Skipped for v1 — iOS falls back to the apple-icon on a theme-color background, which looks fine.
+
+---
+
+## 2026-04-24 — Auto-import: self-hosted email + OFX, no third-party aggregator
+
+User wants transaction input to be a "killer QOL feature" but also wants to run the
+app at $0/month. That rules out paid aggregators (Plaid, Flinks, MX) for the
+foreseeable future. Going with two free, complementary paths:
+
+1. **Email-alert ingestion** (the QOL win). User enables transaction alerts in
+   their bank's online banking, a Gmail Apps Script forwards each alert to
+   `POST /api/ingest/email` on a 5-minute cron. The webhook authenticates via a
+   per-household secret stored in `households.email_ingest_secret` (rotated via
+   the `rotate_email_ingest_secret` RPC) and uses the Supabase service-role key
+   to bypass RLS for inserts. Per-bank parsing is configurable via the
+   `bank_email_rules` table — regex for from-address, subject, amount,
+   description, date, sign convention. Every webhook hit is recorded in
+   `email_ingestion_log` for debugging.
+
+2. **OFX/QFX file import** (the catch-all). Extended the existing CSV import
+   wizard to also accept `.ofx`/`.qfx` files. Parsing is done in-browser by
+   `src/lib/ofx.ts`. OFX rows carry a `FITID` which we persist to
+   `transactions.external_id`; the new `(household_id, external_id)` unique
+   index dedups re-imports automatically.
+
+**Schema additions (migration 20260424000001):**
+- `transactions.source` text check ('manual', 'csv_import', 'ofx_import', 'email_alert')
+- `transactions.external_id` text + unique partial index for dedup
+- `households.email_ingest_secret` text unique
+- `bank_email_rules` table (per-household regex rules, RLS to household)
+- `email_ingestion_log` table (read-only for household members; route handler writes via service role)
+
+**Considered + rejected:**
+- *Plaid free tier*: works for one user but ToS-grey for personal production use
+  and could break with no migration path. Held in reserve.
+- *Per-rule SECURITY DEFINER RPC instead of service-role client*: cleaner auth
+  surface (no service-role key needed) but every parsing/log/insert step would
+  need its own DB function. Service-role client is one moving piece, easier to
+  audit.
+- *Inbound email service (CloudMailin / SendGrid Inbound Parse)*: would let us
+  receive emails directly instead of via Gmail. Free tiers exist but each adds
+  another vendor; Gmail Apps Script keeps the surface to "Gmail + this app".
+
+**New env var:** `SUPABASE_SERVICE_ROLE_KEY` is now required (was optional). The
+email webhook returns 503 if it's missing. CSV-only users can still ignore it
+but the auto-import setup page will guide them to add it.
+
+**Setup walkthrough lives at `/transactions/import/auto-setup`** — five-step
+wizard styled with the Maple tokens to match the rest of the product. Discoverable
+from a leaf-tinted call-to-action card on the Import page.
+
+---
+
 ## 2026-04-19 — Money representation
 
 Store all money as **integer minor units** (cents) in a `bigint` column. Currency implicit `CAD` in v1, column included for future-proofing but not exposed in UI.

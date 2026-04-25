@@ -59,4 +59,8 @@ next-env.d.ts
 /dashboard-*.png
 /figma-*.png
 /maple-*.png
+/auto-setup-*.png
+/import-*.png
+/pwa-*.png
+/smart-*.png
 

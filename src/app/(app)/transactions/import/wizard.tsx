@@ -1,8 +1,9 @@
 'use client'
 
-import { useActionState, useMemo, useState, useEffect } from 'react'
+import { useActionState, useMemo, useState, useEffect, useRef } from 'react'
 import { parseCSV } from '@/lib/csv'
 import { formatMoney, parseMoneyToCents } from '@/lib/format'
+import { parseOFX } from '@/lib/ofx'
 import { commitImport, type ImportState, type StagedTx } from './actions'
 import { MapleLabel } from '@/components/ui/label'
 
@@ -77,6 +78,26 @@ function parseDateISO(raw: string): string | null {
 
 const SAMPLE = 'Date,Description,Amount\n2026-04-01,Rent,-1950.00\n2026-04-02,Groceries - Loblaws,-84.23\n2026-04-03,Paycheque,3250.00'
 
+type OfxLite = {
+  fitid: string
+  date: string
+  amountCents: number          // signed: positive = outflow
+  description: string | null
+}
+
+type PreviewRow = {
+  date: string
+  amountRaw: string
+  amountCents: number | null
+  description: string
+  categoryId: string | null
+  accountId: string
+  memberId: string | null
+  direction: 'out' | 'in'
+  externalId?: string | null
+  error?: string
+}
+
 export function ImportWizard({
   accounts,
   categories,
@@ -87,13 +108,59 @@ export function ImportWizard({
   members: Member[]
 }) {
   const [raw, setRaw] = useState('')
+  const [ofxRows, setOfxRows] = useState<OfxLite[] | null>(null)
+  const [ofxFileName, setOfxFileName] = useState<string | null>(null)
+  const [fileError, setFileError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [defaultAccountId, setDefaultAccountId] = useState(accounts[0]?.id ?? '')
   const [defaultMemberId, setDefaultMemberId] = useState('')
   const [defaultDirection, setDefaultDirection] = useState<'auto' | 'out' | 'in'>('auto')
 
+  const inputMode: 'csv' | 'ofx' = ofxRows ? 'ofx' : 'csv'
+
   const parsed = useMemo(() => (raw.trim() ? parseCSV(raw) : []), [raw])
   const headers = useMemo(() => parsed[0] ?? [], [parsed])
   const bodyRows = useMemo(() => parsed.slice(1), [parsed])
+
+  async function handleFile(file: File) {
+    setFileError(null)
+    const text = await file.text()
+    const looksOfx = /\.(ofx|qfx)$/i.test(file.name) || /<OFX\b/i.test(text)
+    if (looksOfx) {
+      try {
+        const result = parseOFX(text)
+        if (result.transactions.length === 0) {
+          setFileError('No transactions found in this OFX file.')
+          return
+        }
+        setRaw('')
+        setOfxRows(
+          result.transactions.map((t) => ({
+            fitid: t.fitid,
+            date: t.postedOn,
+            amountCents: t.amountCents,
+            description: t.description ?? t.memo,
+          })),
+        )
+        setOfxFileName(file.name)
+      } catch (e) {
+        setFileError(e instanceof Error ? e.message : 'Failed to parse OFX.')
+      }
+    } else {
+      // CSV fallback — dump into the textarea so the existing pipeline runs.
+      setOfxRows(null)
+      setOfxFileName(null)
+      setRaw(text)
+    }
+  }
+
+  function clearAll() {
+    setRaw('')
+    setOfxRows(null)
+    setOfxFileName(null)
+    setFileError(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
 
   const [mapping, setMapping] = useState<FieldKey[]>([])
 
@@ -126,18 +193,30 @@ export function ImportWizard({
     [members],
   )
 
-  const previewRows = bodyRows.map((cells) => {
-    const vm: {
-      date: string
-      amountRaw: string
-      amountCents: number | null
-      description: string
-      categoryId: string | null
-      accountId: string
-      memberId: string | null
-      direction: 'out' | 'in'
-      error?: string
-    } = {
+  // OFX mode → synthesize preview rows directly from parsed transactions.
+  // Skips the CSV column-mapping step entirely since OFX is structured.
+  const ofxPreviewRows =
+    inputMode === 'ofx' && ofxRows
+      ? ofxRows.map((r) => {
+          const vm: PreviewRow = {
+            date: r.date,
+            amountRaw: (r.amountCents / 100).toFixed(2),
+            amountCents: r.amountCents,
+            description: r.description ?? '',
+            categoryId: null,
+            accountId: defaultAccountId,
+            memberId: defaultMemberId || null,
+            direction: r.amountCents >= 0 ? 'out' : 'in',
+            externalId: r.fitid,
+          }
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(vm.date)) vm.error = 'Invalid date.'
+          if (!vm.accountId) vm.error = vm.error ?? 'Account missing.'
+          return vm
+        })
+      : []
+
+  const csvPreviewRows: PreviewRow[] = inputMode === 'ofx' ? [] : bodyRows.map((cells) => {
+    const vm: PreviewRow = {
       date: '',
       amountRaw: '',
       amountCents: null,
@@ -197,6 +276,9 @@ export function ImportWizard({
     return vm
   })
 
+  const previewRows: PreviewRow[] =
+    inputMode === 'ofx' ? ofxPreviewRows : csvPreviewRows
+
   const stagedRows: StagedTx[] = previewRows
     .filter((r) => !r.error && r.amountCents !== null && /^\d{4}-\d{2}-\d{2}$/.test(r.date))
     .map((r) => ({
@@ -206,6 +288,8 @@ export function ImportWizard({
       account_id: r.accountId,
       category_id: r.categoryId,
       member_id: r.memberId,
+      external_id: r.externalId ?? null,
+      source: inputMode === 'ofx' ? 'ofx_import' : 'csv_import',
     }))
 
   const readyCount = stagedRows.length
@@ -215,37 +299,87 @@ export function ImportWizard({
 
   return (
     <div className="flex flex-col gap-5">
-      {/* ─── 1. Paste ─── */}
-      <Step n={1} title="Paste CSV">
-        <textarea
-          value={raw}
-          onChange={(e) => setRaw(e.target.value)}
-          rows={raw ? 6 : 8}
-          placeholder={SAMPLE}
-          spellCheck={false}
-          className="w-full rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2.5 font-mono text-[12px] text-[var(--color-ink)] outline-none transition-colors placeholder:text-[var(--color-ink-3)] focus:border-[var(--color-leaf)] focus:shadow-[0_0_0_3px_var(--color-leaf-soft)]"
-        />
-        <div className="mt-1.5 flex items-center justify-between gap-3 text-[11.5px] text-[var(--color-ink-3)]">
-          <span>{raw ? `${bodyRows.length} row${bodyRows.length === 1 ? '' : 's'} detected` : 'Headers on line 1.'}</span>
-          {!raw && (
-            <button
-              type="button"
-              onClick={() => setRaw(SAMPLE)}
-              className="font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline"
+      {/* ─── 1. Paste or upload ─── */}
+      <Step n={1} title={inputMode === 'ofx' ? 'OFX file loaded' : 'Paste CSV or upload a file'}>
+        {inputMode === 'ofx' ? (
+          <div className="flex flex-col gap-3">
+            <div
+              className="flex items-center justify-between gap-3 rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-cream-2)] px-4 py-3"
             >
-              Try a sample →
-            </button>
-          )}
-          {raw && (
-            <button
-              type="button"
-              onClick={() => setRaw('')}
-              className="font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline"
-            >
-              Clear
-            </button>
-          )}
-        </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-mono text-[12.5px] text-[var(--color-ink)]">
+                  {ofxFileName}
+                </div>
+                <div className="mt-0.5 text-[11.5px] text-[var(--color-ink-2)]">
+                  {ofxRows!.length} transaction{ofxRows!.length === 1 ? '' : 's'} parsed.
+                  Each carries a bank-issued ID — re-importing the same file is safe (duplicates are skipped).
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={clearAll}
+                className="shrink-0 text-[12px] font-semibold text-[var(--color-ink-2)] underline-offset-2 hover:text-[var(--color-ink)] hover:underline"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <textarea
+              value={raw}
+              onChange={(e) => setRaw(e.target.value)}
+              rows={raw ? 6 : 8}
+              placeholder={SAMPLE}
+              spellCheck={false}
+              className="w-full rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2.5 font-mono text-[12px] text-[var(--color-ink)] outline-none transition-colors placeholder:text-[var(--color-ink-3)] focus:border-[var(--color-leaf)] focus:shadow-[0_0_0_3px_var(--color-leaf-soft)]"
+            />
+            <div className="mt-1.5 flex items-center justify-between gap-3 text-[11.5px] text-[var(--color-ink-3)]">
+              <span>{raw ? `${bodyRows.length} row${bodyRows.length === 1 ? '' : 's'} detected` : 'Headers on line 1.'}</span>
+              <div className="flex items-center gap-3">
+                <label className="cursor-pointer font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline">
+                  Upload .csv / .ofx / .qfx
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv,.ofx,.qfx,text/csv,application/x-ofx"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0]
+                      if (f) handleFile(f)
+                    }}
+                    className="hidden"
+                  />
+                </label>
+                {!raw && (
+                  <button
+                    type="button"
+                    onClick={() => setRaw(SAMPLE)}
+                    className="font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline"
+                  >
+                    Try a sample →
+                  </button>
+                )}
+                {raw && (
+                  <button
+                    type="button"
+                    onClick={clearAll}
+                    className="font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+            {fileError && (
+              <p
+                className="mt-2 rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
+                style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
+              >
+                {fileError}
+              </p>
+            )}
+          </>
+        )}
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <Field label="Default account">
@@ -280,6 +414,8 @@ export function ImportWizard({
               value={defaultDirection}
               onChange={(e) => setDefaultDirection(e.target.value as 'auto' | 'out' | 'in')}
               className="maple-select"
+              disabled={inputMode === 'ofx'}
+              title={inputMode === 'ofx' ? 'OFX files include a sign — this is ignored.' : undefined}
             >
               <option value="auto">Auto (respect minus sign)</option>
               <option value="out">All rows are outflows</option>
@@ -435,7 +571,9 @@ export function ImportWizard({
               className="rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
               style={{ background: 'var(--color-leaf-soft)', color: 'var(--color-leaf)' }}
             >
-              Imported {state.count} transaction{state.count === 1 ? '' : 's'}.
+              Imported {state.count} transaction{state.count === 1 ? '' : 's'}
+              {state.skipped > 0 && `, skipped ${state.skipped} duplicate${state.skipped === 1 ? '' : 's'}`}
+              .
             </p>
           )}
           <button
