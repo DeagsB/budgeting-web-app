@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { formatMoney } from '@/lib/format'
+import { MapleLabel } from '@/components/ui/label'
 import { ContributionTable } from './table'
 
 type RegisteredType = 'tfsa' | 'rrsp' | 'fhsa'
@@ -237,45 +238,51 @@ export default async function ContributionsPage({
   )
 
   return (
-    <div className="flex flex-col gap-8">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-baseline sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Registered contributions</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            TFSA / RRSP / FHSA room and usage per member for {year}.
-          </p>
+    <div className="flex flex-col gap-6 pb-10">
+      <header className="flex flex-col gap-1">
+        <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+          Contributions · {year}
         </div>
-        <div className="flex items-center gap-3 text-sm">
-          <Link
-            href={{ pathname: '/contributions', query: { year: year - 1 } }}
-            className="text-gray-500 hover:text-gray-900"
-          >
-            ← {year - 1}
-          </Link>
-          <Link
-            href={{ pathname: '/contributions', query: { year: currentYear } }}
-            className="text-gray-500 hover:text-gray-900"
-          >
-            This year
-          </Link>
-          <Link
-            href={{ pathname: '/contributions', query: { year: year + 1 } }}
-            className="text-gray-500 hover:text-gray-900"
-          >
-            {year + 1} →
-          </Link>
-        </div>
+        <h1 className="font-serif text-[34px] leading-[1.05] tracking-[-0.02em] text-[var(--color-ink)] md:text-[40px]">
+          TFSA, RRSP, FHSA — room left.
+        </h1>
+        <p className="mt-2 max-w-[640px] text-[14px] leading-relaxed text-[var(--color-ink-2)]">
+          Carry-forward room and current-year contributions per member, with the CRA annual
+          allowance applied. Override anything if your Notice of Assessment shows a different
+          number.
+        </p>
       </header>
 
-      <section className="grid gap-4 sm:grid-cols-4">
-        <Tile label="Opening room (Jan 1)" value={formatMoney(totals.opening)} />
+      <nav className="grid grid-cols-3 gap-2 text-[13px]">
+        <Link
+          href={{ pathname: '/contributions', query: { year: year - 1 } }}
+          className="inline-flex items-center justify-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2 font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
+        >
+          ← {year - 1}
+        </Link>
+        <Link
+          href={{ pathname: '/contributions', query: { year: currentYear } }}
+          className="inline-flex items-center justify-center rounded-full border border-[var(--color-hair)] bg-[var(--color-paper-2)] px-3 py-2 font-semibold text-[var(--color-ink)]"
+        >
+          This year
+        </Link>
+        <Link
+          href={{ pathname: '/contributions', query: { year: year + 1 } }}
+          className="inline-flex items-center justify-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2 font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
+        >
+          {year + 1} →
+        </Link>
+      </nav>
+
+      <section className="grid gap-3 sm:grid-cols-4">
+        <Tile label="Opening (Jan 1)" value={formatMoney(totals.opening)} />
         <Tile label={`${year} allowance`} value={formatMoney(totals.allowance)} />
         <Tile label={`Contributed ${year}`} value={formatMoney(totals.contributed)} />
-        <Tile label="Available" value={formatMoney(totals.available)} color="text-green-700" />
+        <Tile label="Available" value={formatMoney(totals.available)} tone="leaf" />
       </section>
 
       {memberRows.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-gray-300 p-6 text-sm text-gray-500">
+        <p className="rounded-[20px] border border-dashed border-[var(--color-hair)] bg-[var(--color-paper-2)] px-5 py-8 text-center text-[13.5px] text-[var(--color-ink-2)]">
           Add members first.
         </p>
       ) : (
@@ -288,23 +295,36 @@ export default async function ContributionsPage({
         />
       )}
 
-      <p className="text-xs text-gray-500">
-        Opening room is the carry-forward balance at Jan 1. For RRSP, paste the number from your
-        latest Notice of Assessment; for TFSA/FHSA, the app suggests next year&apos;s opening based
-        on prior year data (TFSA includes withdrawals that restore on Jan 1; FHSA + RRSP do not).
-        Suggested values appear as placeholders — edit and hit Save to lock them in. Allowance
-        defaults to the CRA annual limit; use the override to paste a personalised figure
-        (essential for RRSP).
+      <p className="rounded-[14px] border border-[var(--color-hair)] bg-[var(--color-paper-2)] px-4 py-3 text-[12px] leading-relaxed text-[var(--color-ink-2)]">
+        Opening room is the carry-forward balance at Jan 1. For <span className="font-semibold text-[var(--color-ink)]">RRSP</span>, paste the
+        number from your latest Notice of Assessment; for <span className="font-semibold text-[var(--color-ink)]">TFSA</span>/FHSA, the app suggests
+        next year&apos;s opening based on prior-year data (TFSA includes withdrawals that restore
+        on Jan 1; FHSA + RRSP do not). Suggested values appear as placeholders — edit and hit Save
+        to lock them in. Allowance defaults to the CRA annual limit; use the override to paste a
+        personalised figure.
       </p>
     </div>
   )
 }
 
-function Tile({ label, value, color }: { label: string; value: string; color?: string }) {
+function Tile({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: string
+  tone?: 'leaf' | 'maple' | 'ink'
+}) {
+  const color =
+    tone === 'leaf' ? 'var(--color-leaf)' : tone === 'maple' ? 'var(--color-maple)' : 'var(--color-ink)'
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
-      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</div>
-      <div className={`mt-1 text-xl font-semibold tabular-nums ${color ?? 'text-gray-900'}`}>
+    <div className="rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-4">
+      <MapleLabel>{label}</MapleLabel>
+      <div
+        className="mt-1.5 font-serif text-[20px] leading-tight tracking-[-0.02em] tabular-nums md:text-[22px]"
+        style={{ color }}
+      >
         {value}
       </div>
     </div>

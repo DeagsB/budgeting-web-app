@@ -35,7 +35,7 @@ export function GoalRow({
 
   if (editing) {
     return (
-      <section className="rounded-lg border border-gray-200 bg-white p-6">
+      <section className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper-2)] p-5 md:p-6">
         <form
           action={async (fd) => {
             await updateGoal(fd)
@@ -45,48 +45,43 @@ export function GoalRow({
         >
           <input type="hidden" name="id" value={goal.id} />
 
-          <label className="flex flex-col gap-1 text-sm sm:col-span-2">
-            <span className="text-gray-700">Name</span>
+          <EditField label="Name" span={2}>
             <input
               name="name"
               defaultValue={goal.name}
               required
               maxLength={120}
-              className="rounded border border-gray-300 px-3 py-2"
+              className="maple-input"
             />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-gray-700">Target date</span>
+          </EditField>
+          <EditField label="Target date">
             <input
               name="target_date"
               type="date"
               defaultValue={goal.target_date ?? ''}
-              className="rounded border border-gray-300 px-3 py-2"
+              className="maple-input"
             />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-gray-700">Target amount</span>
+          </EditField>
+          <EditField label="Target amount">
             <input
               name="target_amount"
               type="text"
               inputMode="decimal"
               defaultValue={(goal.target_amount_cents / 100).toFixed(2)}
               required
-              className="rounded border border-gray-300 px-3 py-2 tabular-nums"
+              className="maple-input tabular-nums"
             />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-gray-700">Current progress</span>
+          </EditField>
+          <EditField label="Current progress">
             <input
               name="current_amount"
               type="text"
               inputMode="decimal"
               defaultValue={(goal.current_amount_cents / 100).toFixed(2)}
-              className="rounded border border-gray-300 px-3 py-2 tabular-nums"
+              className="maple-input tabular-nums"
             />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-gray-700">Funding account</span>
+          </EditField>
+          <EditField label="Funding account">
             <select
               name="funding_account_id"
               defaultValue={goal.funding_account_id ?? ''}
@@ -99,30 +94,29 @@ export function GoalRow({
                 </option>
               ))}
             </select>
-          </label>
-          <label className="flex flex-col gap-1 text-sm sm:col-span-3">
-            <span className="text-gray-700">Notes</span>
+          </EditField>
+          <EditField label="Notes" span={3}>
             <input
               name="note"
               defaultValue={goal.note ?? ''}
               maxLength={1000}
-              className="rounded border border-gray-300 px-3 py-2"
+              className="maple-input"
             />
-          </label>
+          </EditField>
 
-          <div className="flex items-center gap-3 sm:col-span-3">
-            <button
-              type="submit"
-              className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white"
-            >
-              Save
-            </button>
+          <div className="flex items-center justify-end gap-3 sm:col-span-3">
             <button
               type="button"
               onClick={() => setEditing(false)}
-              className="text-sm text-gray-500 hover:text-gray-900"
+              className="rounded-full px-4 py-2 text-[13px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
             >
               Cancel
+            </button>
+            <button
+              type="submit"
+              className="inline-flex items-center gap-2 rounded-full bg-[var(--color-ink)] px-5 py-2.5 text-[13px] font-semibold text-[var(--color-paper)] active:scale-[0.98]"
+            >
+              Save
             </button>
           </div>
         </form>
@@ -131,40 +125,55 @@ export function GoalRow({
   }
 
   return (
-    <section className={`rounded-lg border border-gray-200 bg-white p-6 ${done ? 'opacity-70' : ''}`}>
+    <section
+      className={
+        'rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6 ' +
+        (done ? 'opacity-70' : '')
+      }
+    >
       <div className="flex items-baseline justify-between gap-4">
         <div className="min-w-0">
-          <h3 className="text-lg font-semibold">
-            {goal.name}
+          <div className="flex items-baseline gap-2">
+            <h3 className="font-serif text-[19px] tracking-[-0.01em] text-[var(--color-ink)]">
+              {goal.name}
+            </h3>
             {done && (
-              <span className="ml-2 rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+              <span
+                className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em]"
+                style={{ background: 'var(--color-leaf-soft)', color: 'var(--color-leaf)' }}
+              >
                 Achieved
               </span>
             )}
-          </h3>
+          </div>
           {(goal.targetDateLabel || goal.fundingAccountName) && (
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-[11.5px] text-[var(--color-ink-3)]">
               {goal.targetDateLabel && <>Due {goal.targetDateLabel}</>}
               {goal.targetDateLabel && goal.fundingAccountName && ' · '}
-              {goal.fundingAccountName && <>Funding: {goal.fundingAccountName}</>}
+              {goal.fundingAccountName && <>Funding · {goal.fundingAccountName}</>}
             </p>
           )}
         </div>
-        <div className="flex items-center gap-3 text-xs text-gray-500">
+        <div className="flex items-center gap-3 text-[12px]">
           <button
             type="button"
             onClick={() => setEditing(true)}
-            className="hover:text-gray-900"
+            className="font-semibold text-[var(--color-ink-2)] underline-offset-2 hover:text-[var(--color-ink)] hover:underline"
           >
             Edit
           </button>
+          <span className="text-[var(--color-hair)]">·</span>
           <form action={toggleAchieved}>
             <input type="hidden" name="id" value={goal.id} />
             <input type="hidden" name="achieved" value={done ? '0' : '1'} />
-            <button type="submit" className="hover:text-gray-900">
+            <button
+              type="submit"
+              className="font-semibold text-[var(--color-ink-2)] underline-offset-2 hover:text-[var(--color-ink)] hover:underline"
+            >
               {done ? 'Reopen' : 'Mark achieved'}
             </button>
           </form>
+          <span className="text-[var(--color-hair)]">·</span>
           <ConfirmButton
             action={archiveGoal}
             formData={{ id: goal.id }}
@@ -172,34 +181,60 @@ export function GoalRow({
             description="Archived goals are hidden from the active list but kept in history."
             confirmLabel="Archive"
             destructive
-            className="text-red-600 hover:text-red-800"
+            className="font-semibold underline-offset-2 hover:underline"
           >
-            Archive
+            <span style={{ color: 'var(--color-maple)' }}>Archive</span>
           </ConfirmButton>
         </div>
       </div>
 
       <div className="mt-4 flex items-baseline justify-between gap-4">
-        <div className="flex gap-4 text-sm tabular-nums text-gray-700">
-          <span>
-            <strong>{formatMoney(goal.current_amount_cents)}</strong>
-            <span className="text-gray-500"> saved</span>
-          </span>
-          <span>
-            of {formatMoney(goal.target_amount_cents)}
-          </span>
-          <span className="text-gray-500">({formatMoney(remaining)} to go)</span>
+        <div className="font-serif text-[18px] tabular-nums text-[var(--color-ink)]">
+          {formatMoney(goal.current_amount_cents)}
+          <span className="text-[var(--color-ink-3)]"> of {formatMoney(goal.target_amount_cents)}</span>
         </div>
-        <span className="text-sm font-medium text-gray-700">{percent}%</span>
+        <span className="text-[13px] font-semibold tabular-nums text-[var(--color-ink-2)]">
+          {percent}%
+        </span>
       </div>
-      <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-100">
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--color-paper-2)]">
         <div
-          className={`h-full ${done ? 'bg-green-500' : 'bg-gray-900'}`}
-          style={{ width: `${percent}%` }}
+          className="h-full rounded-full transition-all duration-300"
+          style={{
+            width: `${percent}%`,
+            background: done ? 'var(--color-leaf-deep)' : 'var(--color-leaf)',
+          }}
         />
       </div>
+      <div className="mt-1.5 text-[11.5px] text-[var(--color-ink-3)]">
+        {remaining > 0 ? `${formatMoney(remaining)} to go` : 'Target reached'}
+      </div>
 
-      {goal.note && <p className="mt-3 text-sm text-gray-600">{goal.note}</p>}
+      {goal.note && (
+        <p className="mt-3 rounded-[10px] bg-[var(--color-paper-2)] px-3 py-2 text-[12.5px] leading-relaxed text-[var(--color-ink-2)]">
+          {goal.note}
+        </p>
+      )}
     </section>
+  )
+}
+
+function EditField({
+  label,
+  span,
+  children,
+}: {
+  label: string
+  span?: 2 | 3
+  children: React.ReactNode
+}) {
+  const sc = span === 3 ? 'sm:col-span-3' : span === 2 ? 'sm:col-span-2' : ''
+  return (
+    <label className={`flex flex-col gap-1 ${sc}`}>
+      <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+        {label}
+      </span>
+      {children}
+    </label>
   )
 }

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { formatMoney, formatDate, monthStartISO } from '@/lib/format'
 import { amortize, buildRateLookup } from '@/lib/amortization'
+import { MapleLabel } from '@/components/ui/label'
 import { LoanForm } from './form'
 import { RateHistory } from './rate-history'
 
@@ -84,20 +85,28 @@ export default async function LoansPage() {
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      <header>
-        <h1 className="text-2xl font-semibold">Loans</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Enter your loan terms and rate history to project payoff date, remaining interest, and
-          per-month principal/interest breakdown. Variable-rate loans pick up each rate change as
-          its effective month arrives.
+    <div className="flex flex-col gap-6 pb-10">
+      <header className="flex flex-col gap-1">
+        <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+          Loans
+        </div>
+        <h1 className="font-serif text-[34px] leading-[1.05] tracking-[-0.02em] text-[var(--color-ink)] md:text-[40px]">
+          Payoff, projected.
+        </h1>
+        <p className="mt-2 max-w-[640px] text-[14px] leading-relaxed text-[var(--color-ink-2)]">
+          Enter loan terms and rate history to project payoff date, remaining interest, and the
+          monthly principal/interest split. Variable-rate loans pick up each rate change as its
+          effective month arrives.
         </p>
       </header>
 
       {accounts.length === 0 ? (
-        <section className="rounded-lg border border-dashed border-gray-300 p-6 text-sm text-gray-500">
+        <section className="rounded-[20px] border border-dashed border-[var(--color-hair)] bg-[var(--color-paper-2)] px-5 py-8 text-[13.5px] text-[var(--color-ink-2)]">
           No loan accounts yet. Create one on the{' '}
-          <Link href="/accounts" className="font-medium text-gray-900 underline">
+          <Link
+            href="/accounts"
+            className="font-semibold text-[var(--color-ink)] underline-offset-2 hover:underline"
+          >
             Accounts
           </Link>{' '}
           page with type set to Loan.
@@ -162,16 +171,18 @@ function LoanCard({
   const hasRateChanges = rateChanges.length > 0
 
   return (
-    <section className="rounded-lg border border-gray-200 bg-white p-6">
-      <div className="flex items-baseline justify-between gap-4">
-        <h2 className="text-lg font-semibold">{account.name}</h2>
-        <p className="text-sm text-gray-500">
+    <section className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+        <h2 className="font-serif text-[22px] leading-tight tracking-[-0.01em] text-[var(--color-ink)]">
+          {account.name}
+        </h2>
+        <p className="text-[12.5px] text-[var(--color-ink-2)]">
           Current balance{' '}
-          <span className="font-medium text-gray-900 tabular-nums">
+          <span className="font-semibold tabular-nums text-[var(--color-ink)]">
             {formatMoney(currentBalanceCents)}
           </span>
           {snapshotDate && (
-            <span className="text-xs text-gray-500"> (as of {formatDate(snapshotDate)})</span>
+            <span className="text-[var(--color-ink-3)]"> (as of {formatDate(snapshotDate)})</span>
           )}
         </p>
       </div>
@@ -207,15 +218,15 @@ function LoanCard({
       )}
 
       {amort && detail && (
-        <div className="mt-6 grid gap-4 sm:grid-cols-4">
+        <div className="mt-6 grid gap-3 sm:grid-cols-4">
           <Tile
             label="Months to payoff"
             value={amort.months < 600 ? String(amort.months) : '600+'}
           />
-          <Tile label="Total remaining interest" value={formatMoney(amort.total_interest_cents)} />
-          <Tile label="Total remaining payments" value={formatMoney(amort.total_payments_cents)} />
+          <Tile label="Remaining interest" value={formatMoney(amort.total_interest_cents)} />
+          <Tile label="Remaining payments" value={formatMoney(amort.total_payments_cents)} />
           <Tile
-            label={hasRateChanges ? 'Projection uses rate schedule' : 'Constant rate'}
+            label={hasRateChanges ? 'Schedule applies' : 'Constant rate'}
             value={
               amort.schedule[0]
                 ? `${formatMoney(amort.schedule[0].principal_cents)} principal + ${formatMoney(amort.schedule[0].interest_cents)} interest (next month)`
@@ -227,47 +238,61 @@ function LoanCard({
       )}
 
       {amort && amort.schedule.length > 0 && (
-        <div className="mt-6 overflow-x-auto rounded-lg border border-gray-200">
-          <table className="w-full min-w-[680px] text-sm">
-            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-              <tr>
-                <th className="px-4 py-2 font-medium">#</th>
-                <th className="px-4 py-2 text-right font-medium">Rate</th>
-                <th className="px-4 py-2 text-right font-medium">Starting</th>
-                <th className="px-4 py-2 text-right font-medium">Interest</th>
-                <th className="px-4 py-2 text-right font-medium">Principal</th>
-                <th className="px-4 py-2 text-right font-medium">Payment</th>
-                <th className="px-4 py-2 text-right font-medium">Ending</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {amort.schedule.slice(0, 12).map((r) => (
-                <tr key={r.index}>
-                  <td className="px-4 py-1 text-gray-500">{r.index}</td>
-                  <td className="px-4 py-1 text-right tabular-nums text-gray-500">
-                    {(r.rate_bps / 100).toFixed(3)}%
-                  </td>
-                  <td className="px-4 py-1 text-right tabular-nums">
-                    {formatMoney(r.starting_cents)}
-                  </td>
-                  <td className="px-4 py-1 text-right tabular-nums text-red-700">
-                    {formatMoney(r.interest_cents)}
-                  </td>
-                  <td className="px-4 py-1 text-right tabular-nums text-green-700">
-                    {formatMoney(r.principal_cents)}
-                  </td>
-                  <td className="px-4 py-1 text-right tabular-nums">
-                    {formatMoney(r.payment_cents)}
-                  </td>
-                  <td className="px-4 py-1 text-right tabular-nums">
-                    {formatMoney(r.ending_cents)}
-                  </td>
+        <div className="mt-6 overflow-hidden rounded-[14px] border border-[var(--color-hair)]">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[680px] text-[12.5px]">
+              <thead
+                className="text-left text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]"
+                style={{ background: 'var(--color-cream-2)' }}
+              >
+                <tr>
+                  <th className="px-4 py-2.5 font-bold">#</th>
+                  <th className="px-4 py-2.5 text-right font-bold">Rate</th>
+                  <th className="px-4 py-2.5 text-right font-bold">Starting</th>
+                  <th className="px-4 py-2.5 text-right font-bold">Interest</th>
+                  <th className="px-4 py-2.5 text-right font-bold">Principal</th>
+                  <th className="px-4 py-2.5 text-right font-bold">Payment</th>
+                  <th className="px-4 py-2.5 text-right font-bold">Ending</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {amort.schedule.slice(0, 12).map((r) => (
+                  <tr key={r.index} className="border-t border-[var(--color-hair)]">
+                    <td className="px-4 py-1.5 text-[var(--color-ink-3)]">{r.index}</td>
+                    <td className="px-4 py-1.5 text-right tabular-nums text-[var(--color-ink-3)]">
+                      {(r.rate_bps / 100).toFixed(3)}%
+                    </td>
+                    <td className="px-4 py-1.5 text-right tabular-nums text-[var(--color-ink)]">
+                      {formatMoney(r.starting_cents)}
+                    </td>
+                    <td
+                      className="px-4 py-1.5 text-right tabular-nums"
+                      style={{ color: 'var(--color-maple)' }}
+                    >
+                      {formatMoney(r.interest_cents)}
+                    </td>
+                    <td
+                      className="px-4 py-1.5 text-right tabular-nums"
+                      style={{ color: 'var(--color-leaf)' }}
+                    >
+                      {formatMoney(r.principal_cents)}
+                    </td>
+                    <td className="px-4 py-1.5 text-right tabular-nums text-[var(--color-ink)]">
+                      {formatMoney(r.payment_cents)}
+                    </td>
+                    <td className="px-4 py-1.5 text-right tabular-nums text-[var(--color-ink)]">
+                      {formatMoney(r.ending_cents)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           {amort.schedule.length > 12 && (
-            <div className="border-t border-gray-200 bg-gray-50 px-4 py-2 text-xs text-gray-500">
+            <div
+              className="border-t border-[var(--color-hair)] px-4 py-2 text-[11.5px] text-[var(--color-ink-3)]"
+              style={{ background: 'var(--color-cream-2)' }}
+            >
               First 12 months shown. Full projection has {amort.schedule.length} periods.
             </div>
           )}
@@ -275,7 +300,7 @@ function LoanCard({
       )}
 
       {!detail && (
-        <p className="mt-4 text-xs text-gray-500">
+        <p className="mt-4 text-[12px] text-[var(--color-ink-3)]">
           Save terms above to see the amortisation projection for {month}.
         </p>
       )}
@@ -293,9 +318,15 @@ function Tile({
   small?: boolean
 }) {
   return (
-    <div className="rounded-lg border border-gray-200 p-3">
-      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</div>
-      <div className={small ? 'mt-1 text-xs text-gray-700' : 'mt-1 text-lg font-semibold tabular-nums'}>
+    <div className="rounded-[14px] border border-[var(--color-hair)] bg-[var(--color-paper-2)] p-3">
+      <MapleLabel>{label}</MapleLabel>
+      <div
+        className={
+          small
+            ? 'mt-1 text-[12px] text-[var(--color-ink-2)]'
+            : 'mt-1 font-serif text-[20px] leading-tight tracking-[-0.01em] tabular-nums text-[var(--color-ink)]'
+        }
+      >
         {value}
       </div>
     </div>

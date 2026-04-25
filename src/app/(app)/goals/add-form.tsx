@@ -12,48 +12,43 @@ export function AddGoalForm({ accounts }: { accounts: { id: string; name: string
   }, [pending, state])
 
   return (
-    <form ref={formRef} action={formAction} className="mt-3 grid gap-3 sm:grid-cols-3">
-      <label className="flex flex-col gap-1 text-sm sm:col-span-2">
-        <span className="text-gray-700">Name</span>
+    <form ref={formRef} action={formAction} className="grid gap-3 sm:grid-cols-3">
+      <Field label="Name" span={2}>
         <input
           name="name"
           required
           maxLength={120}
           placeholder="e.g. Down payment"
-          className="rounded border border-gray-300 px-3 py-2"
+          className="maple-input"
         />
-      </label>
+      </Field>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-gray-700">Target date (optional)</span>
-        <input name="target_date" type="date" className="rounded border border-gray-300 px-3 py-2" />
-      </label>
+      <Field label="Target date (optional)">
+        <input name="target_date" type="date" className="maple-input" />
+      </Field>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-gray-700">Target amount (CAD)</span>
+      <Field label="Target amount (CAD)">
         <input
           name="target_amount"
           type="text"
           inputMode="decimal"
           required
           placeholder="0.00"
-          className="rounded border border-gray-300 px-3 py-2 tabular-nums"
+          className="maple-input tabular-nums"
         />
-      </label>
+      </Field>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-gray-700">Current progress (CAD)</span>
+      <Field label="Current progress (CAD)">
         <input
           name="current_amount"
           type="text"
           inputMode="decimal"
           defaultValue="0.00"
-          className="rounded border border-gray-300 px-3 py-2 tabular-nums"
+          className="maple-input tabular-nums"
         />
-      </label>
+      </Field>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-gray-700">Funding account (optional)</span>
+      <Field label="Funding account (optional)">
         <select name="funding_account_id" className="maple-select">
           <option value="">—</option>
           {accounts.map((a) => (
@@ -62,28 +57,54 @@ export function AddGoalForm({ accounts }: { accounts: { id: string; name: string
             </option>
           ))}
         </select>
-      </label>
+      </Field>
 
-      <label className="flex flex-col gap-1 text-sm sm:col-span-3">
-        <span className="text-gray-700">Notes (optional)</span>
+      <Field label="Notes (optional)" span={3}>
         <input
           name="note"
           maxLength={1000}
           placeholder="Anything worth remembering"
-          className="rounded border border-gray-300 px-3 py-2"
+          className="maple-input"
         />
-      </label>
+      </Field>
 
-      <div className="sm:col-span-3 flex items-center justify-between">
-        {state?.error ? <p className="text-sm text-red-600">{state.error}</p> : <span />}
+      <div className="flex items-center justify-end gap-3 sm:col-span-3">
+        {state?.error && (
+          <p
+            className="rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
+            style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
+          >
+            {state.error}
+          </p>
+        )}
         <button
           type="submit"
           disabled={pending}
-          className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-full bg-[var(--color-ink)] px-5 py-2.5 text-[13px] font-semibold text-[var(--color-paper)] transition-all active:scale-[0.98] disabled:opacity-50"
         >
           {pending ? 'Adding…' : 'Add goal'}
         </button>
       </div>
     </form>
+  )
+}
+
+function Field({
+  label,
+  span,
+  children,
+}: {
+  label: string
+  span?: 2 | 3
+  children: React.ReactNode
+}) {
+  const sc = span === 3 ? 'sm:col-span-3' : span === 2 ? 'sm:col-span-2' : ''
+  return (
+    <label className={`flex flex-col gap-1 ${sc}`}>
+      <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+        {label}
+      </span>
+      {children}
+    </label>
   )
 }

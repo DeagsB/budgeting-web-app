@@ -37,113 +37,131 @@ export function ContributionTable({ year, rows }: { year: number; rows: Row[] })
           setTimeout(() => setSaved(false), 1500)
         })
       }
-      className="overflow-hidden rounded-lg border border-gray-200 bg-white"
+      className="overflow-hidden rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)]"
     >
       <input type="hidden" name="year" value={year} />
 
       <div className="overflow-x-auto">
-      <table className="w-full min-w-[820px] text-sm">
-        <thead className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500">
-          <tr>
-            <th className="px-6 py-3 font-medium">Member</th>
-            <th className="px-4 py-3 font-medium">Type</th>
-            <th className="px-4 py-3 text-right font-medium">Opening room</th>
-            <th className="px-4 py-3 text-right font-medium">Allowance override</th>
-            <th className="px-4 py-3 text-right font-medium">CRA limit</th>
-            <th className="px-4 py-3 text-right font-medium">Contributed</th>
-            <th className="px-4 py-3 text-right font-medium">Withdrawn</th>
-            <th className="px-4 py-3 text-right font-medium">Available</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100">
-          {Array.from(byMember.entries()).map(([memberId, memberRows]) => (
-            <Fragment key={memberId}>
-              {memberRows.map((r, i) => {
-                const allowance = r.allowanceOverride ?? r.craAllowance
-                const available = r.opening + allowance - r.contributed
-                const availColor =
-                  available < 0
-                    ? 'text-red-700'
-                    : available === 0
-                      ? 'text-gray-500'
-                      : 'text-green-700'
-                return (
-                  <tr key={`${memberId}:${r.type}`} className={i === 0 ? 'border-t-2 border-gray-200' : ''}>
-                    <td className="px-6 py-2 font-medium text-gray-900">
-                      {i === 0 ? r.memberName : ''}
-                    </td>
-                    <td className="px-4 py-2 text-gray-700">{r.typeLabel}</td>
-                    <td className="px-4 py-2 text-right">
-                      <input
-                        name={`opening:${memberId}:${r.type}`}
-                        type="text"
-                        inputMode="decimal"
-                        defaultValue={
-                          r.openingIsSuggestion ? '' : (r.opening / 100).toFixed(2)
-                        }
-                        placeholder={
-                          r.suggestedOpeningCents !== null
-                            ? (r.suggestedOpeningCents / 100).toFixed(2)
-                            : '0.00'
-                        }
-                        className={
-                          'w-28 rounded border px-2 py-1 text-right tabular-nums ' +
-                          (r.openingIsSuggestion
-                            ? 'border-amber-300 bg-amber-50 dark:border-amber-600 dark:bg-amber-900/20'
-                            : 'border-gray-300')
-                        }
-                        title={
-                          r.openingIsSuggestion
-                            ? `Suggested from prior year (${r.type === 'tfsa' ? 'TFSA withdrawals restore on Jan 1' : 'carries unused room only'})`
-                            : undefined
-                        }
-                      />
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <input
-                        name={`allowance:${memberId}:${r.type}`}
-                        type="text"
-                        inputMode="decimal"
-                        defaultValue={
-                          r.allowanceOverride !== null
-                            ? (r.allowanceOverride / 100).toFixed(2)
-                            : ''
-                        }
-                        placeholder={(r.craAllowance / 100).toFixed(2)}
-                        className="w-28 rounded border border-gray-300 px-2 py-1 text-right tabular-nums"
-                      />
-                    </td>
-                    <td className="px-4 py-2 text-right tabular-nums text-gray-500">
-                      {formatMoney(r.craAllowance)}
-                    </td>
-                    <td className="px-4 py-2 text-right tabular-nums">
-                      {formatMoney(r.contributed)}
-                    </td>
-                    <td className="px-4 py-2 text-right tabular-nums text-gray-500">
-                      {r.withdrawn > 0 ? formatMoney(r.withdrawn) : '—'}
-                    </td>
-                    <td className={`px-4 py-2 text-right tabular-nums ${availColor}`}>
-                      {formatMoney(available)}
-                    </td>
-                  </tr>
-                )
-              })}
-            </Fragment>
-          ))}
-        </tbody>
-      </table>
+        <table className="w-full min-w-[820px] text-[13px]">
+          <thead
+            className="border-b border-[var(--color-hair)] text-left text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]"
+            style={{ background: 'var(--color-cream-2)' }}
+          >
+            <tr>
+              <th className="px-5 py-3 font-bold">Member</th>
+              <th className="px-4 py-3 font-bold">Type</th>
+              <th className="px-4 py-3 text-right font-bold">Opening</th>
+              <th className="px-4 py-3 text-right font-bold">Allowance</th>
+              <th className="px-4 py-3 text-right font-bold">CRA limit</th>
+              <th className="px-4 py-3 text-right font-bold">Contributed</th>
+              <th className="px-4 py-3 text-right font-bold">Withdrawn</th>
+              <th className="px-4 py-3 text-right font-bold">Available</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from(byMember.entries()).map(([memberId, memberRows]) => (
+              <Fragment key={memberId}>
+                {memberRows.map((r, i) => {
+                  const allowance = r.allowanceOverride ?? r.craAllowance
+                  const available = r.opening + allowance - r.contributed
+                  const availColor =
+                    available < 0
+                      ? 'var(--color-maple)'
+                      : available === 0
+                        ? 'var(--color-ink-3)'
+                        : 'var(--color-leaf)'
+                  return (
+                    <tr
+                      key={`${memberId}:${r.type}`}
+                      className={
+                        'border-t border-[var(--color-hair)] ' +
+                        (i === 0 ? 'border-t-2 border-t-[var(--color-hair)]' : '')
+                      }
+                    >
+                      <td className="px-5 py-2.5 font-serif text-[15px] tracking-[-0.01em] text-[var(--color-ink)]">
+                        {i === 0 ? r.memberName : ''}
+                      </td>
+                      <td className="px-4 py-2 text-[var(--color-ink-2)]">{r.typeLabel}</td>
+                      <td className="px-4 py-2 text-right">
+                        <input
+                          name={`opening:${memberId}:${r.type}`}
+                          type="text"
+                          inputMode="decimal"
+                          defaultValue={
+                            r.openingIsSuggestion ? '' : (r.opening / 100).toFixed(2)
+                          }
+                          placeholder={
+                            r.suggestedOpeningCents !== null
+                              ? (r.suggestedOpeningCents / 100).toFixed(2)
+                              : '0.00'
+                          }
+                          className="maple-input sm w-28 text-right tabular-nums"
+                          style={
+                            r.openingIsSuggestion
+                              ? {
+                                  borderColor: 'var(--color-honey)',
+                                  background: 'var(--color-paper-2)',
+                                }
+                              : undefined
+                          }
+                          title={
+                            r.openingIsSuggestion
+                              ? `Suggested from prior year (${r.type === 'tfsa' ? 'TFSA withdrawals restore on Jan 1' : 'carries unused room only'})`
+                              : undefined
+                          }
+                        />
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <input
+                          name={`allowance:${memberId}:${r.type}`}
+                          type="text"
+                          inputMode="decimal"
+                          defaultValue={
+                            r.allowanceOverride !== null
+                              ? (r.allowanceOverride / 100).toFixed(2)
+                              : ''
+                          }
+                          placeholder={(r.craAllowance / 100).toFixed(2)}
+                          className="maple-input sm w-28 text-right tabular-nums"
+                        />
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums text-[var(--color-ink-3)]">
+                        {formatMoney(r.craAllowance)}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums text-[var(--color-ink)]">
+                        {formatMoney(r.contributed)}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums text-[var(--color-ink-3)]">
+                        {r.withdrawn > 0 ? formatMoney(r.withdrawn) : '—'}
+                      </td>
+                      <td
+                        className="px-4 py-2 text-right font-serif tabular-nums"
+                        style={{ color: availColor }}
+                      >
+                        {formatMoney(available)}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-6 py-3">
-        <span className="text-xs text-gray-500">
+      <div
+        className="flex items-center justify-between gap-3 border-t border-[var(--color-hair)] px-5 py-3"
+        style={{ background: 'var(--color-cream-2)' }}
+      >
+        <span className="text-[11.5px] text-[var(--color-ink-3)]">
           {saved
             ? 'Saved.'
-            : 'Amber inputs are suggested from prior-year data. Leave allowance blank to use the CRA default.'}
+            : 'Honey-bordered inputs are suggested from prior-year data. Leave allowance blank to use the CRA default.'}
         </span>
         <button
           type="submit"
           disabled={pending}
-          className="rounded bg-gray-900 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-full bg-[var(--color-ink)] px-4 py-2 text-[12.5px] font-semibold text-[var(--color-paper)] active:scale-[0.98] disabled:opacity-50"
         >
           {pending ? 'Saving…' : 'Save rooms'}
         </button>

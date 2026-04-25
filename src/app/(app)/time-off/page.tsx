@@ -75,39 +75,43 @@ export default async function TimeOffPage({
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-baseline sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Time off</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Vacation + FLEX hours for {monthLabel(month)}. Balances cumulative through end of
-            month.
-          </p>
+    <div className="flex flex-col gap-6 pb-10">
+      <header className="flex flex-col gap-1">
+        <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+          Time off · {monthLabel(month)}
         </div>
-        <div className="flex items-center gap-3 text-sm">
-          <Link
-            href={{ pathname: '/time-off', query: { month: addMonths(month, -1) } }}
-            className="text-gray-500 hover:text-gray-900"
-          >
-            ← Previous
-          </Link>
-          <Link
-            href={{ pathname: '/time-off', query: { month: monthStartISO() } }}
-            className="text-gray-500 hover:text-gray-900"
-          >
-            This month
-          </Link>
-          <Link
-            href={{ pathname: '/time-off', query: { month: nextMonth } }}
-            className="text-gray-500 hover:text-gray-900"
-          >
-            Next →
-          </Link>
-        </div>
+        <h1 className="font-serif text-[34px] leading-[1.05] tracking-[-0.02em] text-[var(--color-ink)] md:text-[40px]">
+          Vacation, accounted for.
+        </h1>
+        <p className="mt-2 max-w-[560px] text-[14px] leading-relaxed text-[var(--color-ink-2)]">
+          Vacation and FLEX hours per member, accrued and used. Balances are cumulative
+          through the end of the selected month.
+        </p>
       </header>
 
+      <nav className="grid grid-cols-3 gap-2 text-[13px]">
+        <Link
+          href={{ pathname: '/time-off', query: { month: addMonths(month, -1) } }}
+          className="inline-flex items-center justify-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2 font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
+        >
+          ← Previous
+        </Link>
+        <Link
+          href={{ pathname: '/time-off', query: { month: monthStartISO() } }}
+          className="inline-flex items-center justify-center rounded-full border border-[var(--color-hair)] bg-[var(--color-paper-2)] px-3 py-2 font-semibold text-[var(--color-ink)]"
+        >
+          This month
+        </Link>
+        <Link
+          href={{ pathname: '/time-off', query: { month: nextMonth } }}
+          className="inline-flex items-center justify-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2 font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
+        >
+          Next →
+        </Link>
+      </nav>
+
       {(members ?? []).length === 0 ? (
-        <p className="rounded-lg border border-dashed border-gray-300 p-6 text-sm text-gray-500">
+        <p className="rounded-[20px] border border-dashed border-[var(--color-hair)] bg-[var(--color-paper-2)] px-5 py-8 text-center text-[13.5px] text-[var(--color-ink-2)]">
           Add members first.
         </p>
       ) : (

@@ -20,8 +20,7 @@ export function LoanForm({ accountId, initial }: { accountId: string; initial: I
     <form action={formAction} className="grid gap-3 sm:grid-cols-4">
       <input type="hidden" name="account_id" value={accountId} />
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-gray-700">Annual rate (%)</span>
+      <Field label="Annual rate (%)">
         <input
           name="annual_rate_pct"
           type="text"
@@ -29,21 +28,19 @@ export function LoanForm({ accountId, initial }: { accountId: string; initial: I
           required
           defaultValue={initial?.annual_rate_pct ?? ''}
           placeholder="5.99"
-          className="rounded border border-gray-300 px-3 py-2 tabular-nums"
+          className="maple-input tabular-nums"
         />
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-gray-700">Origination date</span>
+      </Field>
+      <Field label="Origination date">
         <input
           name="origination_date"
           type="date"
           required
           defaultValue={initial?.origination_date ?? ''}
-          className="rounded border border-gray-300 px-3 py-2"
+          className="maple-input"
         />
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-gray-700">Original principal</span>
+      </Field>
+      <Field label="Original principal">
         <input
           name="original_principal"
           type="text"
@@ -51,11 +48,10 @@ export function LoanForm({ accountId, initial }: { accountId: string; initial: I
           required
           defaultValue={initial?.original_principal ?? ''}
           placeholder="0.00"
-          className="rounded border border-gray-300 px-3 py-2 tabular-nums"
+          className="maple-input tabular-nums"
         />
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-gray-700">Monthly payment</span>
+      </Field>
+      <Field label="Monthly payment">
         <input
           name="monthly_payment"
           type="text"
@@ -63,20 +59,38 @@ export function LoanForm({ accountId, initial }: { accountId: string; initial: I
           required
           defaultValue={initial?.monthly_payment ?? ''}
           placeholder="0.00"
-          className="rounded border border-gray-300 px-3 py-2 tabular-nums"
+          className="maple-input tabular-nums"
         />
-      </label>
+      </Field>
 
-      <div className="sm:col-span-4 flex items-center justify-between">
-        {state?.error ? <p className="text-sm text-red-600">{state.error}</p> : <span />}
+      <div className="flex items-center justify-end gap-3 sm:col-span-4">
+        {state?.error && (
+          <p
+            className="rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
+            style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
+          >
+            {state.error}
+          </p>
+        )}
         <button
           type="submit"
           disabled={pending}
-          className="rounded bg-gray-900 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-full bg-[var(--color-ink)] px-5 py-2.5 text-[13px] font-semibold text-[var(--color-paper)] active:scale-[0.98] disabled:opacity-50"
         >
           {pending ? 'Saving…' : initial ? 'Update terms' : 'Save terms'}
         </button>
       </div>
     </form>
+  )
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+        {label}
+      </span>
+      {children}
+    </label>
   )
 }
