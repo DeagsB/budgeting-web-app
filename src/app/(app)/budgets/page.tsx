@@ -23,6 +23,10 @@ export default async function BudgetsPage({
     params.month && /^\d{4}-\d{2}-01$/.test(params.month) ? params.month : monthStartISO()
   const nextMonth = addMonths(month, 1)
   const yearStart = `${month.slice(0, 4)}-01-01`
+  // Recurring-detection window: the three months immediately before the
+  // selected month. We don't include the current month so this view stays
+  // the same regardless of how the current month is unfolding.
+  const recurringStart = addMonths(month, -3)
 
   const ctx = await getHouseholdContext()
   if (!ctx) return null
@@ -35,6 +39,7 @@ export default async function BudgetsPage({
     { data: txRows },
     { data: yearBudgetRows },
     { data: yearTxRows },
+    { data: recurringTxRows },
   ] = await Promise.all([
     supabase
       .from('categories')
@@ -67,6 +72,17 @@ export default async function BudgetsPage({
       .gt('amount_cents', 0)
       .gte('transaction.occurred_on', yearStart)
       .lt('transaction.occurred_on', nextMonth),
+    // Transactions from the prior three months — used to detect recurring
+    // patterns. We pull from `transactions` (not splits) because the same
+    // logical merchant lives on a single transaction, not split by category.
+    supabase
+      .from('transactions')
+      .select('amount_cents, description, occurred_on, account_id')
+      .eq('household_id', ctx.householdId)
+      .gt('amount_cents', 0)
+      .gte('occurred_on', recurringStart)
+      .lt('occurred_on', month)
+      .order('occurred_on'),
   ])
 
   const categories: Category[] = (catRows ?? []) as Category[]
@@ -143,20 +159,39 @@ export default async function BudgetsPage({
     (c) => (actualRolled.get(c.id) ?? 0) > (budgetByCat.get(c.id) ?? 0),
   ).length
 
-  const monthDate = new Date(month + 'T00:00:00')
-  const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate()
-  const today = new Date()
-  // daysElapsed treats past months as fully elapsed and future months as 0.
-  let daysElapsed: number
-  if (today < monthDate) daysElapsed = 0
-  else if (today.getFullYear() === monthDate.getFullYear() && today.getMonth() === monthDate.getMonth()) {
-    daysElapsed = today.getDate()
-  } else {
-    daysElapsed = daysInMonth
+  // Recurring-transaction detection. Group prior-3-month transactions by a
+  // (normalized description, exact amount) key. Any group that appeared in
+  // ≥ 2 distinct months is treated as recurring. We sum one occurrence per
+  // group to approximate the monthly recurring outflow.
+  type RecurringRow = { amount_cents: number; description: string | null; occurred_on: string }
+  const recurringRows = (recurringTxRows ?? []) as RecurringRow[]
+  const groups = new Map<string, { description: string; amount: number; months: Set<string> }>()
+  for (const tx of recurringRows) {
+    const desc = (tx.description ?? '').trim()
+    if (!desc) continue
+    const norm = desc.toLowerCase().replace(/\s+/g, ' ').replace(/[#0-9]+$/, '').trim()
+    const amt = Number(tx.amount_cents)
+    if (!Number.isFinite(amt) || amt <= 0) continue
+    const key = `${norm}|${amt}`
+    const monthKey = tx.occurred_on.slice(0, 7) // YYYY-MM
+    const existing = groups.get(key)
+    if (existing) existing.months.add(monthKey)
+    else groups.set(key, { description: desc, amount: amt, months: new Set([monthKey]) })
   }
-  const dailyPace = daysElapsed > 0 ? totalActual / daysElapsed : 0
-  const projectedMonth = Math.round(dailyPace * daysInMonth)
-  const projectedVsBudget = totalBudget > 0 ? projectedMonth - totalBudget : 0
+  const recurring = Array.from(groups.values())
+    .filter((g) => g.months.size >= 2)
+    .map((g) => ({
+      description: g.description,
+      amount_cents: g.amount,
+      monthsSeen: g.months.size,
+    }))
+    .sort((a, b) => b.amount_cents - a.amount_cents)
+
+  const recurringMonthlyTotal = recurring.reduce((s, g) => s + g.amount_cents, 0)
+  const recurringTop = recurring.slice(0, 3)
+  // What share of this month's budget is already locked in to recurring spend?
+  const recurringShareOfBudget =
+    totalBudget > 0 ? Math.round((recurringMonthlyTotal / totalBudget) * 100) : null
 
   return (
     <div className="flex flex-col gap-6 pb-10">
@@ -268,17 +303,11 @@ export default async function BudgetsPage({
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2">
-        <Tile
-          label="Pace"
-          value={daysElapsed > 0 ? `${formatMoney(dailyPace)}/day` : '—'}
-          tone="ink"
-          hint={
-            daysElapsed === 0
-              ? 'Future month'
-              : daysElapsed >= daysInMonth
-                ? 'Month complete'
-                : `Projected ${formatMoney(projectedMonth)} (${projectedVsBudget > 0 ? `${formatMoney(projectedVsBudget)} over` : projectedVsBudget < 0 ? `${formatMoney(-projectedVsBudget)} under` : 'on target'})`
-          }
+        <RecurringInsight
+          total={recurringMonthlyTotal}
+          count={recurring.length}
+          shareOfBudget={recurringShareOfBudget}
+          top={recurringTop}
         />
         <Tile
           label="Over budget"
@@ -350,6 +379,68 @@ function Tile({
         {value}
       </div>
       {hint && <div className="mt-1 text-[12px] text-[var(--color-ink-3)]">{hint}</div>}
+    </div>
+  )
+}
+
+function RecurringInsight({
+  total,
+  count,
+  shareOfBudget,
+  top,
+}: {
+  total: number
+  count: number
+  shareOfBudget: number | null
+  top: { description: string; amount_cents: number; monthsSeen: number }[]
+}) {
+  if (count === 0) {
+    return (
+      <div className="rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-4 md:p-5">
+        <MapleLabel>Recurring</MapleLabel>
+        <div className="mt-1.5 font-serif text-[22px] leading-tight tracking-[-0.02em] text-[var(--color-ink-3)] md:text-[26px]">
+          —
+        </div>
+        <div className="mt-1 text-[12px] leading-relaxed text-[var(--color-ink-3)]">
+          Nothing yet. Once a transaction with the same description and amount lands in 2+ of the last 3 months, it&rsquo;ll show up here.
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-4 md:p-5">
+      <div className="flex items-baseline justify-between gap-2">
+        <MapleLabel>Recurring</MapleLabel>
+        <span className="text-[10.5px] tabular-nums text-[var(--color-ink-3)]">
+          {count} item{count === 1 ? '' : 's'}
+        </span>
+      </div>
+      <div className="mt-1.5 font-serif text-[22px] leading-tight tracking-[-0.02em] tabular-nums text-[var(--color-ink)] md:text-[26px]">
+        {formatMoney(total)}
+        <span className="text-[14px] font-normal text-[var(--color-ink-3)]">/mo</span>
+      </div>
+      <div className="mt-0.5 text-[11.5px] text-[var(--color-ink-3)]">
+        {shareOfBudget !== null ? `${shareOfBudget}% of this month's budget is locked in` : 'detected from last 3 months'}
+      </div>
+      {top.length > 0 && (
+        <ul className="mt-3 flex flex-col gap-1.5 border-t border-[var(--color-hair)] pt-3">
+          {top.map((g) => (
+            <li key={g.description + g.amount_cents} className="flex items-baseline gap-2 text-[12px]">
+              <span className="min-w-0 flex-1 truncate text-[var(--color-ink)]">{g.description}</span>
+              <span
+                className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em]"
+                style={{ background: 'var(--color-paper-2)', color: 'var(--color-ink-3)' }}
+                title={`Seen in ${g.monthsSeen} of last 3 months`}
+              >
+                {g.monthsSeen}/3
+              </span>
+              <span className="shrink-0 font-serif text-[13px] tabular-nums text-[var(--color-ink-2)]">
+                {formatMoney(g.amount_cents)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
