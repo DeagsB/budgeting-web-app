@@ -357,11 +357,17 @@ function GmailScriptCard({ webhookUrl }: { webhookUrl: string }) {
           {' '}to the secret you copied in step 1.
         </li>
         <li>
-          Click <b>Triggers</b> (clock icon) → <b>Add trigger</b>: function
-          {' '}<code className="rounded bg-[var(--color-cream-2)] px-1.5 py-0.5 font-mono text-[11.5px]">forwardBankAlerts</code>, time-driven, <b>every hour</b>.
-          {' '}<span className="text-[var(--color-ink-3)]">(Hourly is plenty for budgeting; you can pull right now from the app whenever you want.)</span>
+          <b>Label your alerts in Gmail.</b> Gmail → Settings → Filters → create a filter on
+          your bank&rsquo;s sender, then <b>Apply label</b> → new label{' '}
+          <code className="rounded bg-[var(--color-cream-2)] px-1.5 py-0.5 font-mono text-[11.5px]">bank-alerts</code>.
+          {' '}<span className="text-[var(--color-ink-3)]">Required — the script only reads mail under this label. Tick &ldquo;also apply to matching conversations&rdquo; to backfill existing alerts.</span>
         </li>
-        <li>Run it once manually to authorize Gmail access.</li>
+        <li>
+          In the editor, pick <code className="rounded bg-[var(--color-cream-2)] px-1.5 py-0.5 font-mono text-[11.5px]">installTrigger</code> from the
+          function dropdown and click <b>Run</b>. Approve Gmail access when prompted —
+          this creates the <b>hourly</b> trigger and pulls existing alerts right away.
+          {' '}<span className="text-[var(--color-ink-3)]">(Hourly is plenty; you can also pull on demand from the app.)</span>
+        </li>
         <li>
           <b>For on-demand sync:</b> click <b>Deploy → New deployment</b> → type <b>Web app</b>,
           execute as <i>Me</i>, who has access <i>Anyone with the link</i>. Copy the resulting
@@ -400,60 +406,92 @@ function GmailScriptCard({ webhookUrl }: { webhookUrl: string }) {
 function appsScriptCode(webhookUrl: string): string {
   return `// Forwards Gmail messages labelled "bank-alerts" to Maple.
 // Script properties:
-//   SECRET      (required)  — your Maple webhook secret from step 1
-//   LABEL_NAME  (optional)  — defaults to "bank-alerts"
+//   SECRET        (required)  — your Maple webhook secret from step 1
+//   LABEL_NAME    (optional)  — Gmail label to scan; defaults to "bank-alerts"
+//   LOOKBACK_DAYS (optional)  — how far back to scan each run; defaults to 30.
+//                               Bump to e.g. 365 once for a one-time backfill,
+//                               then lower it again.
 //
-// Triggers: an hourly time-driven trigger keeps things fresh without
-// burning Apps Script quota. The doGet() entry point lets Maple's
-// "Sync now" button invoke this script on demand.
+// Run installTrigger() ONCE to create the hourly trigger and authorize Gmail.
+// The doGet() entry point lets Maple's "Sync now" button invoke this on demand.
+//
+// Note: GmailApp only supports labels at the thread level, and bank alerts
+// with identical subjects often share a thread — so we do NOT track "already
+// imported" with a label (that would drop later alerts in a reused thread).
+// Instead we re-scan recent labelled mail each run and let Maple dedup by
+// message-id (it returns "duplicate" for anything already imported). Safe to
+// run as often as you like.
 
 const WEBHOOK_URL = '${webhookUrl}';
+
+// Run this ONCE from the editor (pick installTrigger in the function dropdown,
+// then Run). Creates the hourly trigger, authorizes Gmail, and pulls now.
+function installTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'forwardBankAlerts') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('forwardBankAlerts').timeBased().everyHours(1).create();
+  const result = forwardBankAlerts();
+  Logger.log('Trigger installed. First run: ' + JSON.stringify(result));
+}
 
 function forwardBankAlerts() {
   const props = PropertiesService.getScriptProperties();
   const secret = props.getProperty('SECRET');
-  if (!secret) throw new Error('Set the SECRET script property first.');
+  if (!secret) throw new Error('Set the SECRET script property first (Project Settings ▸ Script properties).');
   const labelName = props.getProperty('LABEL_NAME') || 'bank-alerts';
-
-  const label = GmailApp.getUserLabelByName(labelName);
-  if (!label) throw new Error('Gmail label "' + labelName + '" not found.');
-  const processed = GmailApp.getUserLabelByName('maple-imported')
-    || GmailApp.createLabel('maple-imported');
+  const lookback = props.getProperty('LOOKBACK_DAYS') || '30';
+  const query = 'label:' + labelName + ' newer_than:' + lookback + 'd';
 
   let imported = 0;
-  let skipped = 0;
-  const threads = label.getThreads(0, 50);
-  for (const thread of threads) {
-    for (const msg of thread.getMessages()) {
-      if (msg.getLabels().some((l) => l.getName() === 'maple-imported')) {
-        skipped++;
-        continue;
-      }
-      const payload = {
-        secret: secret,
-        from: msg.getFrom(),
-        subject: msg.getSubject(),
-        body: msg.getPlainBody(),
-        message_id: msg.getId(),
-        received_at: msg.getDate().toISOString(),
-      };
+  let duplicates = 0;
+  let unmatched = 0;
+  let failures = 0;
 
-      const res = UrlFetchApp.fetch(WEBHOOK_URL, {
-        method: 'post',
-        contentType: 'application/json',
-        payload: JSON.stringify(payload),
-        muteHttpExceptions: true,
-      });
-      const status = res.getResponseCode();
-      if (status === 200 || status === 401) {
-        // 200 = handled (inserted/duplicate/no_match). 401 = bad secret —
-        // we still mark to stop spamming; user must fix and rotate.
-        thread.addLabel(processed);
-        imported++;
+  let start = 0;
+  const PAGE = 50;
+  while (true) {
+    const threads = GmailApp.search(query, start, PAGE);
+    if (threads.length === 0) break;
+    for (const thread of threads) {
+      const messages = thread.getMessages();
+      for (const msg of messages) {
+        const payload = {
+          secret: secret,
+          from: msg.getFrom(),
+          subject: msg.getSubject(),
+          body: msg.getPlainBody(),
+          message_id: msg.getId(),
+          received_at: msg.getDate().toISOString(),
+        };
+        const res = UrlFetchApp.fetch(WEBHOOK_URL, {
+          method: 'post',
+          contentType: 'application/json',
+          payload: JSON.stringify(payload),
+          muteHttpExceptions: true,
+        });
+        const code = res.getResponseCode();
+        if (code === 401) {
+          // Bad/stale secret. Stop loudly instead of silently dropping every
+          // alert — update the SECRET script property and re-run.
+          throw new Error('Maple rejected the secret (HTTP 401). Set the SECRET script property to the current value from Maple step 1, then re-run.');
+        }
+        if (code !== 200) {
+          failures++;
+          continue; // 5xx / network — leave it for the next run to retry
+        }
+        let status = '';
+        try { status = JSON.parse(res.getContentText()).status || ''; } catch (e) {}
+        if (status === 'inserted') imported++;
+        else if (status === 'duplicate') duplicates++;
+        else if (status === 'no_match') unmatched++;
+        else failures++; // parse_error etc — visible in Maple's ingestion log
       }
     }
+    if (threads.length < PAGE) break;
+    start += PAGE;
   }
-  return { imported: imported, skipped: skipped };
+  return { imported: imported, skipped: duplicates, unmatched: unmatched, failures: failures };
 }
 
 // HTTP entry point — deploy this script as a Web App (Deploy → New

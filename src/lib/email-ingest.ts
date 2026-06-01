@@ -68,11 +68,22 @@ function ruleMatches(rule: IngestRule, email: IngestEmail): boolean {
 }
 
 function parseAmountCents(raw: string): number | null {
-  const cleaned = raw.replace(/[^0-9.\-]/g, '')
-  if (!cleaned) return null
-  const n = Number(cleaned)
+  // Canadian / North-American formatting: ',' groups thousands, '.' is the
+  // decimal, and a minus may lead or trail (some banks render '25.00-').
+  // Strip currency symbols and grouping deterministically, then parse.
+  const negative = /^\s*-/.test(raw) || /-\s*$/.test(raw)
+  let s = raw.replace(/[^0-9.]/g, '') // drop currency, spaces, commas, signs
+  if (!s) return null
+  // Collapse stray dots (e.g. '1.234.56' → '1234.56'): keep only the last as
+  // the decimal point, treat earlier ones as grouping.
+  const lastDot = s.lastIndexOf('.')
+  if (lastDot !== -1) {
+    s = s.slice(0, lastDot).replace(/\./g, '') + '.' + s.slice(lastDot + 1)
+  }
+  const n = Number(s)
   if (!Number.isFinite(n)) return null
-  return Math.round(n * 100)
+  const cents = Math.round(n * 100)
+  return negative ? -cents : cents
 }
 
 function normalizeDate(raw: string, fallbackISO: string): string {
@@ -102,15 +113,28 @@ export function parseEmail(
   const candidates = enabledRules.filter((r) => ruleMatches(r, email))
   if (candidates.length === 0) return { ok: false, reason: 'no_match' }
 
+  // Remember the closest candidate that matched from/subject but failed to
+  // yield an amount, so we can report a useful parse_error (with the rule id)
+  // instead of a bare no_match when nothing parses.
+  let nearMiss: { matched_rule_id: string; detail: string } | null = null
+
   for (const rule of candidates) {
     const amountRe = safeRegex(rule.amount_regex)
-    if (!amountRe) continue
+    if (!amountRe) {
+      nearMiss = { matched_rule_id: rule.id, detail: 'amount_regex is not a valid regular expression.' }
+      continue
+    }
     const amountMatch = email.body.match(amountRe)
-    if (!amountMatch) continue
+    if (!amountMatch) {
+      nearMiss = { matched_rule_id: rule.id, detail: 'amount_regex matched no amount in the email body.' }
+      continue
+    }
     const captured = amountMatch[1] ?? amountMatch[0]
     const absCents = parseAmountCents(captured)
     if (absCents === null) {
-      return { ok: false, reason: 'parse_error', detail: 'Amount capture did not parse.', matched_rule_id: rule.id }
+      // Don't abort the whole candidate list — a later rule may parse cleanly.
+      nearMiss = { matched_rule_id: rule.id, detail: `Amount capture "${captured}" did not parse to a number.` }
+      continue
     }
 
     let description: string | null = null
@@ -148,10 +172,12 @@ export function parseEmail(
     if (rule.account_router_regex) {
       const routerRe = safeRegex(rule.account_router_regex)
       const m = routerRe ? email.body.match(routerRe) : null
-      const captured = m && m[1] ? m[1].trim() : null
-      if (captured) {
+      // Normalize to trailing 4 digits so '*1234', 'XXXX1234', '...1234',
+      // ' 1234 ' all resolve to the account whose last_four is '1234'.
+      const captured = m && m[1] ? m[1].replace(/\D/g, '').slice(-4) : null
+      if (captured && captured.length === 4) {
         const matched = accounts.find(
-          (a) => a.last_four && a.last_four === captured,
+          (a) => a.last_four && a.last_four.replace(/\D/g, '').slice(-4) === captured,
         )
         if (matched) routedAccountId = matched.id
       }
@@ -172,5 +198,10 @@ export function parseEmail(
     }
   }
 
+  // A rule fired on from/subject but no candidate produced a parseable amount:
+  // report it as a parse_error against that rule so the log is actionable.
+  if (nearMiss) {
+    return { ok: false, reason: 'parse_error', detail: nearMiss.detail, matched_rule_id: nearMiss.matched_rule_id }
+  }
   return { ok: false, reason: 'no_match' }
 }
