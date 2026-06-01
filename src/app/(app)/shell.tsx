@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { signOut } from '../(auth)/actions'
 import { Button } from '@/components/ui/button'
@@ -147,8 +147,46 @@ export function AppShell({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const router = useRouter()
   const [moreOpen, setMoreOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+
+  // ─── Single-tap bottom-nav during momentum scroll ───
+  // iOS Safari consumes the first tap that lands while the page is still
+  // inertially scrolling to stop the scroll — it never becomes a `click`, so a
+  // fixed tab bar feels like it needs two taps. `pointerup` *does* fire on that
+  // tap, so we resolve a tap there and navigate immediately, then suppress the
+  // duplicate click that follows on a normal (non-scrolling) tap.
+  const tapStart = useRef<{ x: number; y: number } | null>(null)
+  const lastTapNavAt = useRef(0)
+  // `nativeClick: true` for <Link> (let the browser handle a real mouse click /
+  // open-in-new-tab); false for a plain <button> where onClick must run the
+  // action itself.
+  function tabTap(action: () => void, opts?: { nativeClick?: boolean }) {
+    return {
+      onPointerDown: (e: React.PointerEvent) => {
+        if (e.pointerType === 'touch') tapStart.current = { x: e.clientX, y: e.clientY }
+      },
+      onPointerUp: (e: React.PointerEvent) => {
+        if (e.pointerType !== 'touch') return
+        const start = tapStart.current
+        tapStart.current = null
+        // Ignore a swipe/scroll gesture that merely began on the bar.
+        if (!start || Math.abs(e.clientX - start.x) > 12 || Math.abs(e.clientY - start.y) > 12) return
+        lastTapNavAt.current = Date.now()
+        action()
+      },
+      onClick: (e: React.MouseEvent) => {
+        // Touch already navigated on pointerup → drop the synthesized click.
+        if (Date.now() - lastTapNavAt.current < 700) {
+          if (opts?.nativeClick) e.preventDefault()
+          return
+        }
+        // Genuine mouse / keyboard click on a non-link target.
+        if (!opts?.nativeClick) action()
+      },
+    }
+  }
   // Hydrate-safe: render the default order on SSR + first paint, then swap
   // to the persisted choice once we can read localStorage. Avoids hydration
   // mismatch warnings.
@@ -296,7 +334,12 @@ export function AppShell({
             const Icon = d.icon
             return (
               <li key={d.href} className="flex-1">
-                <Link href={d.href} className={tabClass(active)} aria-current={active ? 'page' : undefined}>
+                <Link
+                  href={d.href}
+                  className={tabClass(active)}
+                  aria-current={active ? 'page' : undefined}
+                  {...tabTap(() => router.push(d.href), { nativeClick: true })}
+                >
                   <Icon active={active} />
                   <span className="mt-0.5 text-[10.5px] font-semibold tracking-[-0.01em]">
                     {d.tabLabel}
@@ -312,7 +355,7 @@ export function AppShell({
               <li key="more" className="flex-1">
                 <button
                   type="button"
-                  onClick={() => setMoreOpen(true)}
+                  {...tabTap(() => setMoreOpen(true))}
                   aria-haspopup="dialog"
                   aria-expanded={moreOpen}
                   className={tabClass(moreActive)}
@@ -643,7 +686,7 @@ function TabBarEditor({
 
 function tabClass(active: boolean) {
   return [
-    'flex h-[58px] w-full flex-col items-center justify-center gap-0 transition-colors',
+    'flex h-[58px] w-full touch-manipulation select-none flex-col items-center justify-center gap-0 transition-colors',
     active ? 'text-[var(--color-ink)]' : 'text-[var(--color-ink-3)]',
   ].join(' ')
 }
