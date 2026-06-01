@@ -283,7 +283,11 @@ body {
   border: 1px solid var(--color-hair);
   background: var(--color-paper);
   padding: 11px 14px;
-  font-size: 14px;
+  /* 16px on mobile is a HARD rule: anything smaller makes iOS Safari zoom on
+     focus. A class selector beats the element-level `input{font-size:16px}`
+     rule, so this must stay 16px here too. Step down only at sm:+ (desktop). */
+  font-size: 16px;
+  min-height: 44px; /* tap target — iPhone primary */
   line-height: 1.35;
   color: var(--color-ink);
   transition:
@@ -292,6 +296,15 @@ body {
     background-color 120ms var(--ease-ios);
   appearance: none;
   -webkit-appearance: none;
+}
+
+@media (min-width: 640px) {
+  .maple-input,
+  .maple-select,
+  .maple-textarea {
+    font-size: 14px;
+    min-height: 40px;
+  }
 }
 
 .maple-input::placeholder,
@@ -327,11 +340,22 @@ body {
 
 .maple-input.sm,
 .maple-select.sm {
-  padding: 7px 12px;
-  font-size: 13px;
+  padding: 9px 12px;
+  /* Still 16px on mobile to avoid focus-zoom; the compact look kicks in at sm:+. */
+  font-size: 16px;
+  min-height: 44px;
   border-radius: 10px;
 }
 .maple-select.sm {
   padding-right: 32px;
   background-position: right 10px center;
+}
+
+@media (min-width: 640px) {
+  .maple-input.sm,
+  .maple-select.sm {
+    padding: 7px 12px;
+    font-size: 13px;
+    min-height: 34px;
+  }
 }

@@ -23,25 +23,30 @@ import { signOut } from '../(auth)/actions'
 // tab bar; anything not on the tab bar shows up in the More sheet.
 
 const DESTS = [
-  { href: '/dashboard',      label: 'Home',        tabLabel: 'Home',     icon: HomeIcon,         group: 'main'    },
-  { href: '/accounts',       label: 'Accounts',    tabLabel: 'Accounts', icon: AccountsIcon,     group: 'main'    },
-  { href: '/transactions',   label: 'Activity',    tabLabel: 'Activity', icon: ActivityIcon,     group: 'main'    },
-  { href: '/budgets',        label: 'Budgets',     tabLabel: 'Budgets',  icon: BudgetsIcon,      group: 'main'    },
-  { href: '/shared',         label: 'Shared',      tabLabel: 'Shared',   icon: SharedIcon,       group: 'main'    },
-  { href: '/settlements',    label: 'Settlements', tabLabel: 'Split',    icon: SettlementsIcon,  group: 'main'    },
-  { href: '/pnl',            label: 'Profit & Loss', tabLabel: 'P&L',    icon: ChartIcon,        group: 'reports' },
-  { href: '/balance-sheet',  label: 'Balance sheet', tabLabel: 'Balance',icon: ScaleIcon,        group: 'reports' },
-  { href: '/net-worth',      label: 'Net worth',   tabLabel: 'Worth',    icon: TrendIcon,        group: 'reports' },
-  { href: '/loans',          label: 'Loans',       tabLabel: 'Loans',    icon: LoanIcon,         group: 'reports' },
-  { href: '/contributions',  label: 'Contributions', tabLabel: 'Contribs', icon: PiggyIcon,      group: 'reports' },
-  { href: '/goals',          label: 'Goals',       tabLabel: 'Goals',    icon: TargetIcon,       group: 'reports' },
-  { href: '/time-off',       label: 'Time off',    tabLabel: 'Time off', icon: PlaneIcon,        group: 'reports' },
-  { href: '/setup',          label: 'Setup',       tabLabel: 'Setup',    icon: SettingsIcon,     group: 'setup'   },
+  // Spending — daily drivers (rendered unlabeled at the top of the sidebar).
+  { href: '/dashboard',      label: 'Home',          tabLabel: 'Home',         icon: HomeIcon,        group: 'main'    },
+  { href: '/transactions',   label: 'Transactions',  tabLabel: 'Transactions', icon: ActivityIcon,    group: 'main'    },
+  { href: '/budgets',        label: 'Budgets',       tabLabel: 'Budgets',      icon: BudgetsIcon,     group: 'main'    },
+  { href: '/accounts',       label: 'Accounts',      tabLabel: 'Accounts',     icon: AccountsIcon,    group: 'main'    },
+  // Split & settle — shared-money tasks.
+  { href: '/shared',         label: 'Shared expenses', tabLabel: 'Shared',     icon: SharedIcon,      group: 'split'   },
+  { href: '/settlements',    label: 'Settle up',     tabLabel: 'Settle',       icon: SettlementsIcon, group: 'split'   },
+  // Reports — read-only financial statements.
+  { href: '/pnl',            label: 'Profit & Loss', tabLabel: 'P&L',          icon: ChartIcon,       group: 'reports' },
+  { href: '/balance-sheet',  label: 'Balance sheet', tabLabel: 'Balance',      icon: ScaleIcon,       group: 'reports' },
+  { href: '/net-worth',      label: 'Net worth',     tabLabel: 'Net worth',    icon: TrendIcon,       group: 'reports' },
+  // Plans & savings — forward-looking trackers.
+  { href: '/goals',          label: 'Goals',         tabLabel: 'Goals',        icon: TargetIcon,      group: 'plans'   },
+  { href: '/contributions',  label: 'Contributions', tabLabel: 'Contribs',     icon: PiggyIcon,       group: 'plans'   },
+  { href: '/loans',          label: 'Loans',         tabLabel: 'Loans',        icon: LoanIcon,        group: 'plans'   },
+  { href: '/time-off',       label: 'Time off',      tabLabel: 'Time off',     icon: PlaneIcon,       group: 'plans'   },
+  // Setup — household name, members, categories.
+  { href: '/setup',          label: 'Setup',         tabLabel: 'Setup',        icon: SettingsIcon,    group: 'setup'   },
 ] as const
 
 type Dest = (typeof DESTS)[number]
 
-const DEFAULT_TABS = ['/dashboard', '/transactions', '/budgets', '/accounts']
+const DEFAULT_TABS = ['/dashboard', '/transactions', '/budgets']
 const TAB_STORAGE_KEY = 'maple.tabBar.v1'
 const MAX_TABS = 4
 
@@ -110,7 +115,9 @@ export function AppShell({
     const onBar = new Set(tabHrefs)
     return {
       main: DESTS.filter((d) => d.group === 'main' && !onBar.has(d.href)),
+      split: DESTS.filter((d) => d.group === 'split' && !onBar.has(d.href)),
       reports: DESTS.filter((d) => d.group === 'reports' && !onBar.has(d.href)),
+      plans: DESTS.filter((d) => d.group === 'plans' && !onBar.has(d.href)),
       setup: DESTS.filter((d) => d.group === 'setup' && !onBar.has(d.href)),
     }
   }, [tabHrefs])
@@ -143,8 +150,20 @@ export function AppShell({
             onNav={closeMore}
           />
           <NavGroup
+            label="Split & settle"
+            items={DESTS.filter((d) => d.group === 'split').map((d) => ({ href: d.href, label: d.label }))}
+            pathname={pathname}
+            onNav={closeMore}
+          />
+          <NavGroup
             label="Reports"
             items={DESTS.filter((d) => d.group === 'reports').map((d) => ({ href: d.href, label: d.label }))}
+            pathname={pathname}
+            onNav={closeMore}
+          />
+          <NavGroup
+            label="Plans & savings"
+            items={DESTS.filter((d) => d.group === 'plans').map((d) => ({ href: d.href, label: d.label }))}
             pathname={pathname}
             onNav={closeMore}
           />
@@ -277,8 +296,16 @@ export function AppShell({
             <div className="px-3 pb-3">
               {moreItems.main.length > 0 && (
                 <SheetGroup
-                  label="App"
+                  label="Spending"
                   items={moreItems.main.map((d) => ({ href: d.href, label: d.label }))}
+                  pathname={pathname}
+                  onNav={closeMore}
+                />
+              )}
+              {moreItems.split.length > 0 && (
+                <SheetGroup
+                  label="Split & settle"
+                  items={moreItems.split.map((d) => ({ href: d.href, label: d.label }))}
                   pathname={pathname}
                   onNav={closeMore}
                 />
@@ -287,6 +314,14 @@ export function AppShell({
                 <SheetGroup
                   label="Reports"
                   items={moreItems.reports.map((d) => ({ href: d.href, label: d.label }))}
+                  pathname={pathname}
+                  onNav={closeMore}
+                />
+              )}
+              {moreItems.plans.length > 0 && (
+                <SheetGroup
+                  label="Plans & savings"
+                  items={moreItems.plans.map((d) => ({ href: d.href, label: d.label }))}
                   pathname={pathname}
                   onNav={closeMore}
                 />
