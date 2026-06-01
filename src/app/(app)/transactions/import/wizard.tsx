@@ -1,10 +1,10 @@
 'use client'
 
-import { useActionState, useMemo, useState, useEffect, useRef } from 'react'
+import { useActionState, useMemo, useState, useEffect, useRef, useTransition } from 'react'
 import { parseCSV } from '@/lib/csv'
 import { parseMoneyToCents } from '@/lib/format'
 import { parseOFX } from '@/lib/ofx'
-import { commitImport, type ImportState, type StagedTx } from './actions'
+import { commitImport, analyzeImport, type ImportState, type StagedTx, type RowAnnotation } from './actions'
 import { MapleLabel } from '@/components/ui/label'
 import { DataTable } from '@/components/ui/data-table'
 import { Button } from '@/components/ui/button'
@@ -298,6 +298,74 @@ export function ImportWizard({
   const readyCount = stagedRows.length
   const errorCount = previewRows.filter((r) => r.error).length
 
+  // ─── Reconciliation: match staged rows against existing transactions
+  // (mainly the email-alert rows) and suggest categories from history. Runs
+  // server-side because the client doesn't have the existing ledger.
+  const [annotations, setAnnotations] = useState<RowAnnotation[] | null>(null)
+  const [analyzing, startAnalyze] = useTransition()
+
+  // The preview indices that survive into stagedRows, in the same order — lets
+  // us zip annotations back onto the rendered preview rows.
+  const readyPreviewIdx = useMemo(
+    () =>
+      previewRows
+        .map((r, idx) => ({ r, idx }))
+        .filter(({ r }) => !r.error && r.amountCents !== null && /^\d{4}-\d{2}-\d{2}$/.test(r.date))
+        .map(({ idx }) => idx),
+    [previewRows],
+  )
+
+  // Signature of what would be analyzed; re-analyze only when it actually changes.
+  const stagedSig = useMemo(
+    () => JSON.stringify(stagedRows.map((r) => [r.account_id, r.amount_cents, r.occurred_on, r.description])),
+    [stagedRows],
+  )
+  const analyzedSigRef = useRef<string>('')
+  useEffect(() => {
+    if (readyCount === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAnnotations(null)
+      analyzedSigRef.current = ''
+      return
+    }
+    if (stagedSig === analyzedSigRef.current) return
+    analyzedSigRef.current = stagedSig
+    const rowsAtAnalyze = stagedRows
+    startAnalyze(async () => {
+      try {
+        const result = await analyzeImport(rowsAtAnalyze)
+        setAnnotations(result)
+      } catch {
+        setAnnotations(null)
+      }
+    })
+    // stagedRows is captured at call time; the signature gates re-runs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stagedSig, readyCount])
+
+  const annByIdx = useMemo(() => {
+    const m = new Map<number, RowAnnotation>()
+    if (annotations && annotations.length === readyPreviewIdx.length) {
+      readyPreviewIdx.forEach((pIdx, i) => m.set(pIdx, annotations[i]))
+    }
+    return m
+  }, [annotations, readyPreviewIdx])
+
+  // Final commit payload: fold in the matched-transaction id (enrich, no
+  // duplicate) and any suggested category onto each staged row.
+  const mergedStaged: StagedTx[] = useMemo(() => {
+    if (!annotations || annotations.length !== stagedRows.length) return stagedRows
+    return stagedRows.map((r, i) => ({
+      ...r,
+      matched_tx_id: annotations[i].matchedTxId,
+      category_id: r.category_id ?? annotations[i].suggestedCategoryId,
+    }))
+  }, [stagedRows, annotations])
+
+  const matchedCount = annotations ? annotations.filter((a) => a.matchedTxId).length : 0
+  const autoCatCount = annotations ? annotations.filter((a) => a.suggestedCategoryId).length : 0
+  const newCount = readyCount - matchedCount
+
   const [state, formAction, pending] = useActionState<ImportState, FormData>(commitImport, undefined)
 
   // After a successful commit, clear the parsed input so the staged-rows
@@ -493,12 +561,24 @@ export function ImportWizard({
               <MapleLabel>Preview</MapleLabel>
             </div>
             <div className="flex items-center gap-4 text-[11.5px]">
+              {analyzing && <span className="text-ink-3">Checking matches…</span>}
               <span className="flex items-center gap-1.5">
                 <Dot className="bg-leaf" />
                 <span className="text-ink-2">
-                  <b className="tabular-nums text-ink">{readyCount}</b> ready
+                  <b className="tabular-nums text-ink">{newCount}</b> new
                 </span>
               </span>
+              {matchedCount > 0 && (
+                <span className="flex items-center gap-1.5">
+                  <Dot className="bg-ink-3" />
+                  <span className="text-ink-2">
+                    <b className="tabular-nums text-ink">{matchedCount}</b> match existing
+                  </span>
+                </span>
+              )}
+              {autoCatCount > 0 && (
+                <span className="text-ink-3">· {autoCatCount} auto-categorized</span>
+              )}
               {errorCount > 0 && (
                 <span className="flex items-center gap-1.5">
                   <Dot className="bg-maple" />
@@ -515,7 +595,7 @@ export function ImportWizard({
                 any horizontal scrolling. */}
             <ul className="flex flex-col gap-2 p-3 sm:hidden">
               {previewRows.map((r, idx) => {
-                const d = derivePreview(r, accounts, categories, members)
+                const d = derivePreview(r, accounts, categories, members, annByIdx.get(idx))
                 return (
                   <li
                     key={idx}
@@ -524,7 +604,7 @@ export function ImportWizard({
                     }`}
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <StatusChip error={r.error} />
+                      <StatusChip error={r.error} matched={d.matched} />
                       {d.amt !== null ? (
                         <Amount
                           cents={d.amt}
@@ -543,12 +623,17 @@ export function ImportWizard({
                         <span className="text-ink-3">No description</span>
                       )}
                     </div>
+                    {d.matched && (
+                      <div className="mt-1 text-[11px] text-ink-3">
+                        Enriches an existing transaction{d.matchedDate ? ` from ${d.matchedDate}` : ''} — no duplicate.
+                      </div>
+                    )}
                     <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11.5px]">
                       <MetaPair label="Date" value={r.date || '—'} mono />
                       <MetaPair label="Account" value={d.accountName} />
                       <MetaPair
                         label="Category"
-                        value={d.categoryName}
+                        value={d.categorySuggested ? `${d.categoryName} · suggested` : d.categoryName}
                         muted={d.categoryName === 'Uncategorized'}
                       />
                       <MetaPair label="Member" value={d.memberName} muted={d.memberName === 'Shared'} />
@@ -575,14 +660,14 @@ export function ImportWizard({
                 </thead>
                 <tbody>
                   {previewRows.map((r, idx) => {
-                    const d = derivePreview(r, accounts, categories, members)
+                    const d = derivePreview(r, accounts, categories, members, annByIdx.get(idx))
                     return (
                       <tr
                         key={idx}
                         className={`border-t border-hair ${r.error ? 'bg-maple-soft' : ''}`}
                       >
                         <Td>
-                          <StatusChip error={r.error} />
+                          <StatusChip error={r.error} matched={d.matched} />
                         </Td>
                         <Td align="right" mono>
                           {d.amt !== null ? (
@@ -594,8 +679,16 @@ export function ImportWizard({
                         <Td mono>{r.date}</Td>
                         <Td>
                           {r.description || <span className="text-ink-3">—</span>}
+                          {d.matched && (
+                            <span className="ml-1.5 text-[11px] text-ink-3">· enriches existing</span>
+                          )}
                         </Td>
-                        <Td muted={d.categoryName === 'Uncategorized'}>{d.categoryName}</Td>
+                        <Td muted={d.categoryName === 'Uncategorized'}>
+                          {d.categoryName}
+                          {d.categorySuggested && (
+                            <span className="ml-1 text-[10.5px] text-ink-3">· suggested</span>
+                          )}
+                        </Td>
                         <Td>{d.accountName}</Td>
                         <Td muted={d.memberName === 'Shared'}>{d.memberName}</Td>
                       </tr>
@@ -622,6 +715,7 @@ export function ImportWizard({
         {state && 'ok' in state && state.ok && (
           <p className="rounded-md bg-leaf-soft px-3 py-1.5 text-[12.5px] font-medium text-leaf">
             Imported {state.count} transaction{state.count === 1 ? '' : 's'}
+            {state.reconciled > 0 && `, enriched ${state.reconciled} existing`}
             {state.skipped > 0 && `, skipped ${state.skipped} duplicate${state.skipped === 1 ? '' : 's'}`}
             .
           </p>
@@ -630,12 +724,16 @@ export function ImportWizard({
 
       {readyCount > 0 && (
         <form action={formAction} className="flex flex-wrap items-center justify-end gap-4">
-          <input type="hidden" name="rows" value={JSON.stringify(stagedRows)} />
-          <Button type="submit" variant="primary" disabled={pending}>
+          <input type="hidden" name="rows" value={JSON.stringify(mergedStaged)} />
+          <Button type="submit" variant="primary" disabled={pending || analyzing}>
             {pending
               ? 'Importing…'
-              : `Import ${readyCount} transaction${readyCount === 1 ? '' : 's'}`}
-            {!pending && <span aria-hidden>→</span>}
+              : analyzing
+                ? 'Checking matches…'
+                : matchedCount > 0
+                  ? `Import ${newCount} new · enrich ${matchedCount}`
+                  : `Import ${readyCount} transaction${readyCount === 1 ? '' : 's'}`}
+            {!pending && !analyzing && <span aria-hidden>→</span>}
           </Button>
         </form>
       )}
@@ -652,27 +750,56 @@ function derivePreview(
   accounts: Account[],
   categories: Category[],
   members: Member[],
+  ann?: RowAnnotation,
 ) {
   const accountName = accounts.find((a) => a.id === r.accountId)?.name ?? '—'
-  const categoryName = categories.find((c) => c.id === r.categoryId)?.name ?? 'Uncategorized'
+  let categoryName = categories.find((c) => c.id === r.categoryId)?.name ?? 'Uncategorized'
+  let categorySuggested = false
+  if (!r.categoryId && ann?.suggestedCategoryId) {
+    const n = categories.find((c) => c.id === ann.suggestedCategoryId)?.name
+    if (n) {
+      categoryName = n
+      categorySuggested = true
+    }
+  }
   const memberName = r.memberId
     ? (members.find((m) => m.id === r.memberId)?.name ?? '—')
     : 'Shared'
   const amt = r.amountCents
   const isIncome = amt !== null && amt < 0
-  return { accountName, categoryName, memberName, amt, isIncome }
+  return {
+    accountName,
+    categoryName,
+    categorySuggested,
+    memberName,
+    amt,
+    isIncome,
+    matched: !!ann?.matchedTxId,
+    matchedDate: ann?.matchedDate ?? null,
+  }
 }
 
-// Status chip — the text label ('Ready' / the error string) is the non-color
-// cue, so the verdict survives in greyscale.
-function StatusChip({ error }: { error?: string }) {
-  return error ? (
-    <span className="inline-block rounded-full bg-maple-soft px-2 py-0.5 text-[10.5px] font-semibold text-maple">
-      {error}
-    </span>
-  ) : (
+// Status chip — the text label is the non-color cue, so the verdict survives
+// in greyscale. A reconciled row ('Matches existing') enriches a transaction
+// you already have instead of importing a duplicate.
+function StatusChip({ error, matched }: { error?: string; matched?: boolean }) {
+  if (error) {
+    return (
+      <span className="inline-block rounded-full bg-maple-soft px-2 py-0.5 text-[10.5px] font-semibold text-maple">
+        {error}
+      </span>
+    )
+  }
+  if (matched) {
+    return (
+      <span className="inline-block rounded-full bg-cream-2 px-2 py-0.5 text-[10.5px] font-semibold text-ink-2">
+        Matches existing
+      </span>
+    )
+  }
+  return (
     <span className="inline-block rounded-full bg-leaf-soft px-2 py-0.5 text-[10.5px] font-semibold text-leaf">
-      Ready
+      New
     </span>
   )
 }
