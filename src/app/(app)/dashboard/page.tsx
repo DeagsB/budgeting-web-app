@@ -9,6 +9,7 @@ import {
   groupSnapsByAccount,
 } from '@/lib/balances'
 import { DashboardClient } from './client'
+import { DashboardPullSync } from './pull-sync'
 
 export const dynamic = 'force-dynamic'
 
@@ -335,6 +336,7 @@ export default async function DashboardPage() {
   const projectedMonth = Math.round(dailyPace * daysInMonth)
 
   return (
+    <DashboardPullSync>
     <DashboardClient
       householdName={household.name}
       members={members.map((m) => ({ id: m.id, name: m.display_name, initial: m.display_name[0] ?? '?' }))}
@@ -360,5 +362,6 @@ export default async function DashboardPage() {
       }}
       hasError={hasError}
     />
+    </DashboardPullSync>
   )
 }
