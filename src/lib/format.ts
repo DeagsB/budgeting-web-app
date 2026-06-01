@@ -11,6 +11,34 @@ export function formatMoney(cents: number | bigint | null | undefined): string {
   return CAD.format(n / 100)
 }
 
+export function formatMoneySigned(
+  cents: number | bigint | null | undefined,
+  { plus = false }: { plus?: boolean } = {},
+): string {
+  if (cents === null || cents === undefined) return '—'
+  const n = typeof cents === 'bigint' ? Number(cents) : cents
+  const formatted = CAD.format(Math.abs(n) / 100)
+  if (n < 0) return `-${formatted}`
+  if (plus && n > 0) return `+${formatted}`
+  return formatted
+}
+
+export function formatMoneyCompact(cents: number | bigint | null | undefined): string {
+  if (cents === null || cents === undefined) return '—'
+  const n = typeof cents === 'bigint' ? Number(cents) : cents
+  const dollars = n / 100
+  const abs = Math.abs(dollars)
+  if (abs < 1000) return formatMoney(cents)
+  const sign = dollars < 0 ? '-' : ''
+  if (abs < 1_000_000) return `${sign}$${trimCompact(abs / 1000)}K`
+  if (abs < 1_000_000_000) return `${sign}$${trimCompact(abs / 1_000_000)}M`
+  return `${sign}$${trimCompact(abs / 1_000_000_000)}B`
+}
+
+function trimCompact(value: number): string {
+  return value.toFixed(1).replace(/\.0$/, '')
+}
+
 export function parseMoneyToCents(input: string): number | null {
   const cleaned = input.replace(/[^0-9.\-]/g, '')
   if (!cleaned || cleaned === '-' || cleaned === '.') return null
