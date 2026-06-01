@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { formatMoney } from '@/lib/format'
 import { Amount } from '@/components/ui/amount'
+import { Button } from '@/components/ui/button'
 import { toggleShared, saveShareOverride, clearShares } from './actions'
 
 type Txn = {
@@ -123,6 +124,7 @@ export function SharedRow({
                 <button
                   type="submit"
                   disabled={pending}
+                  aria-label="Clear split"
                   className="inline-flex min-h-[44px] items-center font-semibold text-maple transition-colors hover:underline disabled:opacity-50"
                 >
                   Clear
@@ -308,20 +310,12 @@ function SplitEditor({
       )}
 
       <div className="flex items-center gap-3 pt-1">
-        <button
-          type="submit"
-          disabled={pending || overshoot}
-          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full bg-leaf px-5 text-[13px] font-semibold text-paper shadow-[var(--shadow-card)] transition-transform active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
-        >
+        <Button type="submit" variant="primary" disabled={pending || overshoot}>
           {pending ? 'Saving…' : 'Save split'}
-        </button>
-        <button
-          type="button"
-          onClick={onClose}
-          className="inline-flex min-h-[44px] items-center text-[13px] font-semibold text-ink-2 transition-colors hover:text-ink"
-        >
+        </Button>
+        <Button type="button" variant="ghost" onClick={onClose}>
           Cancel
-        </button>
+        </Button>
       </div>
     </form>
   )

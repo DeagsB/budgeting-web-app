@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react'
 import { formatMoney } from '@/lib/format'
 import { saveSplits, type SplitsState } from './actions'
 import { CategorySelect } from './category-select'
+import { Button } from '@/components/ui/button'
 
 type Category = { id: string; parent_id: string | null; name: string }
 
@@ -57,10 +58,10 @@ export function SplitEditor({
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+          <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-ink-3">
             Split editor
           </div>
-          <div className="mt-0.5 font-serif text-[18px] leading-tight tracking-[-0.01em] text-[var(--color-ink)]">
+          <div className="mt-0.5 font-serif text-[18px] leading-tight tracking-[-0.01em] text-ink">
             Total <span className="tabular-nums">{formatMoney(totalAmountCents)}</span>
           </div>
         </div>
@@ -76,8 +77,13 @@ export function SplitEditor({
       </div>
 
       {/* Progress */}
-      <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-paper)]">
+      <div className="h-1.5 overflow-hidden rounded-full bg-paper">
         <div
+          role="progressbar"
+          aria-label="Splits allocated"
+          aria-valuenow={Math.round(progress * 100)}
+          aria-valuemin={0}
+          aria-valuemax={100}
           className="h-full rounded-full transition-all duration-300"
           style={{
             width: `${Math.round(progress * 100)}%`,
@@ -100,8 +106,8 @@ export function SplitEditor({
               onChange={(v) => updateRow(r.key, { category_id: v || null })}
               compact
             />
-            <div className="flex items-center rounded-[10px] border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-1.5 transition-colors focus-within:border-[var(--color-leaf)]">
-              <span className="text-[12px] text-[var(--color-ink-3)]">$</span>
+            <div className="flex items-center rounded-md border border-hair bg-paper px-3 py-1.5 transition-colors focus-within:border-leaf">
+              <span className="text-[12px] text-ink-3">$</span>
               <input
                 name={`split_amount:${r.key}`}
                 type="text"
@@ -109,7 +115,8 @@ export function SplitEditor({
                 value={r.amount_cents === 0 ? '' : (r.amount_cents / 100).toFixed(2)}
                 placeholder="0.00"
                 onChange={(e) => updateRow(r.key, { amount_cents: parseAmount(e.target.value) })}
-                className="w-full bg-transparent text-right text-[13px] tabular-nums text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-3)]"
+                aria-label={`Split ${i + 1} amount in dollars`}
+                className="w-full bg-transparent text-right text-[13px] tabular-nums text-ink outline-none placeholder:text-ink-3"
               />
             </div>
             {rows.length > 1 ? (
@@ -117,14 +124,14 @@ export function SplitEditor({
                 type="button"
                 onClick={() => setRows((prev) => prev.filter((x) => x.key !== r.key))}
                 aria-label={`Remove split ${i + 1}`}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--color-ink-3)] transition-colors hover:bg-[var(--color-maple-soft)] hover:text-[var(--color-maple)]"
+                className="flex h-11 w-11 items-center justify-center rounded-full text-ink-3 transition-colors hover:bg-maple-soft hover:text-maple"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
                   <path d="M6 6l12 12M18 6L6 18" />
                 </svg>
               </button>
             ) : (
-              <div className="h-8 w-8" />
+              <div className="h-11 w-11" />
             )}
           </div>
         ))}
@@ -137,9 +144,9 @@ export function SplitEditor({
           onClick={() =>
             setRows((prev) => [...prev, { key: nextKey(), category_id: null, amount_cents: 0 }])
           }
-          className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-1.5 text-[12px] font-semibold text-[var(--color-ink)] hover:bg-[var(--color-cream-2)]"
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-hair bg-paper px-3 py-1.5 text-[12px] font-semibold text-ink hover:bg-cream-2"
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
             <path d="M12 5v14M5 12h14" />
           </svg>
           Add split
@@ -155,7 +162,7 @@ export function SplitEditor({
                 return copy
               })
             }
-            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold text-[var(--color-leaf)] hover:underline"
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold text-leaf hover:underline"
           >
             Apply {formatMoney(remaining)} to last split
           </button>
@@ -163,31 +170,23 @@ export function SplitEditor({
       </div>
 
       {/* Feedback */}
-      {state && 'error' in state && state.error && (
-        <p
-          className="rounded-[10px] px-3 py-2 text-[12.5px] font-medium"
-          style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
-        >
-          {state.error}
-        </p>
-      )}
-      {state && 'ok' in state && state.ok && (
-        <p
-          className="rounded-[10px] px-3 py-2 text-[12.5px] font-medium"
-          style={{ background: 'var(--color-leaf-soft)', color: 'var(--color-leaf)' }}
-        >
-          Splits saved.
-        </p>
-      )}
+      <div aria-live="polite">
+        {state && 'error' in state && state.error && (
+          <p className="rounded-md bg-maple-soft px-3 py-2 text-[12.5px] font-medium text-maple">
+            {state.error}
+          </p>
+        )}
+        {state && 'ok' in state && state.ok && (
+          <p className="rounded-md bg-leaf-soft px-3 py-2 text-[12.5px] font-medium text-leaf">
+            Splits saved.
+          </p>
+        )}
+      </div>
 
       <div>
-        <button
-          type="submit"
-          disabled={pending}
-          className="inline-flex items-center rounded-full bg-[var(--color-ink)] px-4 py-2 text-[12.5px] font-semibold text-[var(--color-paper)] transition-all active:scale-[0.98] disabled:opacity-50"
-        >
+        <Button type="submit" variant="primary" size="sm" disabled={pending}>
           {pending ? 'Saving…' : 'Save splits'}
-        </button>
+        </Button>
       </div>
     </form>
   )

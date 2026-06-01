@@ -7,6 +7,10 @@ import { createPortal } from 'react-dom'
 // SSRs once on the server, so the portal render is gated through this guard.
 const isBrowser = typeof window !== 'undefined'
 
+// Elements that can receive focus inside the open modal.
+const FOCUSABLE =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
 /**
  * Maple-styled confirm-then-submit button. Wraps a server-action form so the
  * trigger opens an in-app modal (bottom sheet on mobile, centered card on
@@ -107,6 +111,9 @@ export function ConfirmModal({
   onCancel: () => void
   onConfirm: () => void
 }) {
+  const panelRef = useRef<HTMLDivElement>(null)
+  const restoreFocusRef = useRef<Element | null>(null)
+
   // Lock body scroll while open so the bottom sheet doesn't drag the page.
   useEffect(() => {
     if (!open) return
@@ -115,12 +122,54 @@ export function ConfirmModal({
     return () => { document.body.style.overflow = prev }
   }, [open])
 
-  // Esc to cancel, Enter to confirm — matches OS dialogs.
+  // Save the trigger element on open and restore focus to it on close so
+  // keyboard users land back where they were.
+  useEffect(() => {
+    if (!open) return
+    restoreFocusRef.current = document.activeElement
+    return () => {
+      const el = restoreFocusRef.current
+      if (el instanceof HTMLElement) el.focus()
+      restoreFocusRef.current = null
+    }
+  }, [open])
+
+  // Esc to cancel, Enter to confirm — matches OS dialogs. Tab is trapped
+  // within the modal so focus can't escape to the page behind it.
   useEffect(() => {
     if (!open) return
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onCancel()
-      else if (e.key === 'Enter' && !e.isComposing) onConfirm()
+      if (e.key === 'Escape') {
+        onCancel()
+        return
+      }
+      if (e.key === 'Enter' && !e.isComposing) {
+        onConfirm()
+        return
+      }
+      if (e.key !== 'Tab') return
+      const panel = panelRef.current
+      if (!panel) return
+      const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+        (el) => el.offsetParent !== null,
+      )
+      if (focusable.length === 0) {
+        e.preventDefault()
+        panel.focus()
+        return
+      }
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      const active = document.activeElement
+      if (e.shiftKey) {
+        if (active === first || active === panel) {
+          e.preventDefault()
+          last.focus()
+        }
+      } else if (active === last) {
+        e.preventDefault()
+        first.focus()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -144,7 +193,9 @@ export function ConfirmModal({
         className="absolute inset-0 bg-black/45 backdrop-blur-[2px]"
       />
       <div
-        className="relative z-10 w-full max-w-[420px] rounded-t-[24px] border border-[var(--color-hair)] bg-[var(--color-paper)] shadow-[var(--shadow-float)] sm:rounded-[20px]"
+        ref={panelRef}
+        tabIndex={-1}
+        className="relative z-10 w-full max-w-[420px] rounded-t-xl border border-[var(--color-hair)] bg-[var(--color-paper)] shadow-[var(--shadow-float)] outline-none sm:rounded-lg"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
       >
         <div className="flex justify-center pb-1 pt-2 sm:hidden">

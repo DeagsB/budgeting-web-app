@@ -41,6 +41,7 @@ export function HouseholdForm({ id, name }: { id: string; name: string }) {
         autoFocus
         required
         maxLength={80}
+        aria-label="Household name"
         className="maple-input flex-1 font-serif text-[22px] tracking-[-0.01em]"
       />
       <div className="flex items-center gap-2">

@@ -111,10 +111,11 @@ function AddCategory({ parents }: { parents: Cat[] }) {
         type="text"
         required
         maxLength={60}
+        aria-label="New category name"
         placeholder="Category name — e.g. Groceries"
         className="maple-input"
       />
-      <select name="parent_id" className="maple-select" defaultValue="">
+      <select name="parent_id" aria-label="Parent category" className="maple-select" defaultValue="">
         <option value="">— Top level —</option>
         {parents.map((p) => (
           <option key={p.id} value={p.id}>
@@ -189,6 +190,7 @@ function CategoryRow({
           autoFocus
           required
           maxLength={60}
+          aria-label={`Rename category ${cat.name}`}
           className="maple-input flex-1"
         />
         <Button type="submit" variant="primary" size="sm" disabled={pending}>

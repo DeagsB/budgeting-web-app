@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Card } from '@/components/ui/card'
 import { StatTile } from '@/components/ui/stat-tile'
 import { Amount } from '@/components/ui/amount'
+import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { MonthNav } from '@/components/ui/month-nav'
 import { MapleLabel } from '@/components/ui/label'
@@ -158,14 +159,13 @@ export default async function SettlementsPage({
           title="Add a second member to settle up"
           body="Settlements track who owes whom between household members, so you need at least two before there's anything to square up."
           action={
-            <Link
-              href="/members"
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-full bg-leaf px-5 text-[14px] font-semibold text-paper shadow-[var(--shadow-card)] transition-transform active:scale-[0.97]"
-            >
-              Manage members
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
-                <path d="M5 12h14M13 6l6 6-6 6" />
-              </svg>
+            <Link href="/members">
+              <Button variant="primary" size="md">
+                Manage members
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </Button>
             </Link>
           }
         />
@@ -186,6 +186,7 @@ export default async function SettlementsPage({
           label="Still outstanding"
           value={<Amount cents={totalNet} tone={totalNet > 0 ? 'maple' : 'ink'} />}
           tone={totalNet > 0 ? 'maple' : 'ink'}
+          hint={totalNet > 0 ? 'still owing' : 'all settled'}
         />
       </section>
 

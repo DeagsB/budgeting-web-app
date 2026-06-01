@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { signOut } from '../(auth)/actions'
+import { Button } from '@/components/ui/button'
 
 /**
  * Maple shell. Light + dark are driven by the `.dark` class on <html>
@@ -58,6 +59,69 @@ function isActive(pathname: string, href: string) {
   return pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
 }
 
+// Selector for elements that can hold focus inside an open overlay.
+const FOCUSABLE =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+/**
+ * Hardens a custom overlay: Esc closes, focus is trapped within the panel
+ * while open, and focus is restored to the previously-active element on
+ * close. Mirrors the behaviour of the shared <Sheet> primitive without
+ * rebuilding the overlay on top of it.
+ */
+function useOverlay(open: boolean, panelRef: React.RefObject<HTMLDivElement | null>, onClose: () => void) {
+  const restoreFocusRef = useRef<Element | null>(null)
+
+  // Save the trigger, move focus into the panel on open, restore on close.
+  useEffect(() => {
+    if (!open) return
+    restoreFocusRef.current = document.activeElement
+    panelRef.current?.focus()
+    return () => {
+      const el = restoreFocusRef.current
+      if (el instanceof HTMLElement) el.focus()
+      restoreFocusRef.current = null
+    }
+  }, [open, panelRef])
+
+  // Esc closes; Tab is trapped within the panel.
+  useEffect(() => {
+    if (!open) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        onClose()
+        return
+      }
+      if (e.key !== 'Tab') return
+      const panel = panelRef.current
+      if (!panel) return
+      const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+        (el) => el.offsetParent !== null || el === panel,
+      )
+      if (focusable.length === 0) {
+        e.preventDefault()
+        panel.focus()
+        return
+      }
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      const active = document.activeElement
+      if (e.shiftKey) {
+        if (active === first || active === panel) {
+          e.preventDefault()
+          last.focus()
+        }
+      } else if (active === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [open, onClose, panelRef])
+}
+
 function loadTabs(): string[] {
   if (typeof window === 'undefined') return DEFAULT_TABS
   try {
@@ -101,6 +165,9 @@ export function AppShell({
 
   const closeMore = () => setMoreOpen(false)
   const closeEdit = () => setEditOpen(false)
+
+  const morePanelRef = useRef<HTMLDivElement>(null)
+  useOverlay(moreOpen, morePanelRef, closeMore)
 
   const tabs = useMemo(
     () =>
@@ -269,9 +336,12 @@ export function AppShell({
             className="fixed inset-0 z-40 bg-black/40 md:hidden"
           />
           <div
+            ref={morePanelRef}
             role="dialog"
+            aria-modal="true"
             aria-label="More navigation"
-            className="fixed inset-x-0 bottom-0 z-50 max-h-[86vh] overflow-y-auto rounded-t-[24px] border-t border-[var(--color-hair)] bg-[var(--color-cream)] shadow-[var(--shadow-float)] md:hidden"
+            tabIndex={-1}
+            className="fixed inset-x-0 bottom-0 z-50 max-h-[86vh] overflow-y-auto rounded-t-xl border-t border-[var(--color-hair)] bg-[var(--color-cream)] shadow-[var(--shadow-float)] outline-none md:hidden"
             style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }}
           >
             <div className="flex justify-center pb-1 pt-2">
@@ -395,6 +465,10 @@ function TabBarEditor({
   onSave: (next: string[]) => void
 }) {
   const [draft, setDraft] = useState<string[]>(current)
+  // This editor is mounted only while open, so the overlay is always "open"
+  // for the lifetime of the component.
+  const panelRef = useRef<HTMLDivElement>(null)
+  useOverlay(true, panelRef, onCancel)
 
   function move(href: string, dir: -1 | 1) {
     setDraft((prev) => {
@@ -429,9 +503,12 @@ function TabBarEditor({
         className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px]"
       />
       <div
+        ref={panelRef}
         role="dialog"
+        aria-modal="true"
         aria-label="Customize tab bar"
-        className="fixed inset-x-0 bottom-0 z-[60] flex max-h-[88vh] flex-col rounded-t-[24px] border-t border-[var(--color-hair)] bg-[var(--color-cream)] shadow-[var(--shadow-float)] sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:max-h-[80vh] sm:w-[440px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[20px]"
+        tabIndex={-1}
+        className="fixed inset-x-0 bottom-0 z-[60] flex max-h-[88vh] flex-col rounded-t-xl border-t border-[var(--color-hair)] bg-[var(--color-cream)] shadow-[var(--shadow-float)] outline-none sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:max-h-[80vh] sm:w-[440px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }}
       >
         <div className="flex justify-center pb-1 pt-2 sm:hidden">
@@ -481,8 +558,8 @@ function TabBarEditor({
                   type="button"
                   onClick={() => move(d.href, -1)}
                   disabled={i === 0}
-                  aria-label="Move up"
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--color-ink-2)] disabled:opacity-30"
+                  aria-label={`Move ${d.label} up`}
+                  className="flex h-11 w-11 -mr-1.5 items-center justify-center rounded-full text-[var(--color-ink-2)] disabled:opacity-30"
                 >
                   <ArrowUpIcon />
                 </button>
@@ -490,8 +567,8 @@ function TabBarEditor({
                   type="button"
                   onClick={() => move(d.href, 1)}
                   disabled={i === onBar.length - 1}
-                  aria-label="Move down"
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--color-ink-2)] disabled:opacity-30"
+                  aria-label={`Move ${d.label} down`}
+                  className="flex h-11 w-11 -mr-1.5 items-center justify-center rounded-full text-[var(--color-ink-2)] disabled:opacity-30"
                 >
                   <ArrowDownIcon />
                 </button>
@@ -499,7 +576,7 @@ function TabBarEditor({
                   type="button"
                   onClick={() => remove(d.href)}
                   aria-label={`Remove ${d.label} from tab bar`}
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--color-maple)]"
+                  className="flex h-11 w-11 -mr-1.5 items-center justify-center rounded-full text-[var(--color-maple)]"
                 >
                   <CloseIcon />
                 </button>
@@ -549,20 +626,12 @@ function TabBarEditor({
             Reset to default
           </button>
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-4 py-2 text-[13px] font-semibold text-[var(--color-ink)]"
-            >
+            <Button type="button" variant="secondary" size="sm" onClick={onCancel}>
               Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => onSave(draft)}
-              className="rounded-full bg-[var(--color-ink)] px-5 py-2 text-[13px] font-semibold text-[var(--color-paper)] active:scale-[0.98]"
-            >
+            </Button>
+            <Button type="button" variant="primary" size="sm" onClick={() => onSave(draft)}>
               Save
-            </button>
+            </Button>
           </div>
         </footer>
       </div>

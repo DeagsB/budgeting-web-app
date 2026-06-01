@@ -9,6 +9,7 @@ import { StatTile } from '@/components/ui/stat-tile'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Card } from '@/components/ui/card'
 import { Amount } from '@/components/ui/amount'
+import { Button } from '@/components/ui/button'
 import { MapleLabel } from '@/components/ui/label'
 import { SharedRow } from './row'
 import { BulkActions } from './bulk-actions'
@@ -88,14 +89,13 @@ export default async function SharedPage({
               : 'Once an account exists, transactions on it can be flagged as shared.'
           }
           action={
-            <Link
-              href={noMembers ? '/setup' : '/accounts'}
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-full bg-leaf px-5 text-[14px] font-semibold text-paper shadow-[var(--shadow-card)] transition-transform active:scale-[0.97]"
-            >
-              {noMembers ? 'Go to Setup' : 'Add an account'}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
-                <path d="M5 12h14M13 6l6 6-6 6" />
-              </svg>
+            <Link href={noMembers ? '/setup' : '/accounts'}>
+              <Button variant="primary" size="md">
+                {noMembers ? 'Go to Setup' : 'Add an account'}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </Button>
             </Link>
           }
         />

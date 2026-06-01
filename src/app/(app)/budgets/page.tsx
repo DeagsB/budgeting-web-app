@@ -243,12 +243,10 @@ export default async function BudgetsPage({
                 </div>
               </div>
               <span
-                className="self-start rounded-full px-3 py-1.5 text-[12px] font-semibold tabular-nums sm:self-auto"
-                style={{
-                  background:
-                    monthVariance <= 0 ? 'var(--color-leaf-soft)' : 'var(--color-maple-soft)',
-                  color: monthVariance <= 0 ? 'var(--color-leaf)' : 'var(--color-maple)',
-                }}
+                className={
+                  'self-start rounded-full px-3 py-1.5 text-[12px] font-semibold tabular-nums sm:self-auto ' +
+                  (monthVariance <= 0 ? 'bg-leaf-soft text-leaf' : 'bg-maple-soft text-maple')
+                }
               >
                 {monthVariance <= 0
                   ? `${formatMoney(-monthVariance)} under`
@@ -284,6 +282,11 @@ export default async function BudgetsPage({
                       </div>
                       <div className="mt-1.5 h-[6px] overflow-hidden rounded-full bg-paper">
                         <div
+                          role="progressbar"
+                          aria-label={`${c.name} budget used`}
+                          aria-valuenow={Math.round(pct * 100)}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
                           className="h-full rounded-full transition-all duration-300"
                           style={{
                             width: `${Math.min(100, Math.round(pct * 100))}%`,
@@ -368,45 +371,44 @@ function RecurringInsight({
 }) {
   if (count === 0) {
     return (
-      <div className="rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-4 md:p-5">
+      <div className="rounded-lg border border-hair bg-paper p-4 md:p-5">
         <MapleLabel>Recurring</MapleLabel>
-        <div className="mt-1.5 font-serif text-[22px] leading-tight tracking-[-0.02em] text-[var(--color-ink-3)] md:text-[26px]">
+        <div className="mt-1.5 font-serif text-[22px] leading-tight tracking-[-0.02em] text-ink-3 md:text-[26px]">
           —
         </div>
-        <div className="mt-1 text-[12px] leading-relaxed text-[var(--color-ink-3)]">
+        <div className="mt-1 text-[12px] leading-relaxed text-ink-3">
           Nothing yet. Once a transaction with the same description and amount lands in 2+ of the last 3 months, it&rsquo;ll show up here.
         </div>
       </div>
     )
   }
   return (
-    <div className="rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-4 md:p-5">
+    <div className="rounded-lg border border-hair bg-paper p-4 md:p-5">
       <div className="flex items-baseline justify-between gap-2">
         <MapleLabel>Recurring</MapleLabel>
-        <span className="text-[10.5px] tabular-nums text-[var(--color-ink-3)]">
+        <span className="text-[10.5px] tabular-nums text-ink-3">
           {count} item{count === 1 ? '' : 's'}
         </span>
       </div>
-      <div className="mt-1.5 font-serif text-[22px] leading-tight tracking-[-0.02em] tabular-nums text-[var(--color-ink)] md:text-[26px]">
+      <div className="mt-1.5 font-serif text-[22px] leading-tight tracking-[-0.02em] tabular-nums text-ink md:text-[26px]">
         {formatMoney(total)}
-        <span className="text-[14px] font-normal text-[var(--color-ink-3)]">/mo</span>
+        <span className="text-[14px] font-normal text-ink-3">/mo</span>
       </div>
-      <div className="mt-0.5 text-[11.5px] text-[var(--color-ink-3)]">
+      <div className="mt-0.5 text-[11.5px] text-ink-3">
         {shareOfBudget !== null ? `${shareOfBudget}% of this month's budget is locked in` : 'detected from last 3 months'}
       </div>
       {top.length > 0 && (
-        <ul className="mt-3 flex flex-col gap-1.5 border-t border-[var(--color-hair)] pt-3">
+        <ul className="mt-3 flex flex-col gap-1.5 border-t border-hair pt-3">
           {top.map((g) => (
             <li key={g.description + g.amount_cents} className="flex items-baseline gap-2 text-[12px]">
-              <span className="min-w-0 flex-1 truncate text-[var(--color-ink)]">{g.description}</span>
+              <span className="min-w-0 flex-1 truncate text-ink">{g.description}</span>
               <span
-                className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em]"
-                style={{ background: 'var(--color-paper-2)', color: 'var(--color-ink-3)' }}
+                className="shrink-0 rounded-full bg-paper-2 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-ink-3"
                 title={`Seen in ${g.monthsSeen} of last 3 months`}
               >
                 {g.monthsSeen}/3
               </span>
-              <span className="shrink-0 font-serif text-[13px] tabular-nums text-[var(--color-ink-2)]">
+              <span className="shrink-0 font-serif text-[13px] tabular-nums text-ink-2">
                 {formatMoney(g.amount_cents)}
               </span>
             </li>
@@ -424,8 +426,13 @@ function ProgressBar({ pctUsed }: { pctUsed: number }) {
   // visually pins the "100% of budget" location.
   const breakpoint = over ? 100 / pctUsed : null
   return (
-    <div className="relative mt-4 h-2.5 overflow-hidden rounded-full bg-[var(--color-paper-2)]">
+    <div className="relative mt-4 h-2.5 overflow-hidden rounded-full bg-paper-2">
       <div
+        role="progressbar"
+        aria-label="Total budget used this month"
+        aria-valuenow={Math.round(pctUsed * 100)}
+        aria-valuemin={0}
+        aria-valuemax={100}
         className="h-full rounded-full transition-all duration-300"
         style={{
           width: over ? '100%' : `${Math.round(pctUsed * 100)}%`,
@@ -436,9 +443,9 @@ function ProgressBar({ pctUsed }: { pctUsed: number }) {
       />
       {breakpoint !== null && (
         <div
-          className="pointer-events-none absolute inset-y-0 w-[2px] bg-[var(--color-paper)]"
+          className="pointer-events-none absolute inset-y-0 w-[2px] bg-paper"
           style={{ left: `calc(${breakpoint}% - 1px)` }}
-          aria-label="100% of budget"
+          aria-hidden
         />
       )}
     </div>

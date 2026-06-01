@@ -5,7 +5,7 @@ import { Amount } from '@/components/ui/amount'
 import { DataTable } from '@/components/ui/data-table'
 import { Button } from '@/components/ui/button'
 import { MapleLabel } from '@/components/ui/label'
-import { formatMoney } from '@/lib/format'
+import { formatMoney, formatMoneySigned } from '@/lib/format'
 import { saveBudgets } from './actions'
 
 type Category = {
@@ -278,6 +278,11 @@ function BudgetCard({ row, child = false }: { row: RenderRow; child?: boolean })
       {row.effective > 0 && (
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-cream-2">
           <div
+            role="progressbar"
+            aria-label={`${row.name} budget used`}
+            aria-valuenow={Math.round(pct * 100)}
+            aria-valuemin={0}
+            aria-valuemax={100}
             className="h-full rounded-full transition-all"
             style={{
               width: `${Math.min(100, Math.round(pct * 100))}%`,
@@ -322,6 +327,11 @@ function TableRow({ row }: { row: RenderRow }) {
         {row.effective > 0 && (
           <div className="mt-1.5 h-1 max-w-[240px] overflow-hidden rounded-full bg-cream-2">
             <div
+              role="progressbar"
+              aria-label={`${row.name} budget used`}
+              aria-valuenow={Math.round(pct * 100)}
+              aria-valuemin={0}
+              aria-valuemax={100}
               className="h-full rounded-full transition-all"
               style={{
                 width: `${Math.min(100, Math.round(pct * 100))}%`,
@@ -359,10 +369,11 @@ function TableRow({ row }: { row: RenderRow }) {
         {formatMoney(row.actual)}
       </td>
       <td className="py-3 pr-3 text-right align-top tabular-nums" style={{ color: varColor }}>
-        {row.variance === 0 ? '—' : formatMoney(row.variance)}
+        {row.variance === 0 ? '—' : formatMoneySigned(row.variance, { plus: true })}
+        {row.variance > 0 && <span className="ml-1 text-[10.5px] font-semibold uppercase">over</span>}
       </td>
       <td className="py-3 pr-5 text-right align-top text-[12.5px] tabular-nums" style={{ color: ytdColor }}>
-        {row.ytdVariance === 0 ? '—' : formatMoney(row.ytdVariance)}
+        {row.ytdVariance === 0 ? '—' : formatMoneySigned(row.ytdVariance, { plus: true })}
       </td>
     </tr>
   )

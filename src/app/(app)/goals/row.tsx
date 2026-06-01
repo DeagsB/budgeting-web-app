@@ -128,11 +128,10 @@ export function GoalRow({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-label={`${goal.name} progress`}
-          className="h-full rounded-full transition-all duration-300"
-          style={{
-            width: `${percent}%`,
-            background: done ? 'var(--color-leaf-deep)' : 'var(--color-leaf)',
-          }}
+          className={`h-full rounded-full transition-all duration-300 ${
+            done ? 'bg-leaf-deep' : 'bg-leaf'
+          }`}
+          style={{ width: `${percent}%` }}
         />
       </div>
       <div className="mt-1.5 text-[11.5px] text-ink-3">

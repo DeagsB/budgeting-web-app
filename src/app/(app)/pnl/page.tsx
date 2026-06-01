@@ -166,25 +166,17 @@ export default async function PnlPage({
                     <Link
                       key={b.month}
                       href={makeHref(b.month)}
-                      aria-label={`${monthLabel(b.month)}: income ${formatMoney(b.income)}, expense ${formatMoney(b.expense)}`}
-                      className="group flex flex-col items-center gap-1.5"
+                      aria-label={`View ${monthLabel(b.month)} — income ${formatMoney(b.income)}, expense ${formatMoney(b.expense)}`}
+                      className="group flex min-w-0 flex-col items-center gap-1.5"
                     >
                       <div className="relative flex h-[140px] w-full items-end justify-center gap-0.5">
                         <div
-                          className="w-1/2 rounded-t-sm transition-all group-hover:opacity-100"
-                          style={{
-                            height: `${ih}%`,
-                            background: 'var(--color-leaf)',
-                            opacity: isSel ? 1 : 0.85,
-                          }}
+                          className={`w-1/2 rounded-t-sm bg-leaf transition-all group-hover:opacity-100 ${isSel ? 'opacity-100' : 'opacity-85'}`}
+                          style={{ height: `${ih}%` }}
                         />
                         <div
-                          className="w-1/2 rounded-t-sm transition-all"
-                          style={{
-                            height: `${eh}%`,
-                            background: 'var(--color-maple)',
-                            opacity: isSel ? 1 : 0.85,
-                          }}
+                          className={`w-1/2 rounded-t-sm bg-maple transition-all ${isSel ? 'opacity-100' : 'opacity-85'}`}
+                          style={{ height: `${eh}%` }}
                         />
                       </div>
                       <span
@@ -289,8 +281,8 @@ export default async function PnlPage({
 function Swatch({ tone }: { tone: 'leaf' | 'maple' }) {
   return (
     <span
-      className="inline-block h-[10px] w-[10px] rounded-full"
-      style={{ background: tone === 'leaf' ? 'var(--color-leaf)' : 'var(--color-maple)' }}
+      aria-hidden
+      className={`inline-block h-[10px] w-[10px] rounded-full ${tone === 'leaf' ? 'bg-leaf' : 'bg-maple'}`}
     />
   )
 }

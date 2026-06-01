@@ -3,6 +3,7 @@
 import { useActionState, useRef, useState, useEffect } from 'react'
 import { createAccount, type AccountState } from './actions'
 import { ACCOUNT_TYPES, ACCOUNT_OWNERSHIP } from '@/lib/domain'
+import { Button } from '@/components/ui/button'
 
 /**
  * Maple "add account" form. Two-row grid: identity (name + type) on top,
@@ -60,7 +61,7 @@ export function AddAccountForm({ members }: { members: { id: string; name: strin
           <select
             name="member_id"
             disabled={ownership === 'shared'}
-            className="maple-select disabled:cursor-not-allowed disabled:bg-[var(--color-paper-2)] disabled:text-[var(--color-ink-3)]"
+            className="maple-select disabled:cursor-not-allowed disabled:bg-paper-2 disabled:text-ink-3"
           >
             {ownership === 'shared' ? (
               <option value="">— Shared —</option>
@@ -78,15 +79,16 @@ export function AddAccountForm({ members }: { members: { id: string; name: strin
         </Field>
 
         <Field label="Opening balance (CAD)" hint="For loans or credit cards, enter the balance owing as a positive number.">
-          <div className="flex items-center rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2.5 transition-colors focus-within:border-[var(--color-leaf)] focus-within:shadow-[0_0_0_3px_var(--color-leaf-soft)]">
-            <span className="text-[14px] text-[var(--color-ink-3)]">$</span>
+          <div className="flex items-center rounded-md border border-hair bg-paper px-3 py-2.5 transition-colors focus-within:border-leaf focus-within:shadow-[0_0_0_3px_var(--color-leaf-soft)]">
+            <span className="text-[14px] text-ink-3">$</span>
             <input
               name="opening_balance"
               type="text"
               inputMode="decimal"
               placeholder="0.00"
               defaultValue="0.00"
-              className="w-full bg-transparent pl-1 text-[15px] tabular-nums text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-3)]"
+              aria-label="Opening balance in dollars"
+              className="w-full bg-transparent pl-1 text-[15px] tabular-nums text-ink outline-none placeholder:text-ink-3"
             />
           </div>
         </Field>
@@ -105,23 +107,18 @@ export function AddAccountForm({ members }: { members: { id: string; name: strin
       </div>
 
       <div className="flex items-center justify-between gap-3">
-        {state?.error ? (
-          <p
-            className="rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
-            style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
-          >
-            {state.error}
-          </p>
-        ) : (
-          <span />
-        )}
-        <button
-          type="submit"
-          disabled={pending}
-          className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-ink)] px-5 py-2.5 text-[13px] font-semibold text-[var(--color-paper)] transition-all active:scale-[0.98] disabled:opacity-50"
-        >
+        <div aria-live="polite" className="min-w-0">
+          {state?.error ? (
+            <p className="rounded-md bg-maple-soft px-3 py-1.5 text-[12.5px] font-medium text-maple">
+              {state.error}
+            </p>
+          ) : (
+            <span />
+          )}
+        </div>
+        <Button type="submit" variant="primary" size="sm" disabled={pending}>
           {pending ? 'Adding…' : 'Add account'}
-        </button>
+        </Button>
       </div>
     </form>
   )
@@ -141,11 +138,11 @@ function Field({
   const sc = span === 2 ? 'sm:col-span-2' : ''
   return (
     <label className={`flex flex-col gap-1 ${sc}`}>
-      <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+      <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-ink-3">
         {label}
       </span>
       {children}
-      {hint && <span className="text-[11.5px] text-[var(--color-ink-3)]">{hint}</span>}
+      {hint && <span className="text-[11.5px] text-ink-3">{hint}</span>}
     </label>
   )
 }

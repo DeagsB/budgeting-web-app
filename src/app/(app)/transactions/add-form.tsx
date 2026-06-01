@@ -3,6 +3,7 @@
 import { useActionState, useRef, useState, useEffect } from 'react'
 import { createTransaction, type TransactionState } from './actions'
 import { CategorySelect } from './category-select'
+import { Button } from '@/components/ui/button'
 
 /**
  * Maple "add transaction" inline form.
@@ -52,7 +53,7 @@ export function AddTransactionForm({
     <form ref={formRef} action={formAction} className="flex flex-col gap-4">
       {/* Direction + amount hero */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <div className="flex rounded-full bg-[var(--color-paper-2)] p-1 sm:w-auto">
+        <div className="flex rounded-full bg-paper-2 p-1 sm:w-auto" role="group" aria-label="Transaction direction">
           <input type="hidden" name="direction" value={direction} />
           <SegmentButton active={direction === 'out'} onClick={() => setDirection('out')}>
             Spent
@@ -62,8 +63,8 @@ export function AddTransactionForm({
           </SegmentButton>
         </div>
 
-        <label className="flex min-w-0 flex-1 items-center gap-2 rounded-[14px] border border-[var(--color-hair)] bg-[var(--color-paper)] px-4 py-2.5 transition-colors focus-within:border-[var(--color-leaf)] focus-within:shadow-[0_0_0_3px_var(--color-leaf-soft)]">
-          <span className="text-[20px] font-serif text-[var(--color-ink-3)]">$</span>
+        <label className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-hair bg-paper px-4 py-2.5 transition-colors focus-within:border-leaf focus-within:shadow-[0_0_0_3px_var(--color-leaf-soft)]">
+          <span className="text-[20px] font-serif text-ink-3">$</span>
           <input
             name="amount"
             type="text"
@@ -72,7 +73,8 @@ export function AddTransactionForm({
             placeholder="0.00"
             value={amount}
             onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-            className="w-full bg-transparent font-serif text-[26px] tabular-nums tracking-[-0.01em] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-3)]"
+            aria-label={`Amount ${direction === 'out' ? 'spent' : 'received'} in dollars`}
+            className="w-full bg-transparent font-serif text-[26px] tabular-nums tracking-[-0.01em] text-ink outline-none placeholder:text-ink-3"
           />
         </label>
       </div>
@@ -119,29 +121,26 @@ export function AddTransactionForm({
         </Field>
       </div>
 
-      {state?.error && (
-        <div
-          role="alert"
-          className="rounded-[12px] px-3 py-2 text-[13px] font-medium"
-          style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
-        >
-          {state.error}
-        </div>
-      )}
+      <div aria-live="polite">
+        {state?.error && (
+          <div
+            role="alert"
+            className="rounded-md bg-maple-soft px-3 py-2 text-[13px] font-medium text-maple"
+          >
+            {state.error}
+          </div>
+        )}
+      </div>
 
       <div className="flex items-center justify-end gap-3">
-        <button
-          type="submit"
-          disabled={pending}
-          className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-ink)] px-5 py-2.5 text-[13px] font-semibold text-[var(--color-paper)] transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-        >
+        <Button type="submit" variant="primary" size="md" disabled={pending}>
           {pending ? 'Saving…' : 'Add transaction'}
           {!pending && (
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
               <path d="M12 5v14M5 12h14" />
             </svg>
           )}
-        </button>
+        </Button>
       </div>
     </form>
   )
@@ -164,11 +163,12 @@ function SegmentButton({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={
         'flex-1 rounded-full px-4 py-2 text-center text-[12.5px] font-semibold transition-all ' +
         (active
-          ? 'bg-[var(--color-paper)] text-[var(--color-ink)] shadow-[0_1px_2px_rgba(0,0,0,0.06)]'
-          : 'text-[var(--color-ink-2)] hover:text-[var(--color-ink)]')
+          ? 'bg-paper text-ink shadow-[0_1px_2px_rgba(0,0,0,0.06)]'
+          : 'text-ink-2 hover:text-ink')
       }
     >
       {children}
@@ -189,7 +189,7 @@ function Field({
     span === 2 ? 'sm:col-span-2' : span === 3 ? 'sm:col-span-3' : span === 4 ? 'sm:col-span-4' : 'sm:col-span-6'
   return (
     <label className={`flex flex-col gap-1 ${spanClass}`}>
-      <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+      <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-ink-3">
         {label}
       </span>
       {children}

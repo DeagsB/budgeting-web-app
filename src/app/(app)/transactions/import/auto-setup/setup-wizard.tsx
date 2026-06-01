@@ -23,6 +23,7 @@ import {
 import { BANK_PRESETS } from '@/lib/bank-presets'
 import { ConfirmButton } from '@/components/ui/confirm-button'
 import { DataTable } from '@/components/ui/data-table'
+import { Button } from '@/components/ui/button'
 
 type Account = { id: string; name: string; last_four: string | null }
 type Member = { id: string; name: string }
@@ -218,35 +219,31 @@ function ProgressSummary({
   const allDone = doneCount >= total
   return (
     <div
-      className="flex flex-col gap-2 rounded-[14px] border px-4 py-3"
-      style={{
-        borderColor: allDone ? 'var(--color-leaf)' : 'var(--color-hair)',
-        background: allDone ? 'var(--color-leaf-tint)' : 'var(--color-cream-2)',
-      }}
+      className={`flex flex-col gap-2 rounded-md border px-4 py-3 ${
+        allDone ? 'border-leaf bg-leaf-tint' : 'border-hair bg-cream-2'
+      }`}
     >
       <div className="flex items-baseline justify-between gap-3">
         <span
-          className="text-[10.5px] font-bold uppercase tracking-[0.08em]"
-          style={{ color: allDone ? 'var(--color-leaf-deep)' : 'var(--color-ink-3)' }}
+          className={`text-[10.5px] font-bold uppercase tracking-[0.08em] ${
+            allDone ? 'text-leaf-deep' : 'text-ink-3'
+          }`}
         >
           Setup progress
         </span>
-        <span className="font-serif text-[14px] tabular-nums text-[var(--color-ink)]">
+        <span className="font-serif text-[14px] tabular-nums text-ink">
           {doneCount} / {total} {allDone ? '· ready' : 'done'}
         </span>
       </div>
-      <div className="h-1.5 w-full rounded-full bg-[var(--color-paper)]">
+      <div className="h-1.5 w-full rounded-full bg-paper">
         <div
           role="progressbar"
           aria-valuenow={doneCount}
           aria-valuemin={0}
           aria-valuemax={total}
           aria-label="Auto-import setup progress"
-          className="h-full rounded-full"
-          style={{
-            width: `${Math.round(progress * 100)}%`,
-            background: 'var(--color-leaf)',
-          }}
+          className="h-full rounded-full bg-leaf"
+          style={{ width: `${Math.round(progress * 100)}%` }}
         />
       </div>
     </div>
@@ -286,7 +283,7 @@ function SecretCard({
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-[13.5px] leading-relaxed text-[var(--color-ink-2)]">
+      <p className="text-[13.5px] leading-relaxed text-ink-2">
         Your webhook URL is fixed — your secret rotates each time you press the button.
         The secret is shown <b>once</b> right after generation. Copy it into the Gmail
         script in step 3, then we&rsquo;ll never display it again.
@@ -309,16 +306,18 @@ function SecretCard({
           />
         ) : (
           <div
-            className="rounded-[12px] border border-[var(--color-hair)] px-4 py-3"
-            style={{ background: hasSecret ? 'var(--color-leaf-tint)' : 'var(--color-cream-2)' }}
+            className={`rounded-md border border-hair px-4 py-3 ${
+              hasSecret ? 'bg-leaf-tint' : 'bg-cream-2'
+            }`}
           >
             <div
-              className="text-[10.5px] font-bold uppercase tracking-[0.08em]"
-              style={{ color: hasSecret ? 'var(--color-leaf)' : 'var(--color-ink-3)' }}
+              className={`text-[10.5px] font-bold uppercase tracking-[0.08em] ${
+                hasSecret ? 'text-leaf' : 'text-ink-3'
+              }`}
             >
               Secret
             </div>
-            <div className="mt-1 text-[13px] text-[var(--color-ink-2)]">
+            <div className="mt-1 text-[13px] text-ink-2">
               {hasSecret
                 ? 'A secret is set. Press the button to rotate it (you’ll need to update the Gmail script if you do).'
                 : 'No secret yet — press the button to generate one.'}
@@ -328,24 +327,19 @@ function SecretCard({
       </div>
 
       <form action={formAction}>
-        <button
-          type="submit"
-          disabled={pending}
-          className="inline-flex items-center gap-2 rounded-full bg-[var(--color-ink)] px-5 py-3 text-[13.5px] font-semibold text-[var(--color-paper)] transition-all active:scale-[0.98] disabled:opacity-50"
-        >
+        <Button type="submit" variant="primary" disabled={pending}>
           {pending ? 'Generating…' : hasSecret ? 'Rotate secret' : 'Generate secret'}
           {!pending && <span aria-hidden>→</span>}
-        </button>
+        </Button>
       </form>
 
-      {state && 'error' in state && state.error && (
-        <p
-          className="rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
-          style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
-        >
-          {state.error}
-        </p>
-      )}
+      <div aria-live="polite" role="status">
+        {state && 'error' in state && state.error && (
+          <p className="rounded-md bg-maple-soft px-3 py-1.5 text-[12.5px] font-medium text-maple">
+            {state.error}
+          </p>
+        )}
+      </div>
     </div>
   )
 }
@@ -366,25 +360,24 @@ function CopyField({
   const isWarn = tone === 'warn'
   return (
     <div
-      className="flex flex-col gap-1.5 rounded-[12px] border px-4 py-3"
-      style={{
-        borderColor: isWarn ? 'var(--color-honey)' : 'var(--color-hair)',
-        background: isWarn ? 'var(--color-paper-2)' : 'var(--color-paper)',
-      }}
+      className={`flex flex-col gap-1.5 rounded-md border px-4 py-3 ${
+        isWarn ? 'border-honey bg-paper-2' : 'border-hair bg-paper'
+      }`}
     >
       <div className="flex items-center justify-between gap-3">
-        <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+        <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
           {label}
         </span>
         <button
           type="button"
           onClick={onCopy}
-          className="text-[11.5px] font-semibold text-[var(--color-ink-2)] underline-offset-2 hover:text-[var(--color-ink)] hover:underline"
+          aria-label={`Copy ${label}`}
+          className="inline-flex min-h-[44px] items-center text-[11.5px] font-semibold text-ink-2 underline-offset-2 hover:text-ink hover:underline"
         >
           {copied ? 'Copied ✓' : 'Copy'}
         </button>
       </div>
-      <code className="block break-all font-mono text-[12px] text-[var(--color-ink)]">{value}</code>
+      <code className="block break-all font-mono text-[12px] text-ink">{value}</code>
     </div>
   )
 }
@@ -403,7 +396,7 @@ function BankAlertHelp() {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-[13.5px] leading-relaxed text-[var(--color-ink-2)]">
+      <p className="text-[13.5px] leading-relaxed text-ink-2">
         Set the alert threshold to <b>$0.01</b> so every transaction triggers an email.
         These usually arrive within 30 seconds of the swipe / tap / e-transfer.
       </p>
@@ -411,23 +404,20 @@ function BankAlertHelp() {
         {banks.map((b) => (
           <div
             key={b.name}
-            className="rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-paper)] px-4 py-3"
+            className="rounded-md border border-hair bg-paper px-4 py-3"
           >
-            <div className="font-serif text-[15px] tracking-[-0.01em] text-[var(--color-ink)]">
+            <div className="font-serif text-[15px] tracking-[-0.01em] text-ink">
               {b.name}
             </div>
-            <div className="mt-1 text-[12.5px] leading-relaxed text-[var(--color-ink-2)]">
+            <div className="mt-1 text-[12.5px] leading-relaxed text-ink-2">
               {b.steps}
             </div>
           </div>
         ))}
       </div>
-      <div
-        className="rounded-[12px] px-4 py-3 text-[12.5px] leading-relaxed text-[var(--color-ink-2)]"
-        style={{ background: 'var(--color-cream-2)' }}
-      >
-        <b className="text-[var(--color-ink)]">Tip:</b> create a Gmail filter that
-        labels these alerts (e.g. <code className="rounded bg-[var(--color-paper)] px-1.5 py-0.5 font-mono text-[11.5px]">label:bank-alerts</code>) so the
+      <div className="rounded-md bg-cream-2 px-4 py-3 text-[12.5px] leading-relaxed text-ink-2">
+        <b className="text-ink">Tip:</b> create a Gmail filter that
+        labels these alerts (e.g. <code className="rounded bg-paper px-1.5 py-0.5 font-mono text-[11.5px]">label:bank-alerts</code>) so the
         Apps Script in step 3 only sees them.
       </div>
     </div>
@@ -450,85 +440,74 @@ function GmailScriptCard({ webhookUrl, secret }: { webhookUrl: string; secret: s
   return (
     <div className="flex flex-col gap-3">
       {secret ? (
-        <div
-          className="rounded-[10px] border px-3 py-2 text-[12px] font-medium"
-          style={{ borderColor: 'var(--color-leaf)', background: 'var(--color-leaf-tint)', color: 'var(--color-leaf-deep)' }}
-        >
+        <div className="rounded-md border border-leaf bg-leaf-tint px-3 py-2 text-[12px] font-medium text-leaf-deep">
           ✓ Your secret is already baked into the script below — no script property to set.
-          Just paste, run <code className="rounded bg-[var(--color-paper)] px-1.5 py-0.5 font-mono text-[11px]">setup</code>, done.
+          Just paste, run <code className="rounded bg-paper px-1.5 py-0.5 font-mono text-[11px]">setup</code>, done.
         </div>
       ) : (
-        <div
-          className="rounded-[10px] border px-3 py-2 text-[12px] leading-relaxed"
-          style={{ borderColor: 'var(--color-honey)', background: 'var(--color-paper-2)', color: 'var(--color-ink-2)' }}
-        >
+        <div className="rounded-md border border-honey bg-paper-2 px-3 py-2 text-[12px] leading-relaxed text-ink-2">
           Press <b>Rotate secret</b> in step 1 and the script below comes back with your key
           already baked in — nothing to copy. Otherwise set the{' '}
-          <code className="rounded bg-[var(--color-cream-2)] px-1.5 py-0.5 font-mono text-[11px]">SECRET</code> script
+          <code className="rounded bg-cream-2 px-1.5 py-0.5 font-mono text-[11px]">SECRET</code> script
           property by hand (step 3 below).
         </div>
       )}
 
-      <ol className="ml-5 list-decimal space-y-1 text-[13.5px] leading-relaxed text-[var(--color-ink-2)]">
+      <ol className="ml-5 list-decimal space-y-1 text-[13.5px] leading-relaxed text-ink-2">
         <li>
           Open{' '}
           <a
             href="https://script.google.com/home"
             target="_blank"
             rel="noopener noreferrer"
-            className="font-semibold text-[var(--color-ink)] underline-offset-2 hover:underline"
+            className="font-semibold text-ink underline-offset-2 hover:underline"
           >
             script.google.com
           </a>
           {' '}and click <b>New project</b>.
         </li>
-        <li>Replace the contents of <code className="rounded bg-[var(--color-cream-2)] px-1.5 py-0.5 font-mono text-[11.5px]">Code.gs</code> with the script below{secret ? ' (secret already baked in)' : ''}.</li>
+        <li>Replace the contents of <code className="rounded bg-cream-2 px-1.5 py-0.5 font-mono text-[11.5px]">Code.gs</code> with the script below{secret ? ' (secret already baked in)' : ''}.</li>
         {!secret && (
           <li>
-            Set <code className="rounded bg-[var(--color-cream-2)] px-1.5 py-0.5 font-mono text-[11.5px]">SECRET</code> in <b>Project Settings → Script properties</b>
-            {' '}to the secret from step 1. <span className="text-[var(--color-ink-3)]">(Or rotate the secret to skip this — see note above.)</span>
+            Set <code className="rounded bg-cream-2 px-1.5 py-0.5 font-mono text-[11.5px]">SECRET</code> in <b>Project Settings → Script properties</b>
+            {' '}to the secret from step 1. <span className="text-ink-3">(Or rotate the secret to skip this — see note above.)</span>
           </li>
         )}
         <li>
           <b>Label your alerts in Gmail.</b> Gmail → Settings → Filters → create a filter on
           your bank&rsquo;s sender, then <b>Apply label</b> →{' '}
-          <code className="rounded bg-[var(--color-cream-2)] px-1.5 py-0.5 font-mono text-[11.5px]">bank-alerts</code>.
-          {' '}<span className="text-[var(--color-ink-3)]"><code className="font-mono">setup</code> creates this label for you, but only a filter routes mail into it. Tick &ldquo;also apply to matching conversations&rdquo; to backfill existing alerts.</span>
+          <code className="rounded bg-cream-2 px-1.5 py-0.5 font-mono text-[11.5px]">bank-alerts</code>.
+          {' '}<span className="text-ink-3"><code className="font-mono">setup</code> creates this label for you, but only a filter routes mail into it. Tick &ldquo;also apply to matching conversations&rdquo; to backfill existing alerts.</span>
         </li>
         <li>
-          In the editor, pick <code className="rounded bg-[var(--color-cream-2)] px-1.5 py-0.5 font-mono text-[11.5px]">setup</code> from the
+          In the editor, pick <code className="rounded bg-cream-2 px-1.5 py-0.5 font-mono text-[11.5px]">setup</code> from the
           function dropdown and click <b>Run</b>. Approve Gmail access when prompted —
           this creates the label, installs the <b>hourly</b> trigger, and pulls existing alerts right away.
-          {' '}<span className="text-[var(--color-ink-3)]">(One run does everything. Hourly is plenty; you can also pull on demand from the app.)</span>
+          {' '}<span className="text-ink-3">(One run does everything. Hourly is plenty; you can also pull on demand from the app.)</span>
         </li>
         <li>
           <b>For on-demand sync:</b> click <b>Deploy → New deployment</b> → type <b>Web app</b>,
           execute as <i>Me</i>, who has access <i>Anyone with the link</i>. Copy the resulting
-          <code className="rounded bg-[var(--color-cream-2)] mx-1 px-1.5 py-0.5 font-mono text-[11.5px]">/exec</code> URL and paste it into Maple in step 5 — that&rsquo;s what
+          <code className="rounded bg-cream-2 mx-1 px-1.5 py-0.5 font-mono text-[11.5px]">/exec</code> URL and paste it into Maple in step 5 — that&rsquo;s what
           powers the &ldquo;Sync now&rdquo; button.
         </li>
       </ol>
 
-      <div className="overflow-hidden rounded-[14px] border border-[var(--color-hair)]">
-        <div
-          className="flex items-center justify-between border-b border-[var(--color-hair)] px-4 py-2"
-          style={{ background: 'var(--color-cream-2)' }}
-        >
-          <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+      <div className="overflow-hidden rounded-md border border-hair">
+        <div className="flex items-center justify-between border-b border-hair bg-cream-2 px-4 py-2">
+          <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
             Code.gs
           </span>
           <button
             type="button"
             onClick={copy}
-            className="text-[11.5px] font-semibold text-[var(--color-ink-2)] underline-offset-2 hover:text-[var(--color-ink)] hover:underline"
+            aria-label="Copy the Gmail Apps Script"
+            className="inline-flex min-h-[44px] items-center text-[11.5px] font-semibold text-ink-2 underline-offset-2 hover:text-ink hover:underline"
           >
             {copied ? 'Copied ✓' : 'Copy'}
           </button>
         </div>
-        <pre
-          className="overflow-x-auto px-4 py-3 font-mono text-[11.5px] leading-relaxed text-[var(--color-ink)]"
-          style={{ background: 'var(--color-paper)' }}
-        >
+        <pre className="overflow-x-auto bg-paper px-4 py-3 font-mono text-[11.5px] leading-relaxed text-ink">
 {code}
         </pre>
       </div>
@@ -703,23 +682,17 @@ function RulesSection({
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-[13.5px] leading-relaxed text-[var(--color-ink-2)]">
+      <p className="text-[13.5px] leading-relaxed text-ink-2">
         One rule per bank routes to all your accounts there — set the last 4
-        digits on each account in <Link href="/accounts" className="font-semibold text-[var(--color-ink)] underline-offset-2 hover:underline">Accounts</Link>{' '}
+        digits on each account in <Link href="/accounts" className="font-semibold text-ink underline-offset-2 hover:underline">Accounts</Link>{' '}
         and the engine sends each alert to the right one.
       </p>
 
-      <div
-        className="rounded-[14px] border p-4"
-        style={{ borderColor: 'var(--color-leaf)', background: 'var(--color-leaf-tint)' }}
-      >
-        <div
-          className="text-[10.5px] font-bold uppercase tracking-[0.08em]"
-          style={{ color: 'var(--color-leaf-deep)' }}
-        >
+      <div className="rounded-md border border-leaf bg-leaf-tint p-4">
+        <div className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-leaf-deep">
           Quick start: pick your bank
         </div>
-        <p className="mt-1 text-[12.5px] text-[var(--color-ink-2)]">
+        <p className="mt-1 text-[12.5px] text-ink-2">
           One click installs a tuned rule for that bank. You can tweak it after.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -730,20 +703,20 @@ function RulesSection({
               onClick={() => addPreset(p.id)}
               disabled={presetPending !== null}
               title={p.hint}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-leaf)] bg-[var(--color-paper)] px-3.5 py-1.5 text-[12.5px] font-semibold text-[var(--color-leaf-deep)] transition-transform active:scale-[0.97] disabled:opacity-50"
+              aria-label={`Add ${p.label} rule preset`}
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-leaf bg-paper px-3.5 py-1.5 text-[12.5px] font-semibold text-leaf-deep transition-transform active:scale-[0.97] disabled:opacity-50"
             >
               {presetPending === p.id ? 'Adding…' : `+ ${p.label}`}
             </button>
           ))}
         </div>
-        {presetError && (
-          <p
-            className="mt-2 rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
-            style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
-          >
-            {presetError}
-          </p>
-        )}
+        <div aria-live="polite" role="status">
+          {presetError && (
+            <p className="mt-2 rounded-md bg-maple-soft px-3 py-1.5 text-[12.5px] font-medium text-maple">
+              {presetError}
+            </p>
+          )}
+        </div>
       </div>
 
       {rules.length > 0 && (
@@ -751,23 +724,20 @@ function RulesSection({
           {rules.map((r) => (
             <li
               key={r.id}
-              className="flex flex-col gap-2 rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-4 sm:flex-row sm:items-center sm:justify-between"
+              className="flex flex-col gap-2 rounded-md border border-hair bg-paper p-4 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-baseline gap-2">
-                  <span className="font-serif text-[15.5px] tracking-[-0.01em] text-[var(--color-ink)]">
+                  <span className="font-serif text-[15.5px] tracking-[-0.01em] text-ink">
                     {r.name}
                   </span>
                   {!r.enabled && (
-                    <span
-                      className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em]"
-                      style={{ background: 'var(--color-cream-2)', color: 'var(--color-ink-3)' }}
-                    >
+                    <span className="rounded-full bg-cream-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-3">
                       Disabled
                     </span>
                   )}
                 </div>
-                <div className="mt-0.5 truncate font-mono text-[11.5px] text-[var(--color-ink-3)]">
+                <div className="mt-0.5 truncate font-mono text-[11.5px] text-ink-3">
                   {[r.match_from, r.match_subject].filter(Boolean).join(' · ') || 'Matches every email'}
                 </div>
               </div>
@@ -775,7 +745,8 @@ function RulesSection({
                 <button
                   type="button"
                   onClick={() => onEdit(r)}
-                  className="rounded-full border border-[var(--color-hair)] bg-[var(--color-paper-2)] px-3 py-1.5 text-[12px] font-semibold text-[var(--color-ink)]"
+                  aria-label={`Edit rule "${r.name}"`}
+                  className="inline-flex min-h-[44px] items-center rounded-full border border-hair bg-paper-2 px-3 py-1.5 text-[12px] font-semibold text-ink"
                 >
                   Edit
                 </button>
@@ -786,7 +757,7 @@ function RulesSection({
                   description="Future emails matching this rule will fall through to the next one (if any)."
                   confirmLabel="Delete"
                   destructive
-                  className="rounded-full px-3 py-1.5 text-[12px] font-semibold text-[var(--color-maple)] hover:bg-[var(--color-maple-soft)]"
+                  className="inline-flex min-h-[44px] items-center rounded-full px-3 py-1.5 text-[12px] font-semibold text-maple hover:bg-maple-soft"
                 >
                   Delete
                 </ConfirmButton>
@@ -809,7 +780,7 @@ function RulesSection({
         <button
           type="button"
           onClick={() => onEdit('new')}
-          className="self-start rounded-full border border-dashed border-[var(--color-hair)] bg-[var(--color-cream-2)] px-4 py-2.5 text-[12.5px] font-semibold text-[var(--color-ink-2)] hover:bg-[var(--color-paper-2)] hover:text-[var(--color-ink)]"
+          className="inline-flex min-h-[44px] items-center self-start rounded-full border border-dashed border-hair bg-cream-2 px-4 py-2.5 text-[12.5px] font-semibold text-ink-2 hover:bg-paper-2 hover:text-ink"
         >
           + Add a rule
         </button>
@@ -862,7 +833,7 @@ function RuleForm({
   return (
     <form
       action={formAction}
-      className="flex flex-col gap-4 rounded-[16px] border border-[var(--color-hair)] bg-[var(--color-paper-2)] p-4 md:p-5"
+      className="flex flex-col gap-4 rounded-lg border border-hair bg-paper-2 p-4 md:p-5"
     >
       {initial && <input type="hidden" name="id" value={initial.id} />}
 
@@ -910,13 +881,13 @@ function RuleForm({
           />
         </FormField>
         <FormField label="Enabled">
-          <label className="inline-flex items-center gap-2 pt-1.5 text-[13.5px] text-[var(--color-ink)]">
+          <label className="inline-flex min-h-[44px] items-center gap-2 pt-1.5 text-[13.5px] text-ink">
             <input
               type="checkbox"
               name="enabled"
               checked={draft.enabled ?? true}
               onChange={(e) => field('enabled', e.target.checked)}
-              className="h-4 w-4 accent-[var(--color-leaf)]"
+              className="h-4 w-4 accent-leaf"
             />
             Run this rule on incoming emails
           </label>
@@ -1013,18 +984,15 @@ function RuleForm({
       </div>
 
       {accounts.some((a) => a.last_four) && (
-        <div
-          className="rounded-[10px] border px-3 py-2 text-[11.5px] leading-relaxed text-[var(--color-ink-2)]"
-          style={{ borderColor: 'var(--color-leaf)', background: 'var(--color-leaf-tint)' }}
-        >
-          <b style={{ color: 'var(--color-leaf-deep)' }}>Will route to:</b>{' '}
+        <div className="rounded-md border border-leaf bg-leaf-tint px-3 py-2 text-[11.5px] leading-relaxed text-ink-2">
+          <b className="text-leaf-deep">Will route to:</b>{' '}
           {accounts
             .filter((a) => a.last_four)
             .map((a) => `${a.name} (····${a.last_four})`)
             .join(', ')}
           {accounts.some((a) => !a.last_four) && (
             <>
-              {' · '}<span style={{ color: 'var(--color-ink-3)' }}>
+              {' · '}<span className="text-ink-3">
                 accounts without a last-4 won&rsquo;t auto-route — set them in Accounts.
               </span>
             </>
@@ -1077,30 +1045,21 @@ function RuleForm({
         </FormField>
       </div>
 
-      {state && 'error' in state && state.error && (
-        <p
-          className="rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
-          style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
-        >
-          {state.error}
-        </p>
-      )}
+      <div aria-live="polite" role="status">
+        {state && 'error' in state && state.error && (
+          <p className="rounded-md bg-maple-soft px-3 py-1.5 text-[12.5px] font-medium text-maple">
+            {state.error}
+          </p>
+        )}
+      </div>
 
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-full px-4 py-2.5 text-[12.5px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
-        >
+        <Button type="button" variant="ghost" size="sm" onClick={onClose}>
           Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={pending}
-          className="inline-flex items-center gap-2 rounded-full bg-[var(--color-ink)] px-5 py-2.5 text-[12.5px] font-semibold text-[var(--color-paper)] active:scale-[0.98] disabled:opacity-50"
-        >
+        </Button>
+        <Button type="submit" variant="primary" size="sm" disabled={pending}>
           {pending ? 'Saving…' : initial ? 'Save changes' : 'Add rule'}
-        </button>
+        </Button>
       </div>
     </form>
   )
@@ -1117,11 +1076,11 @@ function FormField({
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+      <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
         {label}
       </span>
       {children}
-      {hint && <span className="text-[11px] text-[var(--color-ink-3)]">{hint}</span>}
+      {hint && <span className="text-[11px] text-ink-3">{hint}</span>}
     </label>
   )
 }
@@ -1196,25 +1155,25 @@ function VerifyLog({
     <div className="flex flex-col gap-3">
       {/* Lead with the payoff: one click proves ingestion → parse → insert
           works end-to-end, and the result lands in the log right below. */}
-      <p className="text-[13.5px] leading-relaxed text-[var(--color-ink-2)]">
+      <p className="text-[13.5px] leading-relaxed text-ink-2">
         Hit <b>Send test email</b> to push a fake bank alert through the whole
         pipeline. You&rsquo;ll see it land in the log below within a second — proof
         the wiring works before a real alert ever arrives.
       </p>
 
-      <div className="flex flex-col gap-3 rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-cream-2)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 rounded-md border border-hair bg-cream-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
-          <div className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+          <div className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
             Test the pipeline now
           </div>
-          <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--color-ink-2)]">
+          <p className="mt-1 text-[12.5px] leading-relaxed text-ink-2">
             Sends a fake bank-alert email through the webhook so you can see
             ingestion + parsing + insert work end-to-end without waiting on a
             real bank.
           </p>
           <div aria-live="polite" role="status">
             {testState && 'ok' in testState && testState.ok && (
-              <p className="mt-1.5 text-[12px] font-medium text-[var(--color-leaf-deep)]">
+              <p className="mt-1.5 text-[12px] font-medium text-leaf-deep">
                 Webhook responded with <b>{testState.status}</b>
                 {testState.transaction_id ? ` — transaction ${testState.transaction_id.slice(0, 8)}…` : ''}.
                 {testState.status === 'inserted' && ' Check Activity to see it.'}
@@ -1222,44 +1181,36 @@ function VerifyLog({
               </p>
             )}
             {testState && 'error' in testState && testState.error && (
-              <p className="mt-1.5 text-[12px] font-medium text-[var(--color-maple)]">
+              <p className="mt-1.5 text-[12px] font-medium text-maple">
                 {testState.error}
               </p>
             )}
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <label className="inline-flex min-h-[44px] items-center gap-1.5 text-[12px] text-[var(--color-ink-2)]">
+          <label className="inline-flex min-h-[44px] items-center gap-1.5 text-[12px] text-ink-2">
             <input
               type="checkbox"
               checked={polling}
               onChange={(e) => setPolling(e.target.checked)}
-              className="h-4 w-4 accent-[var(--color-leaf)]"
+              className="h-4 w-4 accent-leaf"
             />
             Live
           </label>
-          <button
-            type="button"
-            onClick={fireTest}
-            disabled={testPending}
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-full bg-[var(--color-ink)] px-4 py-2 text-[12.5px] font-semibold text-[var(--color-paper)] active:scale-[0.98] disabled:opacity-50"
-          >
+          <Button type="button" variant="primary" size="sm" onClick={fireTest} disabled={testPending}>
             {testPending ? 'Sending…' : 'Send test email'}
-          </button>
+          </Button>
         </div>
       </div>
 
       {log.length === 0 ? (
-        <p className="rounded-[12px] border border-dashed border-[var(--color-hair)] bg-[var(--color-paper)] px-4 py-6 text-center text-[13px] text-[var(--color-ink-2)]">
+        <p className="rounded-md border border-dashed border-hair bg-paper px-4 py-6 text-center text-[13px] text-ink-2">
           No alerts yet. Send a test above, or wait for your Gmail script to fire — entries appear here within seconds.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-[14px] border border-[var(--color-hair)]">
+        <div className="overflow-hidden rounded-md border border-hair">
           <DataTable minWidth={640} className="text-[12.5px]">
-            <thead
-              className="text-left text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]"
-              style={{ background: 'var(--color-cream-2)' }}
-            >
+            <thead className="bg-cream-2 text-left text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
               <tr>
                 <th className="px-4 py-2.5 font-bold">When</th>
                 <th className="px-4 py-2.5 font-bold">From</th>
@@ -1269,14 +1220,14 @@ function VerifyLog({
             </thead>
             <tbody>
               {log.map((l) => (
-                <tr key={l.id} className="border-t border-[var(--color-hair)]">
-                  <td className="px-4 py-2 tabular-nums text-[var(--color-ink-2)]">
+                <tr key={l.id} className="border-t border-hair">
+                  <td className="px-4 py-2 tabular-nums text-ink-2">
                     {formatDate(l.received_at.slice(0, 10))}
                   </td>
-                  <td className="max-w-[200px] truncate px-4 py-2 text-[var(--color-ink-2)]">
+                  <td className="max-w-[200px] truncate px-4 py-2 text-ink-2">
                     {l.from_address ?? '—'}
                   </td>
-                  <td className="max-w-[280px] truncate px-4 py-2 text-[var(--color-ink)]">
+                  <td className="max-w-[280px] truncate px-4 py-2 text-ink">
                     {l.subject ?? '—'}
                   </td>
                   <td className="px-4 py-2">
@@ -1284,7 +1235,8 @@ function VerifyLog({
                     {l.transaction_id && (
                       <Link
                         href="/transactions"
-                        className="ml-2 inline-flex min-h-[44px] items-center text-[11px] font-semibold text-[var(--color-ink-2)] underline-offset-2 hover:text-[var(--color-ink)] hover:underline"
+                        aria-label="View imported transaction"
+                        className="ml-2 inline-flex min-h-[44px] items-center text-[11px] font-semibold text-ink-2 underline-offset-2 hover:text-ink hover:underline"
                       >
                         view
                       </Link>
@@ -1300,24 +1252,18 @@ function VerifyLog({
       {/* On-demand sync editor — secondary to the test payoff above, so it sits
           last. The hourly trigger covers steady-state; this is for "I just
           bought something, pull it now". */}
-      <div
-        className="rounded-[12px] border p-4"
-        style={{ borderColor: 'var(--color-leaf)', background: 'var(--color-leaf-tint)' }}
-      >
-        <div
-          className="text-[10.5px] font-bold uppercase tracking-[0.08em]"
-          style={{ color: 'var(--color-leaf-deep)' }}
-        >
+      <div className="rounded-md border border-leaf bg-leaf-tint p-4">
+        <div className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-leaf-deep">
           On-demand sync
         </div>
-        <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--color-ink-2)]">
+        <p className="mt-1 text-[12.5px] leading-relaxed text-ink-2">
           Hourly trigger handles steady-state. For when you just bought something and
           want it in the app now, paste the Apps Script <b>/exec</b> URL here and use
           the Sync button.
         </p>
         <form action={urlAction} className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
           <label className="flex flex-1 flex-col gap-1">
-            <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+            <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
               Apps Script Web App URL
             </span>
             <input
@@ -1328,48 +1274,39 @@ function VerifyLog({
               className="maple-input font-mono"
             />
           </label>
-          <button
-            type="submit"
-            disabled={urlPending}
-            className="inline-flex min-h-[44px] items-center rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-4 py-2 text-[12.5px] font-semibold text-[var(--color-ink)] disabled:opacity-50"
-          >
+          <Button type="submit" variant="secondary" size="sm" disabled={urlPending}>
             {urlPending ? 'Saving…' : 'Save URL'}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="primary"
+            size="sm"
             onClick={fireSync}
             disabled={syncPending || !gmailSyncUrl}
             title={!gmailSyncUrl ? 'Save the URL first.' : 'Trigger Gmail polling now.'}
-            className="inline-flex min-h-[44px] items-center rounded-full bg-[var(--color-leaf)] px-4 py-2 text-[12.5px] font-semibold text-[var(--color-paper)] disabled:opacity-50"
           >
             {syncPending ? 'Syncing…' : 'Sync now'}
-          </button>
+          </Button>
         </form>
         <div aria-live="polite" role="status">
           {urlState && 'ok' in urlState && (
-            <p className="mt-2 text-[12px] font-medium text-[var(--color-leaf-deep)]">
+            <p className="mt-2 text-[12px] font-medium text-leaf-deep">
               URL saved.
             </p>
           )}
           {urlState && 'error' in urlState && (
-            <p
-              className="mt-2 rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
-              style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
-            >
+            <p className="mt-2 rounded-md bg-maple-soft px-3 py-1.5 text-[12.5px] font-medium text-maple">
               {urlState.error}
             </p>
           )}
           {syncState && 'ok' in syncState && syncState.ok && (
-            <p className="mt-2 text-[12px] font-medium text-[var(--color-leaf-deep)]">
+            <p className="mt-2 text-[12px] font-medium text-leaf-deep">
               Sync ran — script processed {syncState.imported} message{syncState.imported === 1 ? '' : 's'}
               {syncState.skipped > 0 && `, skipped ${syncState.skipped} already-imported`}.
             </p>
           )}
           {syncState && 'error' in syncState && (
-            <p
-              className="mt-2 rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
-              style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
-            >
+            <p className="mt-2 rounded-md bg-maple-soft px-3 py-1.5 text-[12.5px] font-medium text-maple">
               {syncState.error}
             </p>
           )}
@@ -1380,20 +1317,19 @@ function VerifyLog({
 }
 
 function StatusPill({ status, detail }: { status: string; detail: string | null }) {
-  const palette: Record<string, { bg: string; fg: string; label: string }> = {
-    inserted:        { bg: 'var(--color-leaf-soft)',  fg: 'var(--color-leaf)',  label: 'Inserted' },
-    duplicate:       { bg: 'var(--color-cream-2)',     fg: 'var(--color-ink-2)', label: 'Duplicate' },
-    no_match:        { bg: 'var(--color-maple-soft)',  fg: 'var(--color-maple)', label: 'No rule matched' },
-    parse_error:     { bg: 'var(--color-maple-soft)',  fg: 'var(--color-maple)', label: 'Parse error' },
-    invalid_secret:  { bg: 'var(--color-maple-soft)',  fg: 'var(--color-maple)', label: 'Bad secret' },
-    rule_disabled:   { bg: 'var(--color-cream-2)',     fg: 'var(--color-ink-2)', label: 'Rule disabled' },
+  const palette: Record<string, { cls: string; label: string }> = {
+    inserted:        { cls: 'bg-leaf-soft text-leaf',   label: 'Inserted' },
+    duplicate:       { cls: 'bg-cream-2 text-ink-2',    label: 'Duplicate' },
+    no_match:        { cls: 'bg-maple-soft text-maple', label: 'No rule matched' },
+    parse_error:     { cls: 'bg-maple-soft text-maple', label: 'Parse error' },
+    invalid_secret:  { cls: 'bg-maple-soft text-maple', label: 'Bad secret' },
+    rule_disabled:   { cls: 'bg-cream-2 text-ink-2',    label: 'Rule disabled' },
   }
-  const p = palette[status] ?? { bg: 'var(--color-cream-2)', fg: 'var(--color-ink-2)', label: status }
+  const p = palette[status] ?? { cls: 'bg-cream-2 text-ink-2', label: status }
   return (
     <span
       title={detail ?? undefined}
-      className="rounded-full px-2 py-0.5 text-[10.5px] font-semibold"
-      style={{ background: p.bg, color: p.fg }}
+      className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${p.cls}`}
     >
       {p.label}
     </span>
@@ -1432,27 +1368,23 @@ function SmartSuggester({
   }
 
   return (
-    <div
-      className="rounded-[14px] border p-4"
-      style={{ borderColor: 'var(--color-leaf)', background: 'var(--color-leaf-tint)' }}
-    >
+    <div className="rounded-md border border-leaf bg-leaf-tint p-4">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between text-left"
+        aria-expanded={open}
+        aria-label={open ? 'Collapse Smart suggest' : 'Expand Smart suggest'}
+        className="flex min-h-[44px] w-full items-center justify-between text-left"
       >
         <div>
-          <div
-            className="text-[10.5px] font-bold uppercase tracking-[0.08em]"
-            style={{ color: 'var(--color-leaf-deep)' }}
-          >
+          <div className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-leaf-deep">
             Smart suggest
           </div>
-          <div className="mt-0.5 text-[13px] text-[var(--color-ink-2)]">
+          <div className="mt-0.5 text-[13px] text-ink-2">
             Paste a real bank-alert email and we&rsquo;ll fill the regex fields for you.
           </div>
         </div>
-        <span className="ml-3 shrink-0 text-[18px] text-[var(--color-leaf-deep)]" aria-hidden>
+        <span className="ml-3 shrink-0 text-[18px] text-leaf-deep" aria-hidden>
           {open ? '−' : '+'}
         </span>
       </button>
@@ -1487,45 +1419,37 @@ function SmartSuggester({
             />
           </FormField>
 
-          {error && (
-            <p
-              className="rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
-              style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
-            >
-              {error}
-            </p>
-          )}
+          <div aria-live="polite" role="status">
+            {error && (
+              <p className="rounded-md bg-maple-soft px-3 py-1.5 text-[12.5px] font-medium text-maple">
+                {error}
+              </p>
+            )}
 
-          {notes && (
-            <ul
-              className="rounded-[10px] border px-3 py-2 text-[12px] leading-relaxed text-[var(--color-ink-2)]"
-              style={{ borderColor: 'var(--color-leaf)', background: 'var(--color-paper-2)' }}
-            >
-              {notes.map((n, i) => (
-                <li key={i} className="flex gap-2">
-                  <span style={{ color: 'var(--color-leaf)' }} aria-hidden>·</span>
-                  <span>{n}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+            {notes && (
+              <ul className="rounded-md border border-leaf bg-paper-2 px-3 py-2 text-[12px] leading-relaxed text-ink-2">
+                {notes.map((n, i) => (
+                  <li key={i} className="flex gap-2">
+                    <span className="text-leaf" aria-hidden>·</span>
+                    <span>{n}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           <div className="flex items-center justify-end gap-2">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => { setBody(''); setSubject(''); setFrom(''); setNotes(null); setError(null) }}
-              className="rounded-full px-3 py-1.5 text-[12px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
             >
               Clear
-            </button>
-            <button
-              type="button"
-              onClick={suggest}
-              disabled={pending}
-              className="inline-flex items-center gap-2 rounded-full bg-[var(--color-leaf)] px-4 py-2 text-[12.5px] font-semibold text-[var(--color-paper)] active:scale-[0.98] disabled:opacity-50"
-            >
+            </Button>
+            <Button type="button" variant="primary" size="sm" onClick={suggest} disabled={pending}>
               {pending ? 'Analysing…' : 'Suggest from this email'}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -1551,18 +1475,17 @@ function Step({
   const done = status === 'done'
   return (
     <section
-      className="rounded-[20px] border bg-[var(--color-paper)] p-5 md:p-6"
-      style={{ borderColor: done ? 'var(--color-leaf)' : 'var(--color-hair)' }}
+      className={`rounded-lg border bg-paper p-5 md:p-6 ${
+        done ? 'border-leaf' : 'border-hair'
+      }`}
     >
       <header className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
         {/* Number badge flips to a leaf check once the step's done — the check
             glyph is the non-color cue. */}
         <span
-          className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full font-serif text-[12px] tabular-nums"
-          style={{
-            background: done ? 'var(--color-leaf)' : 'var(--color-ink)',
-            color: 'var(--color-paper)',
-          }}
+          className={`inline-flex h-[22px] w-[22px] items-center justify-center rounded-full font-serif text-[12px] tabular-nums text-paper ${
+            done ? 'bg-leaf' : 'bg-ink'
+          }`}
           aria-hidden
         >
           {done ? '✓' : n}
@@ -1580,29 +1503,20 @@ function Step({
 function StepStatusBadge({ status, hint }: { status: StepStatus; hint?: string }) {
   if (status === 'done') {
     return (
-      <span
-        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em]"
-        style={{ background: 'var(--color-leaf-soft)', color: 'var(--color-leaf-deep)' }}
-      >
+      <span className="inline-flex items-center gap-1 rounded-full bg-leaf-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em] text-leaf-deep">
         ✓ Done{hint ? ` · ${hint}` : ''}
       </span>
     )
   }
   if (status === 'manual') {
     return (
-      <span
-        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em]"
-        style={{ background: 'var(--color-cream-2)', color: 'var(--color-ink-3)' }}
-      >
+      <span className="inline-flex items-center rounded-full bg-cream-2 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em] text-ink-3">
         At your bank
       </span>
     )
   }
   return (
-    <span
-      className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em]"
-      style={{ background: 'var(--color-cream-2)', color: 'var(--color-ink-2)' }}
-    >
+    <span className="inline-flex items-center rounded-full bg-cream-2 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em] text-ink-2">
       To do
     </span>
   )

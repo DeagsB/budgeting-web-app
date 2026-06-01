@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { ACCOUNT_TYPES, ACCOUNT_OWNERSHIP, LIABILITY_TYPES, type AccountType } from '@/lib/domain'
 import { Amount } from '@/components/ui/amount'
+import { Button } from '@/components/ui/button'
 import { ConfirmButton } from '@/components/ui/confirm-button'
 import { updateAccount, archiveAccount, unarchiveAccount } from './actions'
 
@@ -65,7 +66,7 @@ export function AccountRow({
   // ───── EDIT ─────
   if (editing) {
     return (
-      <li className="border-b border-[var(--color-hair)] bg-[var(--color-cream-2)]/60 px-5 py-4 last:border-b-0">
+      <li className="border-b border-hair bg-cream-2/60 px-5 py-4 last:border-b-0">
         <form
           action={async (fd) => {
             await updateAccount(fd)
@@ -112,7 +113,7 @@ export function AccountRow({
                 name="member_id"
                 disabled={ownership === 'shared'}
                 defaultValue={account.member_id ?? ''}
-                className="maple-select sm disabled:bg-[var(--color-paper-2)] disabled:text-[var(--color-ink-3)]"
+                className="maple-select sm disabled:bg-paper-2 disabled:text-ink-3"
               >
                 {ownership === 'shared' ? (
                   <option value="">— Shared —</option>
@@ -126,14 +127,15 @@ export function AccountRow({
               </select>
             </EditField>
             <EditField label="Opening balance">
-              <div className="flex items-center rounded-[10px] border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-1.5 transition-colors focus-within:border-[var(--color-leaf)]">
-                <span className="text-[12px] text-[var(--color-ink-3)]">$</span>
+              <div className="flex items-center rounded-md border border-hair bg-paper px-3 py-1.5 transition-colors focus-within:border-leaf">
+                <span className="text-[12px] text-ink-3">$</span>
                 <input
                   name="opening_balance"
                   type="text"
                   inputMode="decimal"
                   defaultValue={(account.opening_balance_cents / 100).toFixed(2)}
-                  className="w-full bg-transparent pl-1 text-[13px] tabular-nums text-[var(--color-ink)] outline-none"
+                  aria-label="Opening balance in dollars"
+                  className="w-full bg-transparent pl-1 text-[13px] tabular-nums text-ink outline-none"
                 />
               </div>
             </EditField>
@@ -151,19 +153,12 @@ export function AccountRow({
             </EditField>
           </div>
           <div className="flex items-center gap-3 pt-1">
-            <button
-              type="submit"
-              className="inline-flex items-center rounded-full bg-[var(--color-ink)] px-4 py-2 text-[12.5px] font-semibold text-[var(--color-paper)]"
-            >
+            <Button type="submit" variant="primary" size="sm">
               Save
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditing(false)}
-              className="text-[12.5px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
-            >
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>
               Cancel
-            </button>
+            </Button>
           </div>
         </form>
       </li>
@@ -182,11 +177,10 @@ export function AccountRow({
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <div
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
-          style={{
-            background: isLiability ? 'var(--color-maple-soft)' : 'var(--color-leaf-soft)',
-            color: isLiability ? 'var(--color-maple)' : 'var(--color-leaf)',
-          }}
+          className={
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-full ' +
+            (isLiability ? 'bg-maple-soft text-maple' : 'bg-leaf-soft text-leaf')
+          }
         >
           <AccountIcon type={account.type} />
         </div>
@@ -270,7 +264,7 @@ function EditField({
   const sc = span === 2 ? 'sm:col-span-2' : ''
   return (
     <label className={`flex flex-col gap-1 ${sc}`}>
-      <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+      <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-ink-3">
         {label}
       </span>
       {children}

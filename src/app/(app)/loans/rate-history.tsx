@@ -75,7 +75,7 @@ export function RateHistory({
                 prompt="Remove this rate change?"
                 confirmLabel="Remove"
                 destructive
-                className="text-[11.5px] font-semibold text-maple underline-offset-2 hover:underline"
+                className="-mr-2 inline-flex min-h-[44px] items-center px-2 text-[11.5px] font-semibold text-maple underline-offset-2 hover:underline"
               >
                 Remove
               </ConfirmButton>

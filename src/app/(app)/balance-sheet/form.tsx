@@ -61,9 +61,9 @@ export function BalanceSheetForm({
       <Section title="Liabilities" monthName={monthName} accounts={liabilityAccounts} />
 
       <div className="flex items-center justify-end gap-3 pt-1">
-        {saved ? (
-          <span className="text-[12.5px] font-semibold text-leaf">Saved.</span>
-        ) : null}
+        <span aria-live="polite" className="text-[12.5px] font-semibold text-leaf">
+          {saved ? 'Saved.' : ''}
+        </span>
         <Button type="submit" variant="primary" size="md" disabled={pending}>
           {pending ? 'Saving…' : 'Save balances'}
         </Button>

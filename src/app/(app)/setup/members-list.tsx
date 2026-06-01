@@ -78,6 +78,7 @@ function AddMember() {
         type="text"
         required
         maxLength={80}
+        aria-label="New member name"
         placeholder="Add a member — first name is fine"
         className="maple-input flex-1"
       />
@@ -113,6 +114,7 @@ function MemberRow({ member }: { member: Member }) {
             autoFocus
             required
             maxLength={80}
+            aria-label={`Rename member ${member.name}`}
             className="maple-input flex-1"
           />
           <Button type="submit" variant="primary" size="sm" disabled={pending}>

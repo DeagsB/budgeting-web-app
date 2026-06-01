@@ -92,17 +92,17 @@ export function RecordSettlementForm({
       </div>
 
       <div className="flex items-center justify-between gap-3">
-        {state && 'error' in state && state.error ? (
-          <p className="rounded-sm bg-maple-soft px-3 py-1.5 text-[12.5px] font-medium text-maple">
-            {state.error}
-          </p>
-        ) : state && 'ok' in state && state.ok ? (
-          <p className="rounded-sm bg-leaf-soft px-3 py-1.5 text-[12.5px] font-medium text-leaf">
-            Payment recorded
-          </p>
-        ) : (
-          <span />
-        )}
+        <div aria-live="polite" className="min-w-0">
+          {state && 'error' in state && state.error ? (
+            <p className="rounded-sm bg-maple-soft px-3 py-1.5 text-[12.5px] font-medium text-maple">
+              {state.error}
+            </p>
+          ) : state && 'ok' in state && state.ok ? (
+            <p className="rounded-sm bg-leaf-soft px-3 py-1.5 text-[12.5px] font-medium text-leaf">
+              Payment recorded
+            </p>
+          ) : null}
+        </div>
         <Button type="submit" variant="primary" disabled={pending} className="shrink-0">
           {pending ? 'Saving…' : 'Record payment'}
         </Button>

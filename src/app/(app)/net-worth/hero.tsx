@@ -69,10 +69,7 @@ export function NetWorthHero({
   const negative = displayedValue < 0
 
   return (
-    <section
-      className="rounded-xl border border-hair p-6 shadow-[var(--shadow-card)] md:p-8"
-      style={{ background: 'var(--color-cream-2)' }}
-    >
+    <section className="rounded-xl border border-hair bg-cream-2 p-6 shadow-[var(--shadow-card)] md:p-8">
       <MapleLabel>{scrubPoint ? monthLabel(scrubPoint.month) : 'Today'}</MapleLabel>
 
       <div

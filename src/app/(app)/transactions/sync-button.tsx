@@ -31,7 +31,7 @@ export function SyncNowButton({ hasSyncUrl }: { hasSyncUrl: boolean }) {
     return (
       <a
         href="/transactions/import/auto-setup"
-        className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-[var(--color-hair)] bg-[var(--color-paper)] px-3.5 py-2 text-[12.5px] font-semibold text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
+        className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-dashed border-hair bg-paper px-3.5 py-2 text-[12.5px] font-semibold text-ink-2 transition-colors hover:text-ink"
         title="Set up Gmail auto-import to enable Sync"
       >
         <RefreshIcon />
@@ -46,24 +46,26 @@ export function SyncNowButton({ hasSyncUrl }: { hasSyncUrl: boolean }) {
         type="button"
         onClick={go}
         disabled={pending}
-        className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3.5 py-2 text-[12.5px] font-semibold text-[var(--color-ink)] transition-transform active:scale-[0.98] disabled:opacity-50"
+        className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-hair bg-paper px-3.5 py-2 text-[12.5px] font-semibold text-ink transition-transform active:scale-[0.98] disabled:opacity-50"
       >
         <RefreshIcon spinning={pending} />
         {pending ? 'Syncing…' : 'Sync'}
       </button>
-      {state && 'ok' in state && state.ok && state.imported === 0 && (
-        <span className="text-[11.5px] text-[var(--color-ink-3)]">Up to date.</span>
-      )}
-      {state && 'ok' in state && state.ok && state.imported > 0 && (
-        <span className="text-[11.5px] font-medium text-[var(--color-leaf-deep)]">
-          +{state.imported} new
-        </span>
-      )}
-      {state && 'error' in state && (
-        <span className="max-w-[180px] truncate text-[11.5px] text-[var(--color-maple)]" title={state.error}>
-          {state.error}
-        </span>
-      )}
+      <span aria-live="polite">
+        {state && 'ok' in state && state.ok && state.imported === 0 && (
+          <span className="text-[11.5px] text-ink-3">Up to date.</span>
+        )}
+        {state && 'ok' in state && state.ok && state.imported > 0 && (
+          <span className="text-[11.5px] font-medium text-leaf-deep">
+            +{state.imported} new
+          </span>
+        )}
+        {state && 'error' in state && (
+          <span className="max-w-[180px] truncate text-[11.5px] text-maple" title={state.error}>
+            {state.error}
+          </span>
+        )}
+      </span>
     </div>
   )
 }

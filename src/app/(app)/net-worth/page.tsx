@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { StatTile } from '@/components/ui/stat-tile'
 import { Amount } from '@/components/ui/amount'
 import { EmptyState } from '@/components/ui/empty-state'
+import { Button } from '@/components/ui/button'
 import { NetWorthHero, type NetWorthPoint } from './hero'
 
 /**
@@ -74,11 +75,10 @@ export default async function NetWorthPage() {
           title="No balance history yet"
           body="Record a balance for your accounts to start charting your net worth over time. Once you have a couple of months, the trend line and year-over-year change appear here."
           action={
-            <Link
-              href="/accounts"
-              className="inline-flex min-h-[44px] items-center justify-center rounded-full bg-leaf px-5 text-[14px] font-semibold text-paper transition-transform active:scale-[0.97]"
-            >
-              Update balances
+            <Link href="/accounts">
+              <Button variant="primary" size="md">
+                Update balances
+              </Button>
             </Link>
           }
         />

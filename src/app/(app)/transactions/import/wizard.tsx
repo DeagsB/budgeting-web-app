@@ -2,11 +2,13 @@
 
 import { useActionState, useMemo, useState, useEffect, useRef } from 'react'
 import { parseCSV } from '@/lib/csv'
-import { formatMoney, parseMoneyToCents } from '@/lib/format'
+import { parseMoneyToCents } from '@/lib/format'
 import { parseOFX } from '@/lib/ofx'
 import { commitImport, type ImportState, type StagedTx } from './actions'
 import { MapleLabel } from '@/components/ui/label'
 import { DataTable } from '@/components/ui/data-table'
+import { Button } from '@/components/ui/button'
+import { Amount } from '@/components/ui/amount'
 
 type Account = { id: string; name: string }
 type Category = { id: string; parent_id: string | null; name: string; code: string }
@@ -321,14 +323,12 @@ export function ImportWizard({
       <Step n={1} title={inputMode === 'ofx' ? 'OFX file loaded' : 'Paste CSV or upload a file'}>
         {inputMode === 'ofx' ? (
           <div className="flex flex-col gap-3">
-            <div
-              className="flex items-center justify-between gap-3 rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-cream-2)] px-4 py-3"
-            >
+            <div className="flex items-center justify-between gap-3 rounded-md border border-hair bg-cream-2 px-4 py-3">
               <div className="min-w-0 flex-1">
-                <div className="truncate font-mono text-[12.5px] text-[var(--color-ink)]">
+                <div className="truncate font-mono text-[12.5px] text-ink">
                   {ofxFileName}
                 </div>
-                <div className="mt-0.5 text-[11.5px] text-[var(--color-ink-2)]">
+                <div className="mt-0.5 text-[11.5px] text-ink-2">
                   {ofxRows!.length} transaction{ofxRows!.length === 1 ? '' : 's'} parsed.
                   Each carries a bank-issued ID — re-importing the same file is safe (duplicates are skipped).
                 </div>
@@ -336,7 +336,8 @@ export function ImportWizard({
               <button
                 type="button"
                 onClick={clearAll}
-                className="inline-flex min-h-[44px] shrink-0 items-center rounded-full px-3 text-[12.5px] font-semibold text-[var(--color-ink-2)] underline-offset-2 hover:text-[var(--color-ink)] hover:underline"
+                aria-label="Clear loaded OFX file"
+                className="inline-flex min-h-[44px] shrink-0 items-center rounded-full px-3 text-[12.5px] font-semibold text-ink-2 underline-offset-2 hover:text-ink hover:underline"
               >
                 Clear
               </button>
@@ -356,15 +357,16 @@ export function ImportWizard({
               aria-label="Paste CSV statement"
               className="maple-textarea font-mono"
             />
-            <div className="mt-1.5 flex flex-col gap-2 text-[12px] text-[var(--color-ink-3)] sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+            <div className="mt-1.5 flex flex-col gap-2 text-[12px] text-ink-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
               <span>{raw ? `${bodyRows.length} row${bodyRows.length === 1 ? '' : 's'} detected` : 'Headers on line 1.'}</span>
               <div className="flex flex-wrap items-center gap-1">
-                <label className="inline-flex min-h-[44px] cursor-pointer items-center rounded-full px-3 text-[12.5px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline">
+                <label className="inline-flex min-h-[44px] cursor-pointer items-center rounded-full px-3 text-[12.5px] font-semibold text-ink-2 hover:text-ink hover:underline">
                   Upload .csv / .ofx / .qfx
                   <input
                     ref={fileInputRef}
                     type="file"
                     accept=".csv,.ofx,.qfx,text/csv,application/x-ofx"
+                    aria-label="Upload a CSV, OFX, or QFX file"
                     onChange={(e) => {
                       const f = e.target.files?.[0]
                       if (f) handleFile(f)
@@ -376,7 +378,7 @@ export function ImportWizard({
                   <button
                     type="button"
                     onClick={() => setRaw(SAMPLE)}
-                    className="inline-flex min-h-[44px] items-center rounded-full px-3 text-[12.5px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline"
+                    className="inline-flex min-h-[44px] items-center rounded-full px-3 text-[12.5px] font-semibold text-ink-2 hover:text-ink hover:underline"
                   >
                     Try a sample →
                   </button>
@@ -385,7 +387,8 @@ export function ImportWizard({
                   <button
                     type="button"
                     onClick={clearAll}
-                    className="inline-flex min-h-[44px] items-center rounded-full px-3 text-[12.5px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline"
+                    aria-label="Clear pasted CSV"
+                    className="inline-flex min-h-[44px] items-center rounded-full px-3 text-[12.5px] font-semibold text-ink-2 hover:text-ink hover:underline"
                   >
                     Clear
                   </button>
@@ -396,10 +399,7 @@ export function ImportWizard({
                 file errors the moment they appear. */}
             <div aria-live="assertive" role="alert">
               {fileError && (
-                <p
-                  className="mt-2 rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
-                  style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
-                >
+                <p className="mt-2 rounded-md bg-maple-soft px-3 py-1.5 text-[12.5px] font-medium text-maple">
                   {fileError}
                 </p>
               )}
@@ -457,11 +457,12 @@ export function ImportWizard({
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             {headers.map((h, i) => (
               <label key={`${i}:${h}`} className="flex flex-col gap-1">
-                <span className="truncate text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+                <span className="truncate text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
                   {h || `Column ${i + 1}`}
                 </span>
                 <select
                   value={mapping[i] ?? 'ignore'}
+                  aria-label={`Map column "${h || `Column ${i + 1}`}" to a field`}
                   onChange={(e) =>
                     setMapping((prev) => {
                       const copy = [...prev]
@@ -485,24 +486,24 @@ export function ImportWizard({
 
       {/* ─── 3. Preview ─── */}
       {previewRows.length > 0 && (
-        <section className="overflow-hidden rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)]">
-          <header className="flex items-baseline justify-between border-b border-[var(--color-hair)] px-5 py-3.5">
+        <section className="overflow-hidden rounded-lg border border-hair bg-paper">
+          <header className="flex items-baseline justify-between border-b border-hair px-5 py-3.5">
             <div className="flex items-baseline gap-3">
               <StepBadge n={3} />
               <MapleLabel>Preview</MapleLabel>
             </div>
             <div className="flex items-center gap-4 text-[11.5px]">
               <span className="flex items-center gap-1.5">
-                <Dot color="var(--color-leaf)" />
-                <span className="text-[var(--color-ink-2)]">
-                  <b className="tabular-nums text-[var(--color-ink)]">{readyCount}</b> ready
+                <Dot className="bg-leaf" />
+                <span className="text-ink-2">
+                  <b className="tabular-nums text-ink">{readyCount}</b> ready
                 </span>
               </span>
               {errorCount > 0 && (
                 <span className="flex items-center gap-1.5">
-                  <Dot color="var(--color-maple)" />
-                  <span className="text-[var(--color-ink-2)]">
-                    <b className="tabular-nums text-[var(--color-maple)]">{errorCount}</b> with errors
+                  <Dot className="bg-maple" />
+                  <span className="text-ink-2">
+                    <b className="tabular-nums text-maple">{errorCount}</b> with errors
                   </span>
                 </span>
               )}
@@ -518,28 +519,28 @@ export function ImportWizard({
                 return (
                   <li
                     key={idx}
-                    className="rounded-[12px] border border-[var(--color-hair)] p-3"
-                    style={{ background: r.error ? 'var(--color-maple-soft)' : 'var(--color-paper)' }}
+                    className={`rounded-md border border-hair p-3 ${
+                      r.error ? 'bg-maple-soft' : 'bg-paper'
+                    }`}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <StatusChip error={r.error} />
-                      <span
-                        className="font-mono text-[14px] tabular-nums"
-                        style={{
-                          color:
-                            d.amt === null
-                              ? 'var(--color-ink-3)'
-                              : d.isIncome
-                                ? 'var(--color-leaf)'
-                                : 'var(--color-maple)',
-                        }}
-                      >
-                        {d.amt !== null ? formatMoney(d.amt) : r.amountRaw}
-                      </span>
+                      {d.amt !== null ? (
+                        <Amount
+                          cents={d.amt}
+                          sign="auto"
+                          tone={d.isIncome ? 'leaf' : 'maple'}
+                          className="font-mono text-[14px]"
+                        />
+                      ) : (
+                        <span className="font-mono text-[14px] tabular-nums text-ink-3">
+                          {r.amountRaw}
+                        </span>
+                      )}
                     </div>
-                    <div className="mt-2 text-[13px] text-[var(--color-ink)]">
+                    <div className="mt-2 text-[13px] text-ink">
                       {r.description || (
-                        <span className="text-[var(--color-ink-3)]">No description</span>
+                        <span className="text-ink-3">No description</span>
                       )}
                     </div>
                     <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11.5px]">
@@ -561,10 +562,7 @@ export function ImportWizard({
                 lead so the verdict columns show before any horizontal scroll. */}
             <div className="hidden sm:block">
               <DataTable minWidth={820}>
-                <thead
-                  className="sticky top-0 text-left text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]"
-                  style={{ background: 'var(--color-cream-2)' }}
-                >
+                <thead className="sticky top-0 bg-cream-2 text-left text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
                   <tr>
                     <Th>Status</Th>
                     <Th align="right">Amount</Th>
@@ -581,29 +579,21 @@ export function ImportWizard({
                     return (
                       <tr
                         key={idx}
-                        className="border-t border-[var(--color-hair)]"
-                        style={r.error ? { background: 'var(--color-maple-soft)' } : undefined}
+                        className={`border-t border-hair ${r.error ? 'bg-maple-soft' : ''}`}
                       >
                         <Td>
                           <StatusChip error={r.error} />
                         </Td>
-                        <Td
-                          align="right"
-                          mono
-                          style={{
-                            color:
-                              d.amt === null
-                                ? 'var(--color-ink-3)'
-                                : d.isIncome
-                                  ? 'var(--color-leaf)'
-                                  : 'var(--color-maple)',
-                          }}
-                        >
-                          {d.amt !== null ? formatMoney(d.amt) : r.amountRaw}
+                        <Td align="right" mono>
+                          {d.amt !== null ? (
+                            <Amount cents={d.amt} sign="auto" tone={d.isIncome ? 'leaf' : 'maple'} />
+                          ) : (
+                            <span className="text-ink-3">{r.amountRaw}</span>
+                          )}
                         </Td>
                         <Td mono>{r.date}</Td>
                         <Td>
-                          {r.description || <span className="text-[var(--color-ink-3)]">—</span>}
+                          {r.description || <span className="text-ink-3">—</span>}
                         </Td>
                         <Td muted={d.categoryName === 'Uncategorized'}>{d.categoryName}</Td>
                         <Td>{d.accountName}</Td>
@@ -625,18 +615,12 @@ export function ImportWizard({
           announce both success and failure. */}
       <div aria-live="polite" role="status">
         {state && 'error' in state && state.error && (
-          <p
-            className="rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
-            style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
-          >
+          <p className="rounded-md bg-maple-soft px-3 py-1.5 text-[12.5px] font-medium text-maple">
             {state.error}
           </p>
         )}
         {state && 'ok' in state && state.ok && (
-          <p
-            className="rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
-            style={{ background: 'var(--color-leaf-soft)', color: 'var(--color-leaf)' }}
-          >
+          <p className="rounded-md bg-leaf-soft px-3 py-1.5 text-[12.5px] font-medium text-leaf">
             Imported {state.count} transaction{state.count === 1 ? '' : 's'}
             {state.skipped > 0 && `, skipped ${state.skipped} duplicate${state.skipped === 1 ? '' : 's'}`}
             .
@@ -647,16 +631,12 @@ export function ImportWizard({
       {readyCount > 0 && (
         <form action={formAction} className="flex flex-wrap items-center justify-end gap-4">
           <input type="hidden" name="rows" value={JSON.stringify(stagedRows)} />
-          <button
-            type="submit"
-            disabled={pending}
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-full bg-[var(--color-ink)] px-5 py-3 text-[13.5px] font-semibold text-[var(--color-paper)] transition-all active:scale-[0.98] disabled:opacity-50"
-          >
+          <Button type="submit" variant="primary" disabled={pending}>
             {pending
               ? 'Importing…'
               : `Import ${readyCount} transaction${readyCount === 1 ? '' : 's'}`}
             {!pending && <span aria-hidden>→</span>}
-          </button>
+          </Button>
         </form>
       )}
     </div>
@@ -687,17 +667,11 @@ function derivePreview(
 // cue, so the verdict survives in greyscale.
 function StatusChip({ error }: { error?: string }) {
   return error ? (
-    <span
-      className="inline-block rounded-full px-2 py-0.5 text-[10.5px] font-semibold"
-      style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
-    >
+    <span className="inline-block rounded-full bg-maple-soft px-2 py-0.5 text-[10.5px] font-semibold text-maple">
       {error}
     </span>
   ) : (
-    <span
-      className="inline-block rounded-full px-2 py-0.5 text-[10.5px] font-semibold"
-      style={{ background: 'var(--color-leaf-soft)', color: 'var(--color-leaf)' }}
-    >
+    <span className="inline-block rounded-full bg-leaf-soft px-2 py-0.5 text-[10.5px] font-semibold text-leaf">
       Ready
     </span>
   )
@@ -716,13 +690,12 @@ function MetaPair({
 }) {
   return (
     <div className="flex flex-col">
-      <dt className="text-[9.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+      <dt className="text-[9.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
         {label}
       </dt>
       <dd
         className={
-          (mono ? 'tabular-nums ' : '') +
-          (muted ? 'text-[var(--color-ink-3)]' : 'text-[var(--color-ink)]')
+          (mono ? 'tabular-nums ' : '') + (muted ? 'text-ink-3' : 'text-ink')
         }
       >
         {value}
@@ -733,7 +706,7 @@ function MetaPair({
 
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6">
+    <section className="rounded-lg border border-hair bg-paper p-5 md:p-6">
       <header className="mb-4 flex items-baseline gap-3">
         <StepBadge n={n} />
         <MapleLabel>{title}</MapleLabel>
@@ -745,10 +718,7 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
 
 function StepBadge({ n }: { n: number }) {
   return (
-    <span
-      className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full font-serif text-[12px] tabular-nums"
-      style={{ background: 'var(--color-ink)', color: 'var(--color-paper)' }}
-    >
+    <span className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full bg-ink font-serif text-[12px] tabular-nums text-paper">
       {n}
     </span>
   )
@@ -757,7 +727,7 @@ function StepBadge({ n }: { n: number }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+      <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
         {label}
       </span>
       {children}
@@ -787,28 +757,26 @@ function Td({
   align = 'left',
   mono,
   muted,
-  style,
 }: {
   children: React.ReactNode
   align?: 'left' | 'right'
   mono?: boolean
   muted?: boolean
-  style?: React.CSSProperties
 }) {
   return (
     <td
       className={
         'px-4 py-2 ' +
         (mono ? 'tabular-nums ' : '') +
-        (muted ? 'text-[var(--color-ink-3)]' : 'text-[var(--color-ink)]')
+        (muted ? 'text-ink-3' : 'text-ink')
       }
-      style={{ textAlign: align, ...style }}
+      style={{ textAlign: align }}
     >
       {children}
     </td>
   )
 }
 
-function Dot({ color }: { color: string }) {
-  return <span className="inline-block h-[8px] w-[8px] rounded-full" style={{ background: color }} />
+function Dot({ className = '' }: { className?: string }) {
+  return <span className={`inline-block h-[8px] w-[8px] rounded-full ${className}`} />
 }

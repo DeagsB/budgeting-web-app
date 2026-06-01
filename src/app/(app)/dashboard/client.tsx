@@ -8,6 +8,7 @@ import { smoothPath, seriesToPoints } from '@/lib/maple'
 import { accountTypeLabel, LIABILITY_TYPES, type AccountType } from '@/lib/domain'
 import { MapleLabel } from '@/components/ui/label'
 import { Amount } from '@/components/ui/amount'
+import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { StatTile } from '@/components/ui/stat-tile'
 import { Reveal } from '@/components/ui/reveal'
@@ -626,6 +627,11 @@ export function DashboardClient({
               </div>
               <div className="relative mt-3 h-2.5 overflow-hidden rounded-full bg-paper-2">
                 <div
+                  role="progressbar"
+                  aria-label="Budget used this month"
+                  aria-valuenow={Math.round(pct * 100)}
+                  aria-valuemin={0}
+                  aria-valuemax={120}
                   className="h-full rounded-full transition-all duration-300"
                   style={{
                     width: over ? '100%' : `${Math.round(pct * 100)}%`,
@@ -638,6 +644,7 @@ export function DashboardClient({
                   <div
                     className="pointer-events-none absolute inset-y-0 w-[2px] bg-paper"
                     style={{ left: `calc(${breakpoint}% - 1px)` }}
+                    aria-hidden
                   />
                 )}
               </div>
@@ -769,6 +776,11 @@ export function DashboardClient({
                   </div>
                   <div className="mt-2 h-2 overflow-hidden rounded-full bg-paper-2">
                     <div
+                      role="progressbar"
+                      aria-label={`${g.name} progress`}
+                      aria-valuenow={Math.round(pct * 100)}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
                       className="h-full rounded-full bg-leaf transition-all duration-300"
                       style={{ width: `${Math.round(pct * 100)}%` }}
                     />
@@ -934,51 +946,51 @@ function DashboardEditor({
       <div
         role="dialog"
         aria-label="Edit dashboard"
-        className="fixed inset-x-0 bottom-0 z-[60] flex max-h-[88vh] flex-col rounded-t-[24px] border-t border-[var(--color-hair)] bg-[var(--color-cream)] shadow-[var(--shadow-float)] sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:max-h-[80vh] sm:w-[460px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[20px]"
+        className="fixed inset-x-0 bottom-0 z-[60] flex max-h-[88vh] flex-col rounded-t-xl border-t border-hair bg-cream shadow-[var(--shadow-float)] sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:max-h-[80vh] sm:w-[460px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }}
       >
         <div className="flex justify-center pb-1 pt-2 sm:hidden">
-          <div className="h-1 w-10 rounded-full bg-[var(--color-hair)]" aria-hidden />
+          <div className="h-1 w-10 rounded-full bg-hair" aria-hidden />
         </div>
-        <header className="flex items-baseline justify-between border-b border-[var(--color-hair)] px-5 py-3.5 sm:py-5">
+        <header className="flex items-baseline justify-between border-b border-hair px-5 py-3.5 sm:py-5">
           <div>
-            <div className="font-serif text-[20px] tracking-[-0.02em] text-[var(--color-ink)]">
+            <div className="font-serif text-[20px] tracking-[-0.02em] text-ink">
               Edit dashboard
             </div>
-            <div className="mt-0.5 text-[12px] text-[var(--color-ink-2)]">
+            <div className="mt-0.5 text-[12px] text-ink-2">
               Pick the widgets you want, drag-rank with the arrows.
             </div>
           </div>
           <button
             type="button"
             onClick={onCancel}
-            aria-label="Close"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)]"
+            aria-label="Close edit dashboard"
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-hair bg-paper text-ink-2"
           >
             <CloseGlyph />
           </button>
         </header>
 
         <div className="flex-1 overflow-y-auto px-3 py-3">
-          <div className="px-2 pb-1.5 text-[10.5px] font-bold uppercase tracking-[0.10em] text-[var(--color-ink-3)]">
+          <div className="px-2 pb-1.5 text-[10.5px] font-bold uppercase tracking-[0.10em] text-ink-3">
             On the dashboard ({visible.length})
           </div>
           <ul className="flex flex-col gap-1.5">
             {visible.length === 0 && (
-              <li className="rounded-[12px] border border-dashed border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-3 text-center text-[12.5px] text-[var(--color-ink-2)]">
+              <li className="rounded-md border border-dashed border-hair bg-paper px-3 py-3 text-center text-[12.5px] text-ink-2">
                 Add a widget below to put it on the dashboard.
               </li>
             )}
             {visible.map((w, i) => (
               <li
                 key={w.id}
-                className="flex items-center gap-2 rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2.5"
+                className="flex items-center gap-2 rounded-md border border-hair bg-paper px-3 py-2.5"
               >
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[14px] font-medium text-[var(--color-ink)]">
+                  <div className="truncate text-[14px] font-medium text-ink">
                     {w.label}
                   </div>
-                  <div className="truncate text-[11.5px] text-[var(--color-ink-3)]">
+                  <div className="truncate text-[11.5px] text-ink-3">
                     {w.description}
                   </div>
                 </div>
@@ -986,8 +998,8 @@ function DashboardEditor({
                   type="button"
                   onClick={() => move(w.id, -1)}
                   disabled={i === 0}
-                  aria-label="Move up"
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--color-ink-2)] disabled:opacity-30"
+                  aria-label={`Move ${w.label} up`}
+                  className="flex h-11 w-11 items-center justify-center rounded-full text-ink-2 disabled:opacity-30"
                 >
                   <ArrowUpGlyph />
                 </button>
@@ -995,8 +1007,8 @@ function DashboardEditor({
                   type="button"
                   onClick={() => move(w.id, 1)}
                   disabled={i === visible.length - 1}
-                  aria-label="Move down"
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--color-ink-2)] disabled:opacity-30"
+                  aria-label={`Move ${w.label} down`}
+                  className="flex h-11 w-11 items-center justify-center rounded-full text-ink-2 disabled:opacity-30"
                 >
                   <ArrowDownGlyph />
                 </button>
@@ -1004,7 +1016,7 @@ function DashboardEditor({
                   type="button"
                   onClick={() => remove(w.id)}
                   aria-label={`Hide ${w.label}`}
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--color-maple)]"
+                  className="flex h-11 w-11 items-center justify-center rounded-full text-maple"
                 >
                   <CloseGlyph />
                 </button>
@@ -1014,27 +1026,28 @@ function DashboardEditor({
 
           {hiddenWidgets.length > 0 && (
             <>
-              <div className="mt-4 px-2 pb-1.5 text-[10.5px] font-bold uppercase tracking-[0.10em] text-[var(--color-ink-3)]">
+              <div className="mt-4 px-2 pb-1.5 text-[10.5px] font-bold uppercase tracking-[0.10em] text-ink-3">
                 Available widgets
               </div>
               <ul className="flex flex-col gap-1.5">
                 {hiddenWidgets.map((w) => (
                   <li
                     key={w.id}
-                    className="flex items-center gap-2 rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-paper-2)] px-3 py-2.5"
+                    className="flex items-center gap-2 rounded-md border border-hair bg-paper-2 px-3 py-2.5"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[14px] font-medium text-[var(--color-ink-2)]">
+                      <div className="truncate text-[14px] font-medium text-ink-2">
                         {w.label}
                       </div>
-                      <div className="truncate text-[11.5px] text-[var(--color-ink-3)]">
+                      <div className="truncate text-[11.5px] text-ink-3">
                         {w.description}
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={() => add(w.id)}
-                      className="rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-1 text-[12px] font-semibold text-[var(--color-ink)]"
+                      aria-label={`Add ${w.label} to dashboard`}
+                      className="inline-flex min-h-[44px] items-center rounded-full border border-hair bg-paper px-3 text-[12px] font-semibold text-ink"
                     >
                       + Add
                     </button>
@@ -1045,29 +1058,21 @@ function DashboardEditor({
           )}
         </div>
 
-        <footer className="flex items-center justify-between gap-3 border-t border-[var(--color-hair)] px-5 py-3.5 sm:px-6 sm:py-4">
+        <footer className="flex items-center justify-between gap-3 border-t border-hair px-5 py-3.5 sm:px-6 sm:py-4">
           <button
             type="button"
             onClick={() => setDraft(DEFAULT_LAYOUT)}
-            className="text-[12.5px] font-semibold text-[var(--color-ink-2)] underline-offset-2 hover:text-[var(--color-ink)] hover:underline"
+            className="inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-ink-2 underline-offset-2 hover:text-ink hover:underline"
           >
             Reset to default
           </button>
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-4 py-2 text-[13px] font-semibold text-[var(--color-ink)]"
-            >
+            <Button type="button" variant="secondary" size="sm" onClick={onCancel}>
               Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => onSave(draft)}
-              className="rounded-full bg-[var(--color-ink)] px-5 py-2 text-[13px] font-semibold text-[var(--color-paper)] active:scale-[0.98]"
-            >
+            </Button>
+            <Button type="button" variant="primary" size="sm" onClick={() => onSave(draft)}>
               Save
-            </button>
+            </Button>
           </div>
         </footer>
       </div>

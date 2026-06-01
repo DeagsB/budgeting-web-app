@@ -67,20 +67,20 @@ export default async function AutoImportSetupPage() {
     <div className="flex flex-col gap-6 pb-10">
       <header className="flex flex-col gap-1">
         <div className="flex items-baseline justify-between">
-          <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+          <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-3">
             Auto-import
           </div>
           <Link
             href="/transactions/import"
-            className="text-[12.5px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline"
+            className="text-[12.5px] font-semibold text-ink-2 hover:text-ink hover:underline"
           >
             ← Import
           </Link>
         </div>
-        <h1 className="font-serif text-[34px] leading-[1.05] tracking-[-0.02em] text-[var(--color-ink)] md:text-[40px]">
+        <h1 className="font-serif text-[34px] leading-[1.05] tracking-[-0.02em] text-ink md:text-[40px]">
           Forward your bank&rsquo;s alerts. We do the rest.
         </h1>
-        <p className="mt-2 max-w-[640px] text-[14px] leading-relaxed text-[var(--color-ink-2)]">
+        <p className="mt-2 max-w-[640px] text-[14px] leading-relaxed text-ink-2">
           Every Canadian bank can email you the second a card is swiped. We pair that
           with a tiny Gmail script you install once — alerts land here as transactions
           within seconds. No credentials shared, no monthly fees, you control every rule.
@@ -88,12 +88,12 @@ export default async function AutoImportSetupPage() {
       </header>
 
       {!hasAccounts && (
-        <section className="rounded-[20px] border border-dashed border-[var(--color-hair)] bg-[var(--color-paper)] p-5 text-[13.5px] text-[var(--color-ink-2)] md:p-6">
+        <section className="rounded-lg border border-dashed border-hair bg-paper p-5 text-[13.5px] text-ink-2 md:p-6">
           You need at least one account before auto-imported transactions have somewhere
           to land.{' '}
           <Link
             href="/accounts"
-            className="font-semibold text-[var(--color-ink)] underline-offset-2 hover:underline"
+            className="font-semibold text-ink underline-offset-2 hover:underline"
           >
             Add an account →
           </Link>
@@ -101,20 +101,14 @@ export default async function AutoImportSetupPage() {
       )}
 
       {!hasServiceRoleKey && (
-        <section
-          className="rounded-[20px] border p-5 md:p-6"
-          style={{ borderColor: 'var(--color-honey)', background: 'var(--color-paper-2)' }}
-        >
-          <div
-            className="text-[10.5px] font-bold uppercase tracking-[0.08em]"
-            style={{ color: 'var(--color-down)' }}
-          >
+        <section className="rounded-lg border border-honey bg-paper-2 p-5 md:p-6">
+          <div className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-down">
             One more env var needed
           </div>
-          <p className="mt-1.5 text-[13.5px] leading-relaxed text-[var(--color-ink-2)]">
-            The webhook needs <code className="rounded bg-[var(--color-cream-2)] px-1.5 py-0.5 font-mono text-[12px]">SUPABASE_SERVICE_ROLE_KEY</code>{' '}
+          <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-2">
+            The webhook needs <code className="rounded bg-cream-2 px-1.5 py-0.5 font-mono text-[12px]">SUPABASE_SERVICE_ROLE_KEY</code>{' '}
             to write incoming transactions on your behalf. Add it to{' '}
-            <code className="rounded bg-[var(--color-cream-2)] px-1.5 py-0.5 font-mono text-[12px]">.env.local</code>{' '}
+            <code className="rounded bg-cream-2 px-1.5 py-0.5 font-mono text-[12px]">.env.local</code>{' '}
             (Supabase dashboard → Project Settings → API → <em>service_role</em> key) and restart
             the dev server. Until then the webhook will respond 503 and no alerts will land.
           </p>

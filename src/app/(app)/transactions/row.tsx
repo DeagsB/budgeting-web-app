@@ -6,6 +6,7 @@ import { CategorySelect } from './category-select'
 import { SplitEditor } from './split-editor'
 import { ConfirmButton } from '@/components/ui/confirm-button'
 import { Amount } from '@/components/ui/amount'
+import { Button } from '@/components/ui/button'
 
 type TransactionVM = {
   id: string
@@ -43,7 +44,7 @@ export function TransactionRow({
     const abs = Math.abs(t.amount_cents)
     const dir = t.amount_cents < 0 ? 'in' : 'out'
     return (
-      <li className="bg-[var(--color-cream-2)]/60 px-5 py-4">
+      <li className="bg-cream-2/60 px-5 py-4">
         <form
           action={async (fd) => {
             await updateTransaction(fd)
@@ -102,10 +103,7 @@ export function TransactionRow({
                 compact
               />
               {t.isSplit && (
-                <p
-                  className="mt-1 rounded-[8px] px-2 py-1 text-[11px]"
-                  style={{ background: 'var(--color-butter)', color: 'var(--color-ink)' }}
-                >
+                <p className="mt-1 rounded-md bg-butter px-2 py-1 text-[11px] text-ink">
                   This transaction is split. Changing the category here replaces every split with one row.
                 </p>
               )}
@@ -135,19 +133,12 @@ export function TransactionRow({
           </div>
 
           <div className="flex items-center gap-3 pt-1">
-            <button
-              type="submit"
-              className="inline-flex items-center rounded-full bg-[var(--color-ink)] px-4 py-2 text-[12.5px] font-semibold text-[var(--color-paper)]"
-            >
+            <Button type="submit" variant="primary" size="sm">
               Save
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditing(false)}
-              className="text-[12.5px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
-            >
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>
               Cancel
-            </button>
+            </Button>
           </div>
         </form>
       </li>
@@ -168,9 +159,9 @@ export function TransactionRow({
 
   return (
     <li className="flex flex-col">
-      <div className="group flex items-start gap-3 px-5 py-4 text-[14px] transition-colors hover:bg-[var(--color-cream-2)]/40">
+      <div className="group flex items-start gap-3 px-5 py-4 text-[14px] transition-colors hover:bg-cream-2/40">
         <div
-          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-serif text-[14px] text-[var(--color-ink)]"
+          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-serif text-[14px]"
           style={{ background: disc.bg, color: disc.fg }}
           aria-hidden
         >
@@ -179,21 +170,15 @@ export function TransactionRow({
 
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-3">
-            <div className="min-w-0 truncate font-medium text-[var(--color-ink)]">
+            <div className="min-w-0 truncate font-medium text-ink">
               {t.description ?? '—'}
               {t.isSplit && (
-                <span
-                  className="ml-2 inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em]"
-                  style={{ background: 'var(--color-paper-2)', color: 'var(--color-ink-2)' }}
-                >
+                <span className="ml-2 inline-flex items-center rounded-full bg-paper-2 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-ink-2">
                   Split
                 </span>
               )}
               {t.isShared && (
-                <span
-                  className="ml-1.5 inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em]"
-                  style={{ background: 'var(--color-leaf-soft)', color: 'var(--color-leaf)' }}
-                >
+                <span className="ml-1.5 inline-flex items-center rounded-full bg-leaf-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-leaf">
                   Shared
                 </span>
               )}
@@ -206,7 +191,7 @@ export function TransactionRow({
             </div>
           </div>
 
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-[var(--color-ink-3)]">
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-ink-3">
             <span className="truncate">{t.categorySummary}</span>
             <span>·</span>
             <span>{t.accountName}</span>
@@ -247,7 +232,7 @@ export function TransactionRow({
       </div>
 
       {showSplits && (
-        <div className="border-t border-[var(--color-hair)] bg-[var(--color-cream-2)] px-5 py-5">
+        <div className="border-t border-hair bg-cream-2 px-5 py-5">
           <SplitEditor
             transactionId={t.id}
             totalAmountCents={t.amount_cents}
@@ -264,7 +249,7 @@ export function TransactionRow({
 
 function MicroLabel({ children }: { children: React.ReactNode }) {
   return (
-    <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+    <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.08em] text-ink-3">
       {children}
     </span>
   )

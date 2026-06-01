@@ -10,6 +10,7 @@ import { Amount } from '@/components/ui/amount'
 import { EmptyState } from '@/components/ui/empty-state'
 import { DataTable } from '@/components/ui/data-table'
 import { MapleLabel } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
 import { LoanForm } from './form'
 import { RateHistory } from './rate-history'
 
@@ -162,11 +163,10 @@ export default async function LoansPage() {
           title="No loan accounts yet"
           body="Create one on the Accounts page with type set to Loan, then come back to add terms."
           action={
-            <Link
-              href="/accounts"
-              className="inline-flex min-h-[44px] items-center rounded-full bg-leaf px-5 text-[13px] font-semibold text-paper"
-            >
-              Go to Accounts
+            <Link href="/accounts">
+              <Button variant="primary" size="md">
+                Go to Accounts
+              </Button>
             </Link>
           }
         />

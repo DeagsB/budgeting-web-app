@@ -166,12 +166,9 @@ function OpeningInput({ memberId, row }: { memberId: string; row: Row }) {
           ? (row.suggestedOpeningCents / 100).toFixed(2)
           : '0.00'
       }
-      className="maple-input sm w-full text-right tabular-nums"
-      style={
-        row.openingIsSuggestion
-          ? { borderColor: 'var(--color-honey)', background: 'var(--color-paper-2)' }
-          : undefined
-      }
+      className={`maple-input sm w-full text-right tabular-nums ${
+        row.openingIsSuggestion ? 'border-honey bg-paper-2' : ''
+      }`}
       title={
         row.openingIsSuggestion
           ? `Suggested from prior year (${row.type === 'tfsa' ? 'TFSA withdrawals restore on Jan 1' : 'carries unused room only'})`
@@ -232,11 +229,8 @@ function RoomCard({ memberId, row }: { memberId: string; row: Row }) {
         aria-label={`${row.typeLabel} room used for ${row.memberName}${over ? ', over contributed' : ''}`}
       >
         <div
-          className="h-full rounded-full transition-all"
-          style={{
-            width: `${fill}%`,
-            background: over ? 'var(--color-maple)' : 'var(--color-leaf)',
-          }}
+          className={`h-full rounded-full transition-all ${over ? 'bg-maple' : 'bg-leaf'}`}
+          style={{ width: `${fill}%` }}
         />
       </div>
       <div className="mt-1.5 flex items-center justify-between text-[11.5px] text-ink-3">
