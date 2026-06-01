@@ -1,11 +1,16 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
-import { addMonths, monthLabel, monthStartISO, formatMoney, formatDate } from '@/lib/format'
+import { addMonths, monthLabel, monthStartISO, formatDate } from '@/lib/format'
+import { PageHeader } from '@/components/ui/page-header'
+import { StatTile } from '@/components/ui/stat-tile'
+import { Amount } from '@/components/ui/amount'
+import { MonthNav } from '@/components/ui/month-nav'
+import { EmptyState } from '@/components/ui/empty-state'
 import { MapleLabel } from '@/components/ui/label'
-import { AddTransactionForm } from './add-form'
 import { TransactionRow } from './row'
 import { SyncNowButton } from './sync-button'
+import { TxControls } from './tx-controls'
 
 type Txn = {
   id: string
@@ -26,11 +31,12 @@ type Split = {
 export default async function TransactionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; account?: string; category?: string; member?: string }>
+  searchParams: Promise<{ month?: string; account?: string; category?: string; member?: string; q?: string }>
 }) {
   const params = await searchParams
   const month = params.month && /^\d{4}-\d{2}-01$/.test(params.month) ? params.month : monthStartISO()
   const nextMonth = addMonths(month, 1)
+  const search = (params.q ?? '').trim()
 
   const ctx = await getHouseholdContext()
   if (!ctx) return null
@@ -75,6 +81,7 @@ export default async function TransactionsPage({
   if (params.account) q = q.eq('account_id', params.account)
   if (params.member === 'shared') q = q.is('member_id', null)
   else if (params.member) q = q.eq('member_id', params.member)
+  if (search) q = q.ilike('description', `%${search}%`)
 
   const { data: rows } = await q
   let transactions = (rows ?? []) as Txn[]
@@ -108,6 +115,9 @@ export default async function TransactionsPage({
     splitsByTx.get(s.transaction_id)!.push(s)
   }
 
+  // Totals computed from the *filtered* set (account + member + search applied
+  // in the query, category applied above) so the summary always matches the
+  // visible list. Sign convention: positive cents = outflow, negative = inflow.
   const outflow = transactions.filter((t) => t.amount_cents > 0).reduce((s, t) => s + t.amount_cents, 0)
   const inflow = transactions.filter((t) => t.amount_cents < 0).reduce((s, t) => s - t.amount_cents, 0)
   const net = outflow - inflow
@@ -124,25 +134,35 @@ export default async function TransactionsPage({
     byDay.get(key)!.push(t)
   }
 
-  const hasFilter = !!(params.account || params.category || params.member)
+  const hasFilter = !!(params.account || params.category || params.member || search)
   const clearQuery: Record<string, string> = { month }
+
+  const accountOptions = (accounts ?? []).map((a) => ({ id: a.id, name: a.name }))
+  const categoryOptions = (categories ?? []).map((c) => ({ id: c.id, parent_id: c.parent_id, name: c.name }))
+  const memberOptions = (members ?? []).map((m) => ({ id: m.id, name: m.display_name }))
+
+  const monthHref = (iso: string) => {
+    const qs = new URLSearchParams()
+    qs.set('month', iso)
+    if (params.account) qs.set('account', params.account)
+    if (params.category) qs.set('category', params.category)
+    if (params.member) qs.set('member', params.member)
+    if (search) qs.set('q', search)
+    return `/transactions?${qs.toString()}`
+  }
 
   return (
     <div className="flex flex-col gap-6 pb-10">
-      {/* Header */}
-      <header className="flex flex-col gap-1">
-        <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
-          Activity · {monthLabel(month)}
-        </div>
-        <div className="flex items-end justify-between gap-4">
-          <h1 className="font-serif text-[34px] leading-[1.05] tracking-[-0.02em] text-[var(--color-ink)] md:text-[40px]">
-            Every dollar, accounted for.
-          </h1>
-          <div className="flex shrink-0 items-center gap-2">
+      <PageHeader
+        eyebrow="Transactions"
+        title="Transactions"
+        subtitle={monthLabel(month)}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
             <SyncNowButton hasSyncUrl={hasSyncUrl} />
             <Link
               href="/transactions/import"
-              className="hidden items-center gap-1.5 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3.5 py-2 text-[12.5px] font-semibold text-[var(--color-ink)] transition-colors hover:bg-[var(--color-cream-2)] sm:inline-flex"
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-hair bg-paper px-3.5 text-[12.5px] font-semibold text-ink transition-colors hover:bg-cream-2"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -152,169 +172,70 @@ export default async function TransactionsPage({
               Import CSV
             </Link>
           </div>
-        </div>
-      </header>
+        }
+      />
 
-      {/* Month nav — three equal-width buttons spanning the page so each
-          tap target is large and the row is balanced. */}
-      <nav className="grid grid-cols-3 gap-2 text-[13px]">
-        <Link
-          href={{ pathname: '/transactions', query: { ...params, month: addMonths(month, -1) } }}
-          className="inline-flex items-center justify-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2 font-medium text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
-        >
-          ← Previous
-        </Link>
-        <Link
-          href={{ pathname: '/transactions', query: { ...params, month: monthStartISO() } }}
-          className="inline-flex items-center justify-center rounded-full border border-[var(--color-hair)] bg-[var(--color-paper-2)] px-3 py-2 font-semibold text-[var(--color-ink)] transition-colors"
-        >
-          This month
-        </Link>
-        <Link
-          href={{ pathname: '/transactions', query: { ...params, month: addMonths(month, 1) } }}
-          className="inline-flex items-center justify-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2 font-medium text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
-        >
-          Next →
-        </Link>
-      </nav>
+      {/* Month nav — link-based; "This month" pill only shows off the current month. */}
+      <MonthNav monthISO={month} makeHref={monthHref} />
 
-      {/* Stats */}
+      {/* Stats — reflect the active filter set. */}
       <section className="grid grid-cols-3 gap-3">
-        <StatTile label="Outflow" value={formatMoney(outflow)} tone="ink" />
-        <StatTile label="Inflow" value={formatMoney(inflow)} tone="leaf" />
-        <StatTile label="Net" value={formatMoney(net)} tone={net >= 0 ? 'leaf' : 'maple'} />
+        <StatTile label="Outflow" value={<Amount cents={outflow} tone="maple" />} tone="maple" />
+        <StatTile label="Inflow" value={<Amount cents={inflow} tone="leaf" />} tone="leaf" />
+        <StatTile
+          label="Net"
+          value={<Amount cents={net} tone={net >= 0 ? 'leaf' : 'maple'} />}
+          tone={net >= 0 ? 'leaf' : 'maple'}
+        />
       </section>
 
-      {/* Filters — collapsed by default; auto-opens when filters are active so
-          the user always sees what's narrowing the list. */}
-      {(accounts ?? []).length > 0 && (
-        <details
-          open={hasFilter}
-          className="group rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)] [&_summary]:list-none [&_summary::-webkit-details-marker]:hidden"
-        >
-          <summary className="flex cursor-pointer items-center justify-between px-5 py-3.5">
-            <div className="flex items-center gap-2">
-              <MapleLabel>Filters</MapleLabel>
-              {hasFilter && (
-                <span
-                  className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em]"
-                  style={{ background: 'var(--color-leaf-soft)', color: 'var(--color-leaf)' }}
-                >
-                  Active
-                </span>
-              )}
-            </div>
-            <span className="flex items-center gap-3">
-              {hasFilter && (
-                <Link
-                  href={{ pathname: '/transactions', query: clearQuery }}
-                  className="text-[12px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  Clear
-                </Link>
-              )}
-              <Chevron />
-            </span>
-          </summary>
-          <form method="get" className="border-t border-[var(--color-hair)] px-4 pb-4 pt-4 md:px-5 md:pb-5">
-            <input type="hidden" name="month" value={month} />
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Selector label="Account" name="account" defaultValue={params.account}>
-                <option value="">All accounts</option>
-                {(accounts ?? []).map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </Selector>
-              <Selector label="Category" name="category" defaultValue={params.category}>
-                <option value="">All categories</option>
-                {(categories ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.parent_id ? `↳ ${c.name}` : c.name}
-                  </option>
-                ))}
-              </Selector>
-              <Selector label="Member" name="member" defaultValue={params.member}>
-                <option value="">Anyone</option>
-                <option value="shared">Shared account</option>
-                {(members ?? []).map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.display_name}
-                  </option>
-                ))}
-              </Selector>
-            </div>
-            <div className="mt-3 flex justify-end">
-              <button
-                type="submit"
-                className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-ink)] px-4 py-2 text-[12.5px] font-semibold text-[var(--color-paper)] transition-all active:scale-[0.98]"
-              >
-                Apply filters
-              </button>
-            </div>
-          </form>
-        </details>
-      )}
-
-      {/* Add transaction */}
-      {(accounts ?? []).length === 0 ? (
-        <div className="flex flex-col items-start gap-4 rounded-[20px] border border-dashed border-[var(--color-hair)] bg-[var(--color-paper-2)] p-8">
-          <div>
-            <h2 className="font-serif text-[22px] leading-tight tracking-[-0.01em] text-[var(--color-ink)]">
-              Add an account first
-            </h2>
-            <p className="mt-2 max-w-[440px] text-[14px] leading-relaxed text-[var(--color-ink-2)]">
-              Transactions need to live somewhere. Create at least one account and you&rsquo;re ready to log spending.
-            </p>
-          </div>
-          <Link
-            href="/accounts"
-            className="inline-flex items-center gap-2 rounded-full bg-[var(--color-ink)] px-4 py-2.5 text-[13px] font-semibold text-[var(--color-paper)]"
-          >
-            Go to accounts
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-              <path d="M5 12h14M13 6l6 6-6 6" />
-            </svg>
-          </Link>
-        </div>
+      {/* Controls — search + chip filters + add (always visible). */}
+      {accountOptions.length === 0 ? (
+        <EmptyState
+          title="Add an account first"
+          body="Transactions need to live somewhere. Create at least one account and you’re ready to log spending."
+          action={
+            <Link
+              href="/accounts"
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-full bg-leaf px-4 text-[13px] font-semibold text-paper shadow-[var(--shadow-card)]"
+            >
+              Go to accounts
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </Link>
+          }
+        />
       ) : (
-        <details className="group rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] [&_summary]:list-none [&_summary::-webkit-details-marker]:hidden">
-          <summary className="flex cursor-pointer items-center justify-between px-5 py-3.5 md:px-6">
-            <MapleLabel>Add transaction</MapleLabel>
-            <Chevron />
-          </summary>
-          <div className="border-t border-[var(--color-hair)] px-5 pb-5 pt-5 md:px-6 md:pb-6">
-            <AddTransactionForm
-              defaultDate={monthStartISO()}
-              accounts={(accounts ?? []).map((a) => ({ id: a.id, name: a.name }))}
-              categories={(categories ?? []).map((c) => ({ id: c.id, parent_id: c.parent_id, name: c.name }))}
-              members={(members ?? []).map((m) => ({ id: m.id, name: m.display_name }))}
-            />
-          </div>
-        </details>
+        <TxControls
+          month={month}
+          search={search}
+          accountId={params.account}
+          categoryId={params.category}
+          memberId={params.member}
+          accounts={accountOptions}
+          categories={categoryOptions}
+          members={memberOptions}
+        />
       )}
 
       {/* Transactions list */}
-      <section className="overflow-hidden rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)]">
-        <header className="flex items-baseline justify-between border-b border-[var(--color-hair)] px-5 py-3.5">
+      <section className="overflow-hidden rounded-lg border border-hair bg-paper">
+        <header className="flex items-baseline justify-between border-b border-hair px-5 py-3.5">
           <MapleLabel>
             {transactions.length} transaction{transactions.length === 1 ? '' : 's'}
           </MapleLabel>
           {transactions.length > 0 && (
-            <span className="text-[11px] text-[var(--color-ink-3)]">
-              Newest first
-            </span>
+            <span className="text-[11px] text-ink-3">Newest first</span>
           )}
         </header>
         {transactions.length === 0 ? (
-          <p className="px-5 py-16 text-center text-[14px] text-[var(--color-ink-2)]">
+          <p className="px-5 py-16 text-center text-[14px] text-ink-2">
             No transactions in {monthLabel(month)}.
             {hasFilter && (
               <>
                 {' '}
-                <Link href={{ pathname: '/transactions', query: clearQuery }} className="font-semibold text-[var(--color-leaf)] underline">
+                <Link href={{ pathname: '/transactions', query: clearQuery }} className="font-semibold text-leaf underline">
                   Clear filters
                 </Link>
               </>
@@ -326,14 +247,14 @@ export default async function TransactionsPage({
               const dayTotal = dayTxs.reduce((s, t) => s + t.amount_cents, 0)
               return (
                 <div key={day}>
-                  <div className="flex items-baseline justify-between bg-[var(--color-cream-2)]/60 px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+                  <div className="flex items-baseline justify-between bg-cream-2/60 px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
                     <span>{formatDate(day)}</span>
                     <span className="tabular-nums">
-                      {dayTotal >= 0 ? '' : '+'}
-                      {formatMoney(Math.abs(dayTotal))}
+                      {dayTotal >= 0 ? '-' : '+'}
+                      <Amount cents={Math.abs(dayTotal)} className="text-[11px] font-semibold" />
                     </span>
                   </div>
-                  <ul className="divide-y divide-[var(--color-hair)]">
+                  <ul className="divide-y divide-hair">
                     {dayTxs.map((t) => {
                       const splits = splitsByTx.get(t.id) ?? []
                       const splitCategories = splits
@@ -367,9 +288,9 @@ export default async function TransactionsPage({
                             member_id: t.member_id,
                             memberName: t.member_id ? (memberName.get(t.member_id) ?? null) : null,
                           }}
-                          accounts={(accounts ?? []).map((a) => ({ id: a.id, name: a.name }))}
-                          categories={(categories ?? []).map((c) => ({ id: c.id, parent_id: c.parent_id, name: c.name }))}
-                          members={(members ?? []).map((m) => ({ id: m.id, name: m.display_name }))}
+                          accounts={accountOptions}
+                          categories={categoryOptions}
+                          members={memberOptions}
                         />
                       )
                     })}
@@ -381,75 +302,5 @@ export default async function TransactionsPage({
         )}
       </section>
     </div>
-  )
-}
-
-// ───────── subcomponents ─────────
-
-function StatTile({
-  label,
-  value,
-  tone,
-}: {
-  label: string
-  value: string
-  tone: 'ink' | 'leaf' | 'maple'
-}) {
-  const color =
-    tone === 'leaf' ? 'var(--color-leaf)' : tone === 'maple' ? 'var(--color-maple)' : 'var(--color-ink)'
-  return (
-    <div className="rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-4 md:p-5">
-      <MapleLabel>{label}</MapleLabel>
-      <div
-        className="mt-1.5 font-serif text-[22px] leading-tight tracking-[-0.02em] tabular-nums md:text-[26px]"
-        style={{ color }}
-      >
-        {value}
-      </div>
-    </div>
-  )
-}
-
-function Selector({
-  label,
-  name,
-  defaultValue,
-  children,
-}: {
-  label: string
-  name: string
-  defaultValue?: string
-  children: React.ReactNode
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
-        {label}
-      </span>
-      <select name={name} defaultValue={defaultValue ?? ''} className="maple-select">
-        {children}
-      </select>
-    </label>
-  )
-}
-
-// Chevron used inside <summary> elements — rotates 180° when the parent
-// <details> opens via group-open:rotate-180.
-function Chevron() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="text-[var(--color-ink-3)] transition-transform group-open:rotate-180"
-      aria-hidden
-    >
-      <path d="M6 9l6 6 6-6" />
-    </svg>
   )
 }

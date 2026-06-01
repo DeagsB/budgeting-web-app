@@ -1,8 +1,12 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
-import { formatMoney } from '@/lib/format'
-import { accountTypeLabel } from '@/lib/domain'
+import { accountTypeLabel, LIABILITY_TYPES, type AccountType } from '@/lib/domain'
+import { PageHeader } from '@/components/ui/page-header'
+import { Card } from '@/components/ui/card'
+import { StatTile } from '@/components/ui/stat-tile'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Amount } from '@/components/ui/amount'
 import { MapleLabel } from '@/components/ui/label'
 import { AddAccountForm } from './add-form'
 import { AccountRow } from './row'
@@ -35,73 +39,111 @@ export default async function AccountsPage({
 
   const memberName = new Map((members ?? []).map((m) => [m.id, m.display_name]))
   const visible = (accounts ?? []).filter((a) => (showArchived ? a.archived_at : !a.archived_at))
-  const totalOpening = visible.reduce((s, a) => s + Number(a.opening_balance_cents), 0)
   const archivedCount = (accounts ?? []).filter((a) => a.archived_at).length
+
+  // Headline split: assets sum opening balances of non-liability accounts;
+  // owing sums opening balances of liability accounts (loan / credit_card).
+  // Summing everything together would let a loan inflate the asset total.
+  let assetsCents = 0
+  let owingCents = 0
+  for (const a of visible) {
+    const cents = Number(a.opening_balance_cents)
+    if (LIABILITY_TYPES.has(a.type as AccountType)) owingCents += cents
+    else assetsCents += cents
+  }
+  const netCents = assetsCents - owingCents
+
+  const memberList = (members ?? []).map((m) => ({ id: m.id, name: m.display_name }))
 
   return (
     <div className="flex flex-col gap-6 pb-10">
-      <header className="flex flex-col gap-1">
-        <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
-          Accounts
-        </div>
-        <div className="flex items-end justify-between gap-4">
-          <h1 className="font-serif text-[34px] leading-[1.05] tracking-[-0.02em] text-[var(--color-ink)] md:text-[40px]">
-            Where the money lives.
-          </h1>
+      <PageHeader
+        eyebrow="Accounts"
+        title="Where the money lives."
+        subtitle="Chequing, savings, registered, crypto, loans, credit cards, and cash — all in one ledger."
+        actions={
           <Link
             href={showArchived ? '/accounts' : '/accounts?show=archived'}
-            className="shrink-0 text-[12.5px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline"
+            className="inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-ink-2 transition-colors hover:text-ink"
           >
             {showArchived ? '← Active' : `Archived (${archivedCount}) →`}
           </Link>
-        </div>
-        <p className="mt-2 max-w-[620px] text-[14px] leading-relaxed text-[var(--color-ink-2)]">
-          Chequing, savings, registered, crypto, loans, credit cards, and cash — all in one ledger.
-        </p>
-      </header>
+        }
+      />
 
       {!showArchived && (
-        <section className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6">
-          <MapleLabel>Add account</MapleLabel>
-          <AddAccountForm members={(members ?? []).map((m) => ({ id: m.id, name: m.display_name }))} />
+        <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <StatTile
+            label="Assets"
+            value={<Amount cents={assetsCents} />}
+            tone="leaf"
+            hint="Opening balances across non-liability accounts"
+          />
+          <StatTile
+            label="Owing"
+            value={<Amount cents={owingCents} />}
+            tone="maple"
+            hint="Loans & credit cards"
+          />
+          <StatTile
+            label="Net opening"
+            value={<Amount cents={netCents} sign="auto" />}
+            tone={netCents >= 0 ? 'leaf' : 'maple'}
+            hint="Assets minus owing"
+          />
         </section>
       )}
 
-      <section className="overflow-hidden rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)]">
-        <header className="flex items-baseline justify-between border-b border-[var(--color-hair)] px-5 py-3.5">
+      {!showArchived && (
+        <Card>
+          <MapleLabel>Add account</MapleLabel>
+          <AddAccountForm members={memberList} />
+        </Card>
+      )}
+
+      <Card padding="none" className="overflow-hidden">
+        <header className="flex items-baseline justify-between border-b border-hair px-5 py-3.5">
           <MapleLabel>
             {showArchived ? 'Archived accounts' : `Active accounts (${visible.length})`}
           </MapleLabel>
-          <span className="text-[11.5px] text-[var(--color-ink-3)]">
-            Opening total <span className="tabular-nums text-[var(--color-ink)]">{formatMoney(totalOpening)}</span>
-          </span>
         </header>
-        <ul>
-          {visible.length === 0 && (
-            <li className="px-5 py-10 text-center text-[13.5px] text-[var(--color-ink-2)]">
-              {showArchived ? 'Nothing archived.' : 'No accounts yet — add one above.'}
-            </li>
-          )}
-          {visible.map((a) => (
-            <AccountRow
-              key={a.id}
-              account={{
-                id: a.id,
-                name: a.name,
-                type: a.type,
-                typeLabel: accountTypeLabel(a.type),
-                ownership: a.ownership,
-                member_id: a.member_id,
-                memberName: a.member_id ? (memberName.get(a.member_id) ?? null) : null,
-                opening_balance_cents: Number(a.opening_balance_cents),
-                last_four: a.last_four ?? null,
-                archived: !!a.archived_at,
-              }}
-              members={(members ?? []).map((m) => ({ id: m.id, name: m.display_name }))}
-            />
-          ))}
-        </ul>
-      </section>
+        {visible.length === 0 ? (
+          <div className="px-5 py-8">
+            {showArchived ? (
+              <EmptyState
+                title="Nothing archived"
+                body="Accounts you archive will show up here. They stay out of your active ledger but keep their history."
+              />
+            ) : (
+              <EmptyState
+                title="No accounts yet"
+                body="Add your first account above — chequing, savings, a registered plan, or a loan — to start tracking where your money lives."
+              />
+            )}
+          </div>
+        ) : (
+          <ul>
+            {visible.map((a) => (
+              <AccountRow
+                key={a.id}
+                account={{
+                  id: a.id,
+                  name: a.name,
+                  type: a.type,
+                  typeLabel: accountTypeLabel(a.type),
+                  ownership: a.ownership,
+                  member_id: a.member_id,
+                  memberName: a.member_id ? (memberName.get(a.member_id) ?? null) : null,
+                  opening_balance_cents: Number(a.opening_balance_cents),
+                  last_four: a.last_four ?? null,
+                  archived: !!a.archived_at,
+                }}
+                members={memberList}
+              />
+            ))}
+          </ul>
+        )}
+      </Card>
     </div>
   )
 }

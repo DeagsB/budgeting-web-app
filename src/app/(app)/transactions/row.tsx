@@ -1,11 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { formatMoney } from '@/lib/format'
 import { updateTransaction, deleteTransaction } from './actions'
 import { CategorySelect } from './category-select'
 import { SplitEditor } from './split-editor'
 import { ConfirmButton } from '@/components/ui/confirm-button'
+import { Amount } from '@/components/ui/amount'
 
 type TransactionVM = {
   id: string
@@ -155,9 +155,12 @@ export function TransactionRow({
   }
 
   // ───────── DISPLAY MODE ─────────
+  // Sign convention: positive cents = outflow (spent), negative = inflow.
+  // Non-color cue: a leading '-' on outflow, '+' on inflow, so direction is
+  // legible without relying on the maple/leaf tint alone.
   const isExpense = t.amount_cents > 0
-  const amountColor = isExpense ? 'var(--color-maple)' : 'var(--color-leaf)'
-  const sign = t.amount_cents < 0 ? '+' : ''
+  const amountTone = isExpense ? 'maple' : 'leaf'
+  const sign = isExpense ? '-' : '+'
   const totalAbs = Math.abs(t.amount_cents)
 
   // Small color disc derived from category name (stable, brand-safe palette)
@@ -195,12 +198,11 @@ export function TransactionRow({
                 </span>
               )}
             </div>
-            <div
-              className="shrink-0 font-serif text-[17px] tabular-nums tracking-[-0.01em]"
-              style={{ color: amountColor }}
-            >
-              {sign}
-              {formatMoney(totalAbs)}
+            <div className="shrink-0 text-[17px] tracking-[-0.01em]">
+              <span className={isExpense ? 'text-maple' : 'text-leaf'} aria-hidden>
+                {sign}
+              </span>
+              <Amount cents={totalAbs} tone={amountTone} className="text-[17px]" />
             </div>
           </div>
 
@@ -212,23 +214,23 @@ export function TransactionRow({
             <span>{t.memberName ?? 'Shared'}</span>
           </div>
 
-          <div className="mt-2 flex flex-wrap items-center gap-3 text-[12px] opacity-0 transition-opacity group-hover:opacity-100 sm:opacity-60">
+          {/* Row actions — always visible (no hover gating) with ≥44px tap
+              targets so they work on touch without a hover state. */}
+          <div className="-ml-1 mt-1.5 flex flex-wrap items-center gap-1 text-[12px]">
             <button
               type="button"
               onClick={() => setShowSplits((v) => !v)}
-              className="font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline"
+              className="inline-flex min-h-[44px] items-center rounded-md px-2 font-semibold text-ink-2 transition-colors hover:bg-cream-2 hover:text-ink"
             >
               {showSplits ? 'Hide splits' : 'Splits'}
             </button>
-            <span className="text-[var(--color-hair)]">·</span>
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline"
+              className="inline-flex min-h-[44px] items-center rounded-md px-2 font-semibold text-ink-2 transition-colors hover:bg-cream-2 hover:text-ink"
             >
               Edit
             </button>
-            <span className="text-[var(--color-hair)]">·</span>
             <ConfirmButton
               action={deleteTransaction}
               formData={{ id: t.id }}
@@ -236,9 +238,9 @@ export function TransactionRow({
               description="The transaction and its splits will be removed. This can't be undone."
               confirmLabel="Delete"
               destructive
-              className="font-semibold transition-colors hover:underline"
+              className="inline-flex min-h-[44px] items-center rounded-md px-2 font-semibold text-maple transition-colors hover:bg-maple-soft"
             >
-              <span style={{ color: 'var(--color-maple)' }}>Delete</span>
+              Delete
             </ConfirmButton>
           </div>
         </div>

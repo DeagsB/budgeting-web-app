@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { formatMoney } from '@/lib/format'
-import { ACCOUNT_TYPES, ACCOUNT_OWNERSHIP } from '@/lib/domain'
+import { ACCOUNT_TYPES, ACCOUNT_OWNERSHIP, LIABILITY_TYPES, type AccountType } from '@/lib/domain'
+import { Amount } from '@/components/ui/amount'
+import { ConfirmButton } from '@/components/ui/confirm-button'
 import { updateAccount, archiveAccount, unarchiveAccount } from './actions'
 
 type Account = {
@@ -18,22 +19,35 @@ type Account = {
   archived: boolean
 }
 
-/** Small icon glyph per account type — drawn SVG so it inherits the palette. */
+/**
+ * Small icon glyph per account type — drawn SVG so it inherits the palette.
+ * Switches on the real `AccountType` union so registered (tfsa/rrsp/fhsa),
+ * investment, and crypto accounts each get a distinct glyph instead of the
+ * chequing fallback.
+ */
 function AccountIcon({ type }: { type: string }) {
   const common = { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
-  switch (type) {
+  switch (type as AccountType) {
     case 'credit_card':
       return (<svg {...common}><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M2 10h20" /></svg>)
     case 'savings':
-    case 'registered':
       return (<svg {...common}><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H7" /></svg>)
     case 'loan':
       return (<svg {...common}><path d="M3 12h18M3 6h18M3 18h12" /></svg>)
     case 'crypto':
       return (<svg {...common}><circle cx="12" cy="12" r="9" /><path d="M9 8h5a2.5 2.5 0 0 1 0 5H9M9 13h5.5a2.5 2.5 0 0 1 0 5H9M10 6v12M14 6v12" /></svg>)
+    case 'tfsa':
+    case 'rrsp':
+    case 'fhsa':
+      // Registered plans — shield to signal tax-sheltered status.
+      return (<svg {...common}><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" /></svg>)
+    case 'taxable_investment':
+      // Investment — growth chart.
+      return (<svg {...common}><path d="M3 17l5-5 3 3 7-7M16 6h4v4" /></svg>)
     case 'cash':
       return (<svg {...common}><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="3" /></svg>)
-    default: // chequing + fallback
+    case 'chequing':
+    default:
       return (<svg {...common}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M7 9h10M7 13h6" /></svg>)
   }
 }
@@ -157,15 +171,13 @@ export function AccountRow({
   }
 
   // ───── DISPLAY ─────
-  const isLiability = account.type === 'credit_card' || account.type === 'loan'
-  const amountColor = isLiability ? 'var(--color-maple)' : 'var(--color-ink)'
-  const amountPrefix = isLiability && account.opening_balance_cents !== 0 ? '−' : ''
+  const isLiability = LIABILITY_TYPES.has(account.type as AccountType)
 
   return (
     <li
       className={
-        'group flex items-center justify-between gap-4 border-b border-[var(--color-hair)] px-5 py-3.5 transition-colors last:border-b-0 ' +
-        (account.archived ? 'opacity-50' : 'hover:bg-[var(--color-cream-2)]/40')
+        'flex flex-col gap-3 border-b border-hair px-5 py-3.5 transition-colors last:border-b-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4 ' +
+        (account.archived ? 'opacity-60' : 'hover:bg-cream-2/40')
       }
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -179,10 +191,10 @@ export function AccountRow({
           <AccountIcon type={account.type} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate font-serif text-[16px] tracking-[-0.01em] text-[var(--color-ink)]">
+          <div className="truncate font-serif text-[16px] tracking-[-0.01em] text-ink">
             {account.name}
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[12px] text-[var(--color-ink-3)]">
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[12px] text-ink-3">
             <span>{account.typeLabel}</span>
             <span>·</span>
             <span>
@@ -197,24 +209,23 @@ export function AccountRow({
           </div>
         </div>
         <div className="text-right">
-          <div
-            className="font-serif text-[16px] tabular-nums tracking-[-0.01em]"
-            style={{ color: amountColor }}
-          >
-            {amountPrefix}
-            {formatMoney(Math.abs(account.opening_balance_cents))}
-          </div>
-          <div className="text-[10.5px] font-medium uppercase tracking-[0.06em] text-[var(--color-ink-3)]">
+          <Amount
+            cents={isLiability ? -Math.abs(account.opening_balance_cents) : account.opening_balance_cents}
+            sign={isLiability ? 'auto' : 'none'}
+            tone={isLiability ? 'maple' : 'ink'}
+            className="text-[16px]"
+          />
+          <div className="text-[10.5px] font-medium uppercase tracking-[0.06em] text-ink-3">
             Opening
           </div>
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-3 text-[12px] opacity-60 transition-opacity group-hover:opacity-100">
+      <div className="flex shrink-0 items-center gap-2 text-[12px] sm:gap-3">
         {!account.archived && (
           <button
             type="button"
             onClick={() => setEditing(true)}
-            className="font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline"
+            className="inline-flex min-h-[44px] items-center px-2 font-semibold text-ink-2 hover:text-ink hover:underline"
           >
             Edit
           </button>
@@ -222,21 +233,25 @@ export function AccountRow({
         {account.archived ? (
           <form action={unarchiveAccount}>
             <input type="hidden" name="id" value={account.id} />
-            <button type="submit" className="font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline">
+            <button
+              type="submit"
+              className="inline-flex min-h-[44px] items-center px-2 font-semibold text-ink-2 hover:text-ink hover:underline"
+            >
               Unarchive
             </button>
           </form>
         ) : (
-          <form action={archiveAccount}>
-            <input type="hidden" name="id" value={account.id} />
-            <button
-              type="submit"
-              className="font-semibold hover:underline"
-              style={{ color: 'var(--color-maple)' }}
-            >
-              Archive
-            </button>
-          </form>
+          <ConfirmButton
+            action={archiveAccount}
+            formData={{ id: account.id }}
+            prompt={`Archive "${account.name}"?`}
+            description="Archived accounts are hidden from the active ledger but keep their history. You can unarchive them anytime."
+            confirmLabel="Archive"
+            destructive
+            className="inline-flex min-h-[44px] items-center px-2 font-semibold text-maple hover:underline"
+          >
+            Archive
+          </ConfirmButton>
         )}
       </div>
     </li>

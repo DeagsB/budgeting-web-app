@@ -1,8 +1,15 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
-import { addMonths, formatMoney, monthLabel, monthStartISO } from '@/lib/format'
+import { addMonths, formatMoney, monthStartISO } from '@/lib/format'
 import { MapleLabel } from '@/components/ui/label'
+import { PageHeader } from '@/components/ui/page-header'
+import { MonthNav } from '@/components/ui/month-nav'
+import { StatTile } from '@/components/ui/stat-tile'
+import { Card } from '@/components/ui/card'
+import { Amount } from '@/components/ui/amount'
+import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { BudgetTable } from './table'
 
 type Category = {
@@ -193,147 +200,138 @@ export default async function BudgetsPage({
   const recurringShareOfBudget =
     totalBudget > 0 ? Math.round((recurringMonthlyTotal / totalBudget) * 100) : null
 
+  const noCategories = categories.length === 0
+
+  const makeHref = (iso: string) =>
+    iso === monthStartISO() ? '/budgets' : `/budgets?month=${iso}`
+
   return (
-    <div className="flex flex-col gap-6 pb-10">
-      <header className="flex flex-col gap-1">
-        <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
-          Budgets · {monthLabel(month)}
-        </div>
-        <h1 className="font-serif text-[34px] leading-[1.05] tracking-[-0.02em] text-[var(--color-ink)] md:text-[40px]">
-          The plan, in dollars.
-        </h1>
-      </header>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3">
+        <PageHeader eyebrow="Budgets" title="The plan, in dollars." />
+        <MonthNav monthISO={month} makeHref={makeHref} className="-ml-2 flex-wrap" />
+      </div>
 
-      <nav className="grid grid-cols-3 gap-2 text-[13px]">
-        <Link
-          href={{ pathname: '/budgets', query: { month: addMonths(month, -1) } }}
-          className="inline-flex items-center justify-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2 font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
-        >
-          ← Previous
-        </Link>
-        <Link
-          href={{ pathname: '/budgets', query: { month: monthStartISO() } }}
-          className="inline-flex items-center justify-center rounded-full border border-[var(--color-hair)] bg-[var(--color-paper-2)] px-3 py-2 font-semibold text-[var(--color-ink)]"
-        >
-          This month
-        </Link>
-        <Link
-          href={{ pathname: '/budgets', query: { month: addMonths(month, 1) } }}
-          className="inline-flex items-center justify-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2 font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
-        >
-          Next →
-        </Link>
-      </nav>
-
-      {/* Big progress hero */}
-      <section className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <div>
-            <MapleLabel>This month</MapleLabel>
-            <div className="mt-1 font-serif text-[28px] leading-tight tracking-[-0.02em] text-[var(--color-ink)] md:text-[34px]">
-              {formatMoney(totalActual)}{' '}
-              <span className="text-[var(--color-ink-3)]">of {formatMoney(totalBudget)}</span>
-            </div>
-            <div className="mt-1 text-[12.5px] text-[var(--color-ink-2)]">
-              <span className="font-semibold tabular-nums text-[var(--color-ink)]">
-                {budgetedTopLevel.length}
-              </span>{' '}
-              of <span className="tabular-nums">{topLevel.length}</span> categories budgeted
-            </div>
-          </div>
-          <span
-            className="rounded-full px-3 py-1.5 text-[12px] font-semibold tabular-nums"
-            style={{
-              background: monthVariance <= 0 ? 'var(--color-leaf-soft)' : 'var(--color-maple-soft)',
-              color: monthVariance <= 0 ? 'var(--color-leaf)' : 'var(--color-maple)',
-            }}
-          >
-            {monthVariance <= 0
-              ? `${formatMoney(-monthVariance)} under`
-              : `${formatMoney(monthVariance)} over`}
-          </span>
-        </div>
-        {/* Progress bar. When over budget, the bar fills the full track but
-            splits at the budget-100% mark — leaf for the budgeted portion,
-            maple for the overage — with a paper-colored tick line at the
-            boundary so the 100% mark stays visible. */}
-        <ProgressBar pctUsed={pctUsed} />
-
-        {/* Top-spending budgeted categories — quick glance before the full
-            table. Mini bars match the hero's tone: leaf when within budget,
-            maple when over. */}
-        {topCategories.length > 0 && (
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {topCategories.map((c) => {
-              const pct = c.budget > 0 ? Math.min(1.2, c.actual / c.budget) : 0
-              const over = c.actual > c.budget
-              return (
-                <div key={c.id} className="rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-paper-2)] p-3">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <div className="truncate text-[12.5px] font-semibold text-[var(--color-ink)]">
-                      {c.name}
-                    </div>
-                    <div
-                      className="shrink-0 text-[11px] font-semibold tabular-nums"
-                      style={{ color: over ? 'var(--color-maple)' : 'var(--color-ink-2)' }}
-                    >
-                      {Math.round(pct * 100)}%
-                    </div>
-                  </div>
-                  <div className="mt-1.5 h-[6px] overflow-hidden rounded-full bg-[var(--color-paper)]">
-                    <div
-                      className="h-full rounded-full transition-all duration-300"
-                      style={{
-                        width: `${Math.min(100, Math.round(pct * 100))}%`,
-                        background: over ? 'var(--color-maple)' : 'var(--color-leaf)',
-                      }}
-                    />
-                  </div>
-                  <div className="mt-1.5 text-[11.5px] tabular-nums text-[var(--color-ink-3)]">
-                    <span style={{ color: over ? 'var(--color-maple)' : 'var(--color-ink)' }}>
-                      {formatMoney(c.actual)}
-                    </span>{' '}
-                    of {formatMoney(c.budget)}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </section>
-
-      <section className="grid gap-3 sm:grid-cols-2">
-        <RecurringInsight
-          total={recurringMonthlyTotal}
-          count={recurring.length}
-          shareOfBudget={recurringShareOfBudget}
-          top={recurringTop}
-        />
-        <Tile
-          label="Over budget"
-          value={`${categoriesOver} of ${budgetedTopLevel.length}`}
-          tone={categoriesOver > 0 ? 'maple' : 'leaf'}
-          hint={
-            budgetedTopLevel.length === 0
-              ? 'No budgets configured yet'
-              : categoriesOver === 0
-                ? 'Every category on track this month'
-                : `${categoriesOver} categor${categoriesOver === 1 ? 'y' : 'ies'} need${categoriesOver === 1 ? 's' : ''} attention`
+      {noCategories ? (
+        <EmptyState
+          title="No categories yet"
+          body="Budgets are built per category. Create a few categories first, then set a monthly amount for each."
+          action={
+            <Link href="/categories">
+              <Button variant="primary" size="md">
+                Set up categories
+              </Button>
+            </Link>
           }
         />
-      </section>
+      ) : (
+        <>
+          {/* Big progress hero */}
+          <Card padding="lg">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
+              <div>
+                <MapleLabel>This month</MapleLabel>
+                <div className="mt-1 font-serif text-[28px] leading-tight tracking-[-0.02em] text-ink md:text-[34px]">
+                  <Amount cents={totalActual} className="text-[28px] md:text-[34px]" />{' '}
+                  <span className="text-ink-3">of {formatMoney(totalBudget)}</span>
+                </div>
+                <div className="mt-1 text-[12.5px] text-ink-2">
+                  <span className="font-semibold tabular-nums text-ink">
+                    {budgetedTopLevel.length}
+                  </span>{' '}
+                  of <span className="tabular-nums">{topLevel.length}</span> categories budgeted
+                </div>
+              </div>
+              <span
+                className="self-start rounded-full px-3 py-1.5 text-[12px] font-semibold tabular-nums sm:self-auto"
+                style={{
+                  background:
+                    monthVariance <= 0 ? 'var(--color-leaf-soft)' : 'var(--color-maple-soft)',
+                  color: monthVariance <= 0 ? 'var(--color-leaf)' : 'var(--color-maple)',
+                }}
+              >
+                {monthVariance <= 0
+                  ? `${formatMoney(-monthVariance)} under`
+                  : `${formatMoney(monthVariance)} over`}
+              </span>
+            </div>
+            {/* Progress bar. When over budget, the bar fills the full track but
+                splits at the budget-100% mark — leaf for the budgeted portion,
+                maple for the overage — with a paper-colored tick line at the
+                boundary so the 100% mark stays visible. */}
+            <ProgressBar pctUsed={pctUsed} />
 
-      <details className="group rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] [&_summary]:list-none [&_summary::-webkit-details-marker]:hidden">
-        <summary className="flex cursor-pointer items-center justify-between px-5 py-3.5 md:px-6">
+            {/* Top-spending budgeted categories — quick glance before the full
+                editor. Mini bars match the hero's tone: leaf when within
+                budget, maple when over. */}
+            {topCategories.length > 0 && (
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {topCategories.map((c) => {
+                  const pct = c.budget > 0 ? Math.min(1.2, c.actual / c.budget) : 0
+                  const over = c.actual > c.budget
+                  return (
+                    <div key={c.id} className="rounded-md border border-hair bg-paper-2 p-3">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <div className="truncate text-[12.5px] font-semibold text-ink">
+                          {c.name}
+                        </div>
+                        <div
+                          className="shrink-0 text-[11px] font-semibold tabular-nums"
+                          style={{ color: over ? 'var(--color-maple)' : 'var(--color-ink-2)' }}
+                        >
+                          {Math.round(pct * 100)}%
+                        </div>
+                      </div>
+                      <div className="mt-1.5 h-[6px] overflow-hidden rounded-full bg-paper">
+                        <div
+                          className="h-full rounded-full transition-all duration-300"
+                          style={{
+                            width: `${Math.min(100, Math.round(pct * 100))}%`,
+                            background: over ? 'var(--color-maple)' : 'var(--color-leaf)',
+                          }}
+                        />
+                      </div>
+                      <div className="mt-1.5 text-[11.5px] tabular-nums text-ink-3">
+                        <span style={{ color: over ? 'var(--color-maple)' : 'var(--color-ink)' }}>
+                          {formatMoney(c.actual)}
+                        </span>{' '}
+                        of {formatMoney(c.budget)}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </Card>
+
+          <section className="grid gap-3 sm:grid-cols-2">
+            <RecurringInsight
+              total={recurringMonthlyTotal}
+              count={recurring.length}
+              shareOfBudget={recurringShareOfBudget}
+              top={recurringTop}
+            />
+            <StatTile
+              label="Over budget"
+              value={`${categoriesOver} of ${budgetedTopLevel.length}`}
+              tone={categoriesOver > 0 ? 'maple' : 'leaf'}
+              hint={
+                budgetedTopLevel.length === 0
+                  ? 'No budgets configured yet'
+                  : categoriesOver === 0
+                    ? 'Every category on track this month'
+                    : `${categoriesOver} categor${categoriesOver === 1 ? 'y' : 'ies'} need${categoriesOver === 1 ? 's' : ''} attention`
+              }
+            />
+          </section>
+
           <div className="flex items-center gap-2">
             <MapleLabel>Categories</MapleLabel>
-            <span className="text-[11.5px] text-[var(--color-ink-3)]">
+            <span className="text-[11.5px] text-ink-3">
               {budgetedTopLevel.length} of {topLevel.length} budgeted
             </span>
           </div>
-          <Chevron />
-        </summary>
-        <div className="border-t border-[var(--color-hair)]">
+
           <BudgetTable
             month={month}
             categories={categories}
@@ -344,41 +342,15 @@ export default async function BudgetsPage({
             ytdActualRolled={Object.fromEntries(ytdActualRolled)}
             rolloverCredit={Object.fromEntries(rolloverCredit)}
           />
-        </div>
-      </details>
 
-      <p className="rounded-[14px] border border-[var(--color-hair)] bg-[var(--color-paper-2)] px-4 py-3 text-[12.5px] leading-relaxed text-[var(--color-ink-2)]">
-        Actuals count outflows only. Paycheques and other inflows appear on P&amp;L. Parent-category
-        totals include their children. <span className="font-semibold text-[var(--color-ink)]">Rollover</span>{' '}
-        categories carry last month&rsquo;s surplus or deficit into this month&rsquo;s effective budget.
-      </p>
-    </div>
-  )
-}
-
-function Tile({
-  label,
-  value,
-  tone,
-  hint,
-}: {
-  label: string
-  value: string
-  tone: 'ink' | 'leaf' | 'maple'
-  hint?: string
-}) {
-  const color =
-    tone === 'leaf' ? 'var(--color-leaf)' : tone === 'maple' ? 'var(--color-maple)' : 'var(--color-ink)'
-  return (
-    <div className="rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-4 md:p-5">
-      <MapleLabel>{label}</MapleLabel>
-      <div
-        className="mt-1.5 font-serif text-[22px] leading-tight tracking-[-0.02em] tabular-nums md:text-[26px]"
-        style={{ color }}
-      >
-        {value}
-      </div>
-      {hint && <div className="mt-1 text-[12px] text-[var(--color-ink-3)]">{hint}</div>}
+          <p className="rounded-md border border-hair bg-paper-2 px-4 py-3 text-[12.5px] leading-relaxed text-ink-2">
+            Actuals count outflows only. Paycheques and other inflows appear on P&amp;L.
+            Parent-category totals include their children.{' '}
+            <span className="font-semibold text-ink">Rollover</span> categories carry last
+            month&rsquo;s surplus or deficit into this month&rsquo;s effective budget.
+          </p>
+        </>
+      )}
     </div>
   )
 }
@@ -470,26 +442,5 @@ function ProgressBar({ pctUsed }: { pctUsed: number }) {
         />
       )}
     </div>
-  )
-}
-
-// Used inside the collapsible <summary>; rotates 180° when the parent
-// <details> opens via group-open:rotate-180.
-function Chevron() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="text-[var(--color-ink-3)] transition-transform group-open:rotate-180"
-      aria-hidden
-    >
-      <path d="M6 9l6 6 6-6" />
-    </svg>
   )
 }

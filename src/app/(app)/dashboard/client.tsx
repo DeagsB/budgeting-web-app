@@ -1,15 +1,29 @@
 'use client'
 
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
+import Link from 'next/link'
 import { createPortal } from 'react-dom'
-import { formatMoney, formatDate, monthLabel } from '@/lib/format'
+import { formatMoney, formatMoneySigned, formatDate, monthLabel } from '@/lib/format'
 import { smoothPath, seriesToPoints } from '@/lib/maple'
 import { accountTypeLabel, LIABILITY_TYPES, type AccountType } from '@/lib/domain'
 import { MapleLabel } from '@/components/ui/label'
+import { Amount } from '@/components/ui/amount'
+import { Card } from '@/components/ui/card'
+import { StatTile } from '@/components/ui/stat-tile'
 import { Reveal } from '@/components/ui/reveal'
 import { PrivacyBlur } from '@/components/ui/privacy-blur'
 import { useCountUp } from '@/components/ui/count-up'
 import { colorForCategory } from '@/lib/category-colors'
+
+// Fixed brand gradient for the net-worth hero. Uses the light-mode leaf values
+// directly (not tokens) so the surface stays deep green in BOTH light and dark
+// mode — tokens invert leaf to a pale mint in dark mode, which would wash the
+// hero out. The chart + text below ride on top of this with light foreground
+// colours, so contrast holds either way.
+const HERO_GRADIENT = 'linear-gradient(150deg, #1f5641 0%, #154031 100%)'
+// Mint used for the hero chart stroke/area + the area-fill gradient. Legible on
+// the deep-green surface in either theme.
+const HERO_CHART = '#9ad8b4'
 
 // ─── Widget registry ─────────────────────────────────────────────────────
 // Every dashboard section is addressable by id. The user picks which to show
@@ -81,29 +95,6 @@ const RANGES = [
 ] as const
 type RangeId = (typeof RANGES)[number]['id']
 
-/**
- * Full CAD formatter — always show the real number on the hero. Abbreviation
- * belongs on axes, not on the primary balance.
- */
-const CAD_FULL = new Intl.NumberFormat('en-CA', {
-  style: 'currency',
-  currency: 'CAD',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-const CAD_COMPACT = new Intl.NumberFormat('en-CA', {
-  style: 'currency',
-  currency: 'CAD',
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-})
-const fmtCAD = (cents: number, compact = false) =>
-  (compact ? CAD_COMPACT : CAD_FULL).format(cents / 100)
-const fmtSignedCAD = (cents: number, compact = false) => {
-  const s = (compact ? CAD_COMPACT : CAD_FULL).format(Math.abs(cents) / 100)
-  return cents >= 0 ? `+${s}` : `−${s}`
-}
-
 export function DashboardClient({
   householdName: _householdName,
   members,
@@ -122,6 +113,7 @@ export function DashboardClient({
   recurringTotal,
   recentActivity,
   pace,
+  hasError = false,
 }: {
   householdName: string
   members: MemberVM[]
@@ -140,6 +132,7 @@ export function DashboardClient({
   recurringTotal: number
   recentActivity: RecentTxVM[]
   pace: PaceVM
+  hasError?: boolean
 }) {
   const [hidden, setHidden] = useState(false)
   const [range, setRange] = useState<RangeId>('1Y')
@@ -202,20 +195,30 @@ export function DashboardClient({
   const widgets: Record<WidgetId, ReactNode> = {
     greeting: (
       <header key="greeting" className="flex items-end justify-between gap-4">
-        <div>
-          <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+        <div className="min-w-0">
+          <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-3">
             {monthLabel(currentMonthISO)}
           </div>
-          <h1 className="mt-1 font-serif text-[34px] leading-[1.05] tracking-[-0.02em] text-[var(--color-ink)] md:text-[40px]">
+          <h1 className="mt-1 font-serif text-[34px] leading-[1.05] tracking-[-0.02em] text-ink md:text-[40px]">
             Bonjour, {firstName}.
           </h1>
+          {/* Edit dashboard demoted here: a small ghost control in the greeting
+              row instead of a floating pill competing with the primary action. */}
+          <button
+            type="button"
+            onClick={() => setEditOpen(true)}
+            className="mt-2 inline-flex min-h-[44px] items-center gap-1.5 text-[12.5px] font-semibold text-ink-2 transition-colors hover:text-ink"
+          >
+            <PencilIcon />
+            Edit dashboard
+          </button>
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setHidden((h) => !h)}
             aria-label={hidden ? 'Show balances' : 'Hide balances'}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] text-[var(--color-ink-2)] transition-all active:scale-95"
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-hair bg-paper text-ink-2 transition-all active:scale-95"
           >
             {hidden ? <EyeOffIcon /> : <EyeIcon />}
           </button>
@@ -223,7 +226,7 @@ export function DashboardClient({
             {members.slice(0, 3).map((m, i) => (
               <div
                 key={m.id}
-                className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-[var(--color-cream)] font-serif text-[15px] text-[var(--color-ink)]"
+                className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-cream font-serif text-[15px] text-ink"
                 style={{
                   background: ['var(--color-leaf-soft)', 'var(--color-maple-soft)', 'var(--color-butter)'][i] ?? 'var(--color-butter)',
                   marginLeft: i === 0 ? 0 : -10,
@@ -239,30 +242,45 @@ export function DashboardClient({
     ),
     'net-worth': (
       <Reveal key="net-worth">
-        <section className="overflow-hidden rounded-[24px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-6 shadow-[var(--shadow-card)] md:p-8">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <MapleLabel>Net worth</MapleLabel>
-              <div className="mt-2 font-serif text-[56px] leading-none tracking-[-0.03em] tabular-nums text-[var(--color-ink)] md:text-[72px]">
-                <PrivacyBlur hidden={hidden}>{fmtCAD(displayedValue)}</PrivacyBlur>
+        {/* Signature brand surface: a fixed deep-green gradient (not tokens, so
+            it never inverts), light serif number, and a mint area chart riding
+            beneath. Light foreground colours keep everything legible on green
+            in both light and dark mode. */}
+        <section
+          className="relative overflow-hidden rounded-xl p-6 text-white shadow-[var(--shadow-card)] md:p-8"
+          style={{ background: HERO_GRADIENT }}
+        >
+          {/* faint maple-leaf watermark */}
+          <div className="pointer-events-none absolute -right-8 -top-8 opacity-10" aria-hidden>
+            <svg width="180" height="180" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2l1.4 3.6 3.8-1L15.6 8l4.4 2-4 2.2 1 4.4-4-1-1 3.4-1-3.4-4 1 1-4.4-4-2.2 4.4-2L8.8 4.6l3.8 1L12 2Z" />
+            </svg>
+          </div>
+
+          <div className="relative flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="text-[11px] font-bold uppercase tracking-[0.10em] text-white/70">
+                Net worth
+              </div>
+              <div className="mt-2 font-serif text-[48px] leading-none tracking-[-0.03em] tabular-nums md:text-[64px]">
+                <PrivacyBlur hidden={hidden}>{formatMoney(displayedValue)}</PrivacyBlur>
               </div>
               <div className="mt-3 flex items-center gap-2 text-[13px]">
                 <span
-                  className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-semibold tabular-nums"
-                  style={{
-                    background: deltaUp ? 'var(--color-leaf-soft)' : 'var(--color-maple-soft)',
-                    color: deltaUp ? 'var(--color-leaf)' : 'var(--color-maple)',
-                  }}
+                  className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-[12px] font-semibold tabular-nums"
+                  style={{ color: scrubPoint || deltaUp ? HERO_CHART : '#ffb6a3' }}
                 >
                   <PrivacyBlur hidden={hidden}>
-                    {scrubPoint ? fmtCAD(scrubPoint.value) : fmtSignedCAD(netWorthDelta)}
+                    {scrubPoint
+                      ? formatMoney(scrubPoint.value)
+                      : formatMoneySigned(netWorthDelta, { plus: true })}
                   </PrivacyBlur>
                 </span>
-                <span className="text-[var(--color-ink-2)]">{displayedLabel}</span>
+                <span className="text-white/60">{displayedLabel}</span>
               </div>
             </div>
-            {/* Range selector */}
-            <div className="hidden gap-0.5 rounded-full bg-[var(--color-paper-2)] p-1 sm:flex">
+            {/* Range selector (desktop) — translucent pills on the green */}
+            <div className="hidden gap-0.5 rounded-full bg-white/10 p-1 sm:flex">
               {RANGES.map((r) => (
                 <button
                   key={r.id}
@@ -271,8 +289,8 @@ export function DashboardClient({
                   className={
                     'rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all ' +
                     (range === r.id
-                      ? 'bg-[var(--color-paper)] text-[var(--color-ink)] shadow-[0_1px_2px_rgba(0,0,0,0.06)]'
-                      : 'text-[var(--color-ink-2)] hover:text-[var(--color-ink)]')
+                      ? 'bg-white/20 text-white'
+                      : 'text-white/55 hover:text-white')
                   }
                 >
                   {r.id}
@@ -292,25 +310,16 @@ export function DashboardClient({
             >
               <defs>
                 <linearGradient id="netWorthArea" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stopColor="var(--color-leaf)" stopOpacity="0.20" />
-                  <stop offset="100%" stopColor="var(--color-leaf)" stopOpacity="0" />
+                  <stop offset="0%" stopColor={HERO_CHART} stopOpacity="0.35" />
+                  <stop offset="100%" stopColor={HERO_CHART} stopOpacity="0" />
                 </linearGradient>
               </defs>
-              {/* baseline */}
-              <line
-                x1="0"
-                x2={chartW}
-                y1={chartH - 1}
-                y2={chartH - 1}
-                stroke="var(--color-hair)"
-                strokeWidth="1"
-              />
               {chartArea && <path d={chartArea} fill="url(#netWorthArea)" />}
               {chartPath && (
                 <path
                   d={chartPath}
                   fill="none"
-                  stroke="var(--color-leaf)"
+                  stroke={HERO_CHART}
                   strokeWidth="2.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -323,7 +332,7 @@ export function DashboardClient({
                     x2={chartPoints[scrubIdx][0]}
                     y1={0}
                     y2={chartH}
-                    stroke="var(--color-ink-3)"
+                    stroke="rgba(255,255,255,0.4)"
                     strokeDasharray="2 3"
                     strokeWidth="1"
                   />
@@ -331,8 +340,8 @@ export function DashboardClient({
                     cx={chartPoints[scrubIdx][0]}
                     cy={chartPoints[scrubIdx][1]}
                     r="5"
-                    fill="var(--color-paper)"
-                    stroke="var(--color-leaf)"
+                    fill={HERO_CHART}
+                    stroke="#fff"
                     strokeWidth="2.5"
                   />
                 </g>
@@ -341,7 +350,7 @@ export function DashboardClient({
           </div>
 
           {/* Mobile range selector */}
-          <div className="mt-3 flex gap-1 sm:hidden">
+          <div className="relative mt-3 flex gap-1 sm:hidden">
             {RANGES.map((r) => (
               <button
                 key={r.id}
@@ -349,9 +358,7 @@ export function DashboardClient({
                 onClick={() => setRange(r.id)}
                 className={
                   'flex-1 rounded-full py-1.5 text-[11px] font-semibold transition-all ' +
-                  (range === r.id
-                    ? 'bg-[var(--color-paper-2)] text-[var(--color-ink)]'
-                    : 'text-[var(--color-ink-2)]')
+                  (range === r.id ? 'bg-white/20 text-white' : 'text-white/55')
                 }
               >
                 {r.id}
@@ -363,30 +370,42 @@ export function DashboardClient({
     ),
     'month-stats': (
       <section key="month-stats" className="grid grid-cols-3 gap-3">
-        {[
-          { label: 'Income', value: income, color: 'var(--color-leaf)' },
-          { label: 'Spent', value: expenses, color: 'var(--color-maple)' },
-          { label: 'Saved', value: net, color: net >= 0 ? 'var(--color-leaf)' : 'var(--color-maple)', signed: true },
-        ].map((s, i) => (
+        {([
+          { label: 'Income', value: income, tone: 'leaf' as const, signed: false },
+          { label: 'Spent', value: expenses, tone: 'maple' as const, signed: false },
+          {
+            label: 'Saved',
+            value: net,
+            tone: (net >= 0 ? 'leaf' : 'maple') as 'leaf' | 'maple',
+            signed: true,
+          },
+        ]).map((s, i) => (
           <Reveal key={s.label} delay={120 + i * 60}>
-            <div className="rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-4 md:p-5">
-              <MapleLabel>{s.label}</MapleLabel>
-              <div
-                className="mt-1.5 whitespace-nowrap font-serif text-[20px] leading-tight tracking-[-0.02em] tabular-nums md:text-[26px]"
-                style={{ color: s.color }}
-              >
+            <StatTile
+              label={s.label}
+              tone={s.tone}
+              value={
                 <PrivacyBlur hidden={hidden}>
-                  {/* Mobile drops cents so the negative-sign edge case
-                      doesn't push the value past the narrow grid column. */}
+                  {/* Mobile drops cents (compact) so the negative-sign edge
+                      case doesn't push the value past the narrow grid column. */}
                   <span className="md:hidden">
-                    {s.signed ? fmtSignedCAD(s.value, true) : fmtCAD(Math.abs(s.value), true)}
+                    <Amount
+                      cents={s.signed ? s.value : Math.abs(s.value)}
+                      tone={s.tone}
+                      sign={s.signed ? 'always' : 'none'}
+                      compact
+                    />
                   </span>
                   <span className="hidden md:inline">
-                    {s.signed ? fmtSignedCAD(s.value) : fmtCAD(Math.abs(s.value))}
+                    <Amount
+                      cents={s.signed ? s.value : Math.abs(s.value)}
+                      tone={s.tone}
+                      sign={s.signed ? 'always' : 'none'}
+                    />
                   </span>
                 </PrivacyBlur>
-              </div>
-            </div>
+              }
+            />
           </Reveal>
         ))}
       </section>
@@ -395,16 +414,16 @@ export function DashboardClient({
       <section key="accounts">
         <div className="mb-3 flex items-baseline justify-between">
           <MapleLabel>Accounts</MapleLabel>
-          <a href="/accounts" className="text-[12px] font-semibold text-[var(--color-leaf)] hover:underline">
+          <Link href="/accounts" className="text-[12px] font-semibold text-leaf hover:underline">
             See all →
-          </a>
+          </Link>
         </div>
         {accounts.length === 0 ? (
-          <div className="rounded-[18px] border border-dashed border-[var(--color-hair)] bg-[var(--color-paper-2)] p-6 text-[14px] text-[var(--color-ink-2)]">
+          <div className="rounded-md border border-dashed border-hair bg-paper-2 p-6 text-[14px] text-ink-2">
             No accounts yet.{' '}
-            <a href="/accounts" className="font-semibold text-[var(--color-leaf)] underline">
+            <Link href="/accounts" className="font-semibold text-leaf underline">
               Add one
-            </a>
+            </Link>
             .
           </div>
         ) : (
@@ -434,13 +453,13 @@ export function DashboardClient({
                         transition: 'transform 600ms var(--ease-ios)',
                       }}
                     >
-                      {/* front — cream card */}
+                      {/* front — paper card */}
                       <div
-                        className="absolute inset-0 flex flex-col rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-4"
+                        className="absolute inset-0 flex flex-col rounded-md border border-hair bg-paper p-4"
                         style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}
                       >
                         <div className="flex items-center justify-between">
-                          <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+                          <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-ink-3">
                             {accountTypeLabel(a.type)}
                           </div>
                           <div
@@ -448,24 +467,25 @@ export function DashboardClient({
                             style={{ background: a.ownership === 'shared' ? 'var(--color-maple)' : 'var(--color-leaf)' }}
                           />
                         </div>
-                        <div className="mt-2 text-[14px] font-medium text-[var(--color-ink)]">{a.name}</div>
-                        <div
-                          className="mt-1 font-serif text-[26px] leading-tight tracking-[-0.02em] tabular-nums"
-                          style={{ color: negative ? 'var(--color-maple)' : 'var(--color-ink)' }}
-                        >
-                          <PrivacyBlur hidden={hidden}>{fmtCAD(display)}</PrivacyBlur>
+                        <div className="mt-2 text-[14px] font-medium text-ink">{a.name}</div>
+                        <div className="mt-1 text-[26px] leading-tight">
+                          <PrivacyBlur hidden={hidden}>
+                            <Amount cents={display} tone={negative ? 'maple' : 'ink'} />
+                          </PrivacyBlur>
                         </div>
                         <div className="flex-1" />
-                        <div className="text-[11px] text-[var(--color-ink-3)]">
+                        <div className="text-[11px] text-ink-3">
                           {a.ownership === 'shared' ? 'Shared' : 'Personal'} · tap to flip
                         </div>
                       </div>
-                      {/* back — this-month stats */}
+                      {/* back — this-month stats. Both gradient stops are tokens
+                          so the surface follows the theme instead of inverting
+                          a hardcoded hex against a token. */}
                       <div
-                        className="absolute inset-0 flex flex-col justify-between rounded-[18px] p-4 text-white"
+                        className="absolute inset-0 flex flex-col justify-between rounded-md p-4 text-white"
                         style={{
                           background:
-                            'linear-gradient(135deg, var(--color-leaf) 0%, #0f3a25 100%)',
+                            'linear-gradient(135deg, var(--color-leaf) 0%, var(--color-leaf-deep) 100%)',
                           backfaceVisibility: 'hidden',
                           WebkitBackfaceVisibility: 'hidden',
                           transform: 'rotateY(180deg)',
@@ -484,7 +504,7 @@ export function DashboardClient({
                             <div className="opacity-60">{isLoan ? 'Charged' : 'Out'}</div>
                             <div className="font-serif text-[16px] tabular-nums">
                               <PrivacyBlur hidden={hidden}>
-                                {fmtCAD(a.month_outflow_cents)}
+                                {formatMoney(a.month_outflow_cents)}
                               </PrivacyBlur>
                             </div>
                           </div>
@@ -492,7 +512,7 @@ export function DashboardClient({
                             <div className="opacity-60">{isLoan ? 'Paid' : 'In'}</div>
                             <div className="font-serif text-[16px] tabular-nums">
                               <PrivacyBlur hidden={hidden}>
-                                {fmtCAD(a.month_inflow_cents)}
+                                {formatMoney(a.month_inflow_cents)}
                               </PrivacyBlur>
                             </div>
                           </div>
@@ -501,13 +521,10 @@ export function DashboardClient({
                               <div className="opacity-60">Net</div>
                               <div
                                 className="font-serif text-[18px] tabular-nums"
-                                style={{
-                                  color: monthNet >= 0 ? '#bdf0d2' : '#ffb6a3',
-                                }}
+                                style={{ color: monthNet >= 0 ? '#bdf0d2' : '#ffb6a3' }}
                               >
                                 <PrivacyBlur hidden={hidden}>
-                                  {monthNet >= 0 ? '+' : '−'}
-                                  {fmtCAD(Math.abs(monthNet))}
+                                  {formatMoneySigned(monthNet, { plus: true })}
                                 </PrivacyBlur>
                               </div>
                             </div>
@@ -533,22 +550,22 @@ export function DashboardClient({
       <section key="spending">
         <div className="mb-3 flex items-baseline justify-between">
           <MapleLabel>Where it went</MapleLabel>
-          <a href="/budgets" className="text-[12px] font-semibold text-[var(--color-leaf)] hover:underline">
+          <Link href="/budgets" className="text-[12px] font-semibold text-leaf hover:underline">
             Budgets →
-          </a>
+          </Link>
         </div>
-        <div className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5">
+        <Card>
           {spendingBreakdown.length === 0 ? (
-            <p className="text-[14px] text-[var(--color-ink-2)]">
+            <p className="text-[14px] text-ink-2">
               No categorised expenses this month.{' '}
-              <a href="/transactions" className="font-semibold text-[var(--color-leaf)] underline">
+              <Link href="/transactions" className="font-semibold text-leaf underline">
                 Add some
-              </a>
+              </Link>
               .
             </p>
           ) : (
             <>
-              <div className="flex h-[10px] gap-[2px] overflow-hidden rounded-full bg-[var(--color-paper-2)]">
+              <div className="flex h-[10px] gap-[2px] overflow-hidden rounded-full bg-paper-2">
                 {spendingBreakdown.map((b) => (
                   <div key={b.id} className="h-full" style={{ flex: b.amount_cents, background: colorForCategory(b.name) }} />
                 ))}
@@ -557,18 +574,20 @@ export function DashboardClient({
                 {spendingBreakdown.map((b) => (
                   <div key={b.id} className="flex items-center gap-3">
                     <div className="h-2 w-2 shrink-0 rounded-full" style={{ background: colorForCategory(b.name) }} />
-                    <div className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-[var(--color-ink)]">
+                    <div className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-ink">
                       {b.name}
                     </div>
-                    <div className="shrink-0 font-serif text-[14px] tabular-nums text-[var(--color-ink-2)]">
-                      <PrivacyBlur hidden={hidden}>{formatMoney(b.amount_cents)}</PrivacyBlur>
+                    <div className="shrink-0 text-[14px]">
+                      <PrivacyBlur hidden={hidden}>
+                        <Amount cents={b.amount_cents} />
+                      </PrivacyBlur>
                     </div>
                   </div>
                 ))}
               </div>
             </>
           )}
-        </div>
+        </Card>
       </section>
     ),
 
@@ -577,35 +596,35 @@ export function DashboardClient({
       const over = pct > 1
       const breakpoint = over ? 100 / pct : null
       return (
-        <section
-          key="budget-progress"
-          className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6"
-        >
+        <Card key="budget-progress" padding="lg">
           <div className="flex items-baseline justify-between gap-2">
             <MapleLabel>Budget</MapleLabel>
-            <a
+            <Link
               href="/budgets"
-              className="text-[12px] font-semibold text-[var(--color-leaf)] hover:underline"
+              className="text-[12px] font-semibold text-leaf hover:underline"
             >
               See all →
-            </a>
+            </Link>
           </div>
           {totalBudget === 0 ? (
-            <div className="mt-2 text-[13.5px] text-[var(--color-ink-2)]">
+            <div className="mt-2 text-[13.5px] text-ink-2">
               No budgets set this month.{' '}
-              <a href="/budgets" className="font-semibold text-[var(--color-leaf)] underline">
+              <Link href="/budgets" className="font-semibold text-leaf underline">
                 Add some
-              </a>
+              </Link>
               .
             </div>
           ) : (
             <>
-              <div className="mt-1.5 font-serif text-[24px] leading-tight tracking-[-0.02em] tabular-nums text-[var(--color-ink)] md:text-[28px]">
+              <div className="mt-1.5 text-[24px] leading-tight md:text-[28px]">
                 <PrivacyBlur hidden={hidden}>
-                  {fmtCAD(expenses)} <span className="text-[var(--color-ink-3)]">of {fmtCAD(totalBudget)}</span>
+                  <Amount cents={expenses} />{' '}
+                  <span className="font-serif tabular-nums text-ink-3">
+                    of {formatMoney(totalBudget)}
+                  </span>
                 </PrivacyBlur>
               </div>
-              <div className="relative mt-3 h-2.5 overflow-hidden rounded-full bg-[var(--color-paper-2)]">
+              <div className="relative mt-3 h-2.5 overflow-hidden rounded-full bg-paper-2">
                 <div
                   className="h-full rounded-full transition-all duration-300"
                   style={{
@@ -617,114 +636,113 @@ export function DashboardClient({
                 />
                 {breakpoint !== null && (
                   <div
-                    className="pointer-events-none absolute inset-y-0 w-[2px] bg-[var(--color-paper)]"
+                    className="pointer-events-none absolute inset-y-0 w-[2px] bg-paper"
                     style={{ left: `calc(${breakpoint}% - 1px)` }}
                   />
                 )}
               </div>
-              <div className="mt-2 text-[12px] text-[var(--color-ink-3)]">
-                {over
-                  ? <span style={{ color: 'var(--color-maple)' }}>{fmtCAD(expenses - totalBudget)} over budget</span>
-                  : `${fmtCAD(totalBudget - expenses)} left`}
+              <div className="mt-2 text-[12px] text-ink-3">
+                {over ? (
+                  <span className="text-maple">{formatMoney(expenses - totalBudget)} over budget</span>
+                ) : (
+                  `${formatMoney(totalBudget - expenses)} left`
+                )}
               </div>
             </>
           )}
-        </section>
+        </Card>
       )
     })(),
 
     pace: (() => {
       const isCurrentMonth = pace.daysElapsed > 0 && pace.daysElapsed < pace.daysInMonth
       return (
-        <section
-          key="pace"
-          className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6"
-        >
+        <Card key="pace" padding="lg">
           <MapleLabel>Pace</MapleLabel>
           {!isCurrentMonth ? (
-            <div className="mt-1.5 text-[13.5px] text-[var(--color-ink-2)]">
+            <div className="mt-1.5 text-[13.5px] text-ink-2">
               {pace.daysElapsed === 0 ? 'Future month — no pace yet.' : 'Month complete.'}
             </div>
           ) : (
             <>
-              <div className="mt-1.5 font-serif text-[24px] leading-tight tracking-[-0.02em] tabular-nums text-[var(--color-ink)] md:text-[28px]">
-                <PrivacyBlur hidden={hidden}>{fmtCAD(pace.dailyPace)}</PrivacyBlur>
-                <span className="text-[14px] font-normal text-[var(--color-ink-3)]">/day</span>
+              <div className="mt-1.5 text-[24px] leading-tight md:text-[28px]">
+                <PrivacyBlur hidden={hidden}>
+                  <Amount cents={pace.dailyPace} />
+                </PrivacyBlur>
+                <span className="font-serif text-[14px] font-normal text-ink-3">/day</span>
               </div>
-              <div className="mt-1 text-[12.5px] text-[var(--color-ink-2)]">
+              <div className="mt-1 text-[12.5px] text-ink-2">
                 Day {pace.daysElapsed} of {pace.daysInMonth} · projected{' '}
-                <span className="font-semibold tabular-nums text-[var(--color-ink)]">
-                  <PrivacyBlur hidden={hidden}>{fmtCAD(pace.projectedMonth)}</PrivacyBlur>
+                <span className="font-semibold tabular-nums text-ink">
+                  <PrivacyBlur hidden={hidden}>{formatMoney(pace.projectedMonth)}</PrivacyBlur>
                 </span>{' '}
                 this month
               </div>
             </>
           )}
-        </section>
+        </Card>
       )
     })(),
 
     recurring: (
-      <section
-        key="recurring"
-        className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6"
-      >
+      <Card key="recurring" padding="lg">
         <div className="flex items-baseline justify-between gap-2">
           <MapleLabel>Recurring</MapleLabel>
-          <span className="text-[10.5px] tabular-nums text-[var(--color-ink-3)]">
+          <span className="text-[10.5px] tabular-nums text-ink-3">
             {recurring.length} item{recurring.length === 1 ? '' : 's'}
           </span>
         </div>
         {recurring.length === 0 ? (
-          <div className="mt-1.5 text-[13.5px] text-[var(--color-ink-2)]">
+          <div className="mt-1.5 text-[13.5px] text-ink-2">
             Nothing detected yet — recurring transactions appear here once we see them in 2+ of the last 3 months.
           </div>
         ) : (
           <>
-            <div className="mt-1.5 font-serif text-[24px] leading-tight tracking-[-0.02em] tabular-nums text-[var(--color-ink)] md:text-[28px]">
-              <PrivacyBlur hidden={hidden}>{fmtCAD(recurringTotal)}</PrivacyBlur>
-              <span className="text-[14px] font-normal text-[var(--color-ink-3)]">/mo</span>
+            <div className="mt-1.5 text-[24px] leading-tight md:text-[28px]">
+              <PrivacyBlur hidden={hidden}>
+                <Amount cents={recurringTotal} />
+              </PrivacyBlur>
+              <span className="font-serif text-[14px] font-normal text-ink-3">/mo</span>
             </div>
-            <ul className="mt-3 flex flex-col gap-1.5 border-t border-[var(--color-hair)] pt-3">
+            <ul className="mt-3 flex flex-col gap-1.5 border-t border-hair pt-3">
               {recurring.slice(0, 5).map((g) => (
                 <li
                   key={g.description + g.amount_cents}
                   className="flex items-baseline gap-2 text-[12.5px]"
                 >
-                  <span className="min-w-0 flex-1 truncate text-[var(--color-ink)]">
+                  <span className="min-w-0 flex-1 truncate text-ink">
                     {g.description}
                   </span>
-                  <span
-                    className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em]"
-                    style={{ background: 'var(--color-paper-2)', color: 'var(--color-ink-3)' }}
-                  >
+                  <span className="shrink-0 rounded-full bg-paper-2 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-ink-3">
                     {g.monthsSeen}/3
                   </span>
-                  <span className="shrink-0 font-serif text-[13px] tabular-nums text-[var(--color-ink-2)]">
-                    <PrivacyBlur hidden={hidden}>{fmtCAD(g.amount_cents)}</PrivacyBlur>
+                  <span className="shrink-0 text-[13px]">
+                    <PrivacyBlur hidden={hidden}>
+                      <Amount cents={g.amount_cents} />
+                    </PrivacyBlur>
                   </span>
                 </li>
               ))}
             </ul>
           </>
         )}
-      </section>
+      </Card>
     ),
 
     goals: (
       <section key="goals">
         <div className="mb-3 flex items-baseline justify-between">
           <MapleLabel>Goals</MapleLabel>
-          <a href="/goals" className="text-[12px] font-semibold text-[var(--color-leaf)] hover:underline">
+          <Link href="/goals" className="text-[12px] font-semibold text-leaf hover:underline">
             See all →
-          </a>
+          </Link>
         </div>
         {goals.length === 0 ? (
-          <div className="rounded-[18px] border border-dashed border-[var(--color-hair)] bg-[var(--color-paper-2)] p-6 text-[14px] text-[var(--color-ink-2)]">
+          <div className="rounded-md border border-dashed border-hair bg-paper-2 p-6 text-[14px] text-ink-2">
             No active goals.{' '}
-            <a href="/goals" className="font-semibold text-[var(--color-leaf)] underline">
+            <Link href="/goals" className="font-semibold text-leaf underline">
               Set one
-            </a>
+            </Link>
             .
           </div>
         ) : (
@@ -734,26 +752,25 @@ export function DashboardClient({
               return (
                 <li
                   key={g.id}
-                  className="rounded-[14px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-3.5"
+                  className="rounded-md border border-hair bg-paper p-3.5"
                 >
                   <div className="flex items-baseline justify-between gap-2">
-                    <span className="truncate text-[13.5px] font-medium text-[var(--color-ink)]">
+                    <span className="truncate text-[13.5px] font-medium text-ink">
                       {g.name}
                     </span>
-                    <span className="shrink-0 font-serif text-[13px] tabular-nums text-[var(--color-ink-2)]">
+                    <span className="shrink-0 text-[13px]">
                       <PrivacyBlur hidden={hidden}>
-                        {fmtCAD(g.current)}{' '}
-                        <span className="text-[var(--color-ink-3)]">of {fmtCAD(g.target)}</span>
+                        <Amount cents={g.current} />{' '}
+                        <span className="font-serif tabular-nums text-ink-3">
+                          of {formatMoney(g.target)}
+                        </span>
                       </PrivacyBlur>
                     </span>
                   </div>
-                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--color-paper-2)]">
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-paper-2">
                     <div
-                      className="h-full rounded-full transition-all duration-300"
-                      style={{
-                        width: `${Math.round(pct * 100)}%`,
-                        background: 'var(--color-leaf)',
-                      }}
+                      className="h-full rounded-full bg-leaf transition-all duration-300"
+                      style={{ width: `${Math.round(pct * 100)}%` }}
                     />
                   </div>
                 </li>
@@ -768,16 +785,16 @@ export function DashboardClient({
       <section key="recent-activity">
         <div className="mb-3 flex items-baseline justify-between">
           <MapleLabel>Recent activity</MapleLabel>
-          <a href="/transactions" className="text-[12px] font-semibold text-[var(--color-leaf)] hover:underline">
+          <Link href="/transactions" className="text-[12px] font-semibold text-leaf hover:underline">
             See all →
-          </a>
+          </Link>
         </div>
         {recentActivity.length === 0 ? (
-          <div className="rounded-[18px] border border-dashed border-[var(--color-hair)] bg-[var(--color-paper-2)] p-6 text-[14px] text-[var(--color-ink-2)]">
+          <div className="rounded-md border border-dashed border-hair bg-paper-2 p-6 text-[14px] text-ink-2">
             No transactions yet.
           </div>
         ) : (
-          <ul className="overflow-hidden rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)]">
+          <ul className="overflow-hidden rounded-md border border-hair bg-paper">
             {recentActivity.slice(0, 5).map((t, i) => {
               const isOut = t.amount_cents > 0
               return (
@@ -785,24 +802,27 @@ export function DashboardClient({
                   key={t.id}
                   className={
                     'flex items-center gap-3 px-4 py-2.5 ' +
-                    (i > 0 ? 'border-t border-[var(--color-hair)]' : '')
+                    (i > 0 ? 'border-t border-hair' : '')
                   }
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13.5px] font-medium text-[var(--color-ink)]">
+                    <div className="truncate text-[13.5px] font-medium text-ink">
                       {t.description}
                     </div>
-                    <div className="truncate text-[11.5px] text-[var(--color-ink-3)]">
+                    <div className="truncate text-[11.5px] text-ink-3">
                       {formatDate(t.occurred_on)} · {t.account_name}
                     </div>
                   </div>
-                  <div
-                    className="shrink-0 font-serif text-[14.5px] tabular-nums"
-                    style={{ color: isOut ? 'var(--color-maple)' : 'var(--color-leaf)' }}
-                  >
+                  <div className="shrink-0 text-[14.5px]">
                     <PrivacyBlur hidden={hidden}>
-                      {isOut ? '−' : '+'}
-                      {fmtCAD(Math.abs(t.amount_cents))}
+                      {/* Outflows are positive cents (down/maple), inflows
+                          negative (up/leaf). Flip the sign so the displayed
+                          number matches a spend = "−" convention. */}
+                      <Amount
+                        cents={-t.amount_cents}
+                        sign="always"
+                        tone={isOut ? 'maple' : 'leaf'}
+                      />
                     </PrivacyBlur>
                   </div>
                 </li>
@@ -816,18 +836,33 @@ export function DashboardClient({
 
   return (
     <div className="flex flex-col gap-6 pb-10">
-      {/* Edit-mode entry — small Maple-pill aligned right of the page so it
-          stays out of the way but is always reachable, even if the greeting
-          widget is hidden. */}
-      <div className="-mb-2 flex justify-end">
-        <button
-          type="button"
-          onClick={() => setEditOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3.5 py-1.5 text-[12px] font-semibold text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
+      {/* A failed query means a card would otherwise read $0 — surface it so the
+          user knows the number is missing data, not real. */}
+      {hasError && (
+        <div
+          role="alert"
+          className="flex items-start gap-2.5 rounded-md border border-maple/30 bg-maple-soft px-4 py-3 text-[13px] text-maple"
         >
-          <PencilIcon />
-          Edit dashboard
-        </button>
+          <span className="mt-px shrink-0" aria-hidden>
+            <AlertIcon />
+          </span>
+          <span>
+            Some figures couldn’t load just now, so parts of your dashboard may be
+            incomplete. Pull to refresh or try again shortly.
+          </span>
+        </div>
+      )}
+
+      {/* Primary action — obvious leaf button anchored top-right of the page so
+          it stays reachable even when the greeting widget is hidden. */}
+      <div className="flex items-center justify-end">
+        <Link
+          href="/transactions"
+          className="inline-flex h-[46px] items-center justify-center gap-2 rounded-full bg-leaf px-5 text-[14px] font-semibold tracking-[-0.01em] text-paper shadow-[var(--shadow-card)] transition-transform duration-150 active:scale-[0.97]"
+        >
+          <PlusIcon />
+          Add transaction
+        </Link>
       </div>
 
       {layout.map((id) => (
@@ -1046,6 +1081,21 @@ function PencilIcon() {
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+  )
+}
+function PlusIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  )
+}
+function AlertIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+      <path d="M12 9v4M12 17h.01" />
     </svg>
   )
 }

@@ -15,11 +15,13 @@ export function AddTransactionForm({
   accounts,
   categories,
   members,
+  onSaved,
 }: {
   defaultDate: string
   accounts: { id: string; name: string }[]
   categories: { id: string; parent_id: string | null; name: string }[]
   members: { id: string; name: string }[]
+  onSaved?: () => void
 }) {
   const [state, formAction, pending] = useActionState<TransactionState, FormData>(
     createTransaction,
@@ -42,11 +44,12 @@ export function AddTransactionForm({
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setAmount('')
       setDirection('out')
+      onSaved?.()
     }
-  }, [pending, state])
+  }, [pending, state, onSaved])
 
   return (
-    <form ref={formRef} action={formAction} className="mt-4 flex flex-col gap-4">
+    <form ref={formRef} action={formAction} className="flex flex-col gap-4">
       {/* Direction + amount hero */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex rounded-full bg-[var(--color-paper-2)] p-1 sm:w-auto">

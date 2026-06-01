@@ -110,6 +110,23 @@ export default async function DashboardPage() {
       .limit(8),
   ])
 
+  // If any query errored, the derived figures below silently read as $0/empty.
+  // Surface a flag so the client can warn the user instead of presenting a
+  // fabricated zero as real data.
+  const hasError = [
+    householdRes,
+    membersRes,
+    accountsRes,
+    snapshotsRes,
+    transactionsRes,
+    splitsRes,
+    categoriesRes,
+    budgetsRes,
+    goalsRes,
+    recurringTxRes,
+    recentTxRes,
+  ].some((r) => r.error)
+
   const household = householdRes.data ?? { name: 'Household' }
   const members = (membersRes.data ?? []) as { id: string; display_name: string }[]
   const accounts = ((accountsRes.data ?? []) as Account[]).map((a) => ({
@@ -336,6 +353,7 @@ export default async function DashboardPage() {
         daysElapsed,
         daysInMonth,
       }}
+      hasError={hasError}
     />
   )
 }
