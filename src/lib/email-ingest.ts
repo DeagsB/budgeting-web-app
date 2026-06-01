@@ -22,10 +22,13 @@ export type IngestRule = {
 }
 
 // Tiny lookup of a household's accounts so the engine can resolve the
-// router regex's captured discriminator into an account id.
+// router regex's captured discriminator into an account id, and default the
+// transaction's member from the account's owner.
 export type AccountLookup = {
   id: string
   last_four: string | null
+  ownership?: 'member' | 'shared'
+  member_id?: string | null
 }
 
 export type IngestEmail = {
@@ -183,6 +186,16 @@ export function parseEmail(
       }
     }
 
+    // Member resolution: an explicit rule default wins; otherwise the
+    // transaction follows the routed account's owner — a member-owned account
+    // makes it personal to that member, a shared account leaves it shared.
+    // This is multi-member correct: each member's own accounts route to them.
+    let memberId = rule.default_member_id
+    if (!memberId) {
+      const routed = accounts.find((a) => a.id === routedAccountId)
+      memberId = routed && routed.ownership === 'member' ? routed.member_id ?? null : null
+    }
+
     return {
       ok: true,
       tx: {
@@ -190,7 +203,7 @@ export function parseEmail(
         amount_cents: signedCents,
         description,
         account_id: routedAccountId,
-        member_id: rule.default_member_id,
+        member_id: memberId,
         category_id: rule.default_category_id,
         external_id: email.message_id,
         matched_rule_id: rule.id,

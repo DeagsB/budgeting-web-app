@@ -81,13 +81,19 @@ export async function POST(request: NextRequest) {
       .order('sort_order', { ascending: true }),
     service
       .from('accounts')
-      .select('id, last_four, name')
+      .select('id, last_four, name, ownership, member_id')
       .eq('household_id', householdId)
       .is('archived_at', null),
   ])
 
   const rules = (ruleRows ?? []) as IngestRule[]
-  const accounts = (accountRows ?? []) as { id: string; last_four: string | null; name: string | null }[]
+  const accounts = (accountRows ?? []) as {
+    id: string
+    last_four: string | null
+    name: string | null
+    ownership: 'member' | 'shared'
+    member_id: string | null
+  }[]
   const outcome = parseEmail(rules, email, accounts)
 
   if (!outcome.ok) {
