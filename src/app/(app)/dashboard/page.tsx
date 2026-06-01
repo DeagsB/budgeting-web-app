@@ -1,7 +1,13 @@
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { addMonths, monthStartISO } from '@/lib/format'
-import { LIABILITY_TYPES, type AccountType } from '@/lib/domain'
+import { type AccountType } from '@/lib/domain'
+import {
+  netWorthTrail as computeTrail,
+  accountBalanceAt,
+  groupTxByAccount,
+  groupSnapsByAccount,
+} from '@/lib/balances'
 import { DashboardClient } from './client'
 
 export const dynamic = 'force-dynamic'
@@ -44,6 +50,7 @@ export default async function DashboardPage() {
     goalsRes,
     recurringTxRes,
     recentTxRes,
+    balanceTxRes,
   ] = await Promise.all([
     supabase.from('households').select('name').eq('id', ctx.householdId).maybeSingle(),
     supabase
@@ -108,6 +115,14 @@ export default async function DashboardPage() {
       .order('occurred_on', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(8),
+    // All transactions up to the end of the current month — drives the
+    // cashflow-derived running balances + the net-worth trail.
+    supabase
+      .from('transactions')
+      .select('account_id, occurred_on, amount_cents')
+      .eq('household_id', ctx.householdId)
+      .lt('occurred_on', currentMonthEnd)
+      .limit(20000),
   ])
 
   // If any query errored, the derived figures below silently read as $0/empty.
@@ -125,6 +140,7 @@ export default async function DashboardPage() {
     goalsRes,
     recurringTxRes,
     recentTxRes,
+    balanceTxRes,
   ].some((r) => r.error)
 
   const household = householdRes.data ?? { name: 'Household' }
@@ -149,37 +165,26 @@ export default async function DashboardPage() {
   }))
   const categories = (categoriesRes.data ?? []) as { id: string; name: string; parent_id: string | null }[]
 
-  // Build net-worth trail: for each of the last 12 months, sum the latest
-  // snapshot balance per account (fallback to opening_balance_cents).
-  const snapsByAcct = new Map<string, Snapshot[]>()
-  for (const s of snapshots) {
-    if (!snapsByAcct.has(s.account_id)) snapsByAcct.set(s.account_id, [])
-    snapsByAcct.get(s.account_id)!.push(s)
-  }
-
-  function balanceAt(acct: Account, month: string): number {
-    const arr = snapsByAcct.get(acct.id) ?? []
-    let best: number | null = null
-    for (const s of arr) {
-      if (s.as_of_month <= month) best = s.balance_cents
-      else break
-    }
-    return best ?? acct.opening_balance_cents
-  }
+  // Cashflow-derived balances: opening balance + the net effect of every
+  // transaction through the month (snapshots, if any, anchor it). Makes the
+  // net-worth trail + card balances track real spending/income instead of
+  // sitting flat on opening balances.
+  const balanceTx = ((balanceTxRes.data ?? []) as Array<{
+    account_id: string
+    occurred_on: string
+    amount_cents: number | string
+  }>).map((t) => ({
+    account_id: t.account_id,
+    occurred_on: t.occurred_on,
+    amount_cents: Number(t.amount_cents),
+  }))
+  const txByAccount = groupTxByAccount(balanceTx)
+  const snapsByAccount = groupSnapsByAccount(snapshots)
 
   const months: string[] = []
   for (let i = 0; i < 12; i += 1) months.push(addMonths(monthStart12, i))
 
-  const netWorthTrail = months.map((m) => {
-    let assets = 0
-    let liabilities = 0
-    for (const a of accounts) {
-      const bal = balanceAt(a, m)
-      if (LIABILITY_TYPES.has(a.type)) liabilities += bal
-      else assets += bal
-    }
-    return { month: m, value: assets - liabilities }
-  })
+  const netWorthTrail = computeTrail(accounts, months, txByAccount, snapsByAccount)
 
   const netWorth = netWorthTrail[netWorthTrail.length - 1]?.value ?? 0
   const netWorthPrev = netWorthTrail[netWorthTrail.length - 2]?.value ?? netWorth
@@ -203,14 +208,14 @@ export default async function DashboardPage() {
     monthCountByAccount.set(tx.account_id, (monthCountByAccount.get(tx.account_id) ?? 0) + 1)
   }
 
-  // Current account balances (latest snapshot or opening fallback).
+  // Current account balances (cashflow-derived through this month).
   const accountsWithBalance = accounts.map((a) => ({
     id: a.id,
     name: a.name,
     type: a.type,
     ownership: a.ownership,
     member_id: a.member_id,
-    balance_cents: balanceAt(a, currentMonth),
+    balance_cents: accountBalanceAt(a, currentMonth, txByAccount, snapsByAccount),
     month_outflow_cents: monthOutByAccount.get(a.id) ?? 0,
     month_inflow_cents: monthInByAccount.get(a.id) ?? 0,
     month_tx_count: monthCountByAccount.get(a.id) ?? 0,

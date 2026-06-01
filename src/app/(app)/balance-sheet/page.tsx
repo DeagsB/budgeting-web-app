@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { addMonths, monthLabel, monthStartISO } from '@/lib/format'
 import { accountTypeLabel, LIABILITY_TYPES, type AccountType } from '@/lib/domain'
+import { accountBalanceAt, groupTxByAccount, groupSnapsByAccount } from '@/lib/balances'
 import { PageHeader } from '@/components/ui/page-header'
 import { MonthNav } from '@/components/ui/month-nav'
 import { StatTile } from '@/components/ui/stat-tile'
@@ -34,7 +35,7 @@ export default async function BalanceSheetPage({
   if (!ctx) return null
   const supabase = await createClient()
 
-  const [{ data: accounts }, { data: snapshots }, { data: members }] = await Promise.all([
+  const [{ data: accounts }, { data: snapshots }, { data: members }, { data: txData }] = await Promise.all([
     supabase
       .from('accounts')
       .select('id, name, type, ownership, member_id, opening_balance_cents')
@@ -50,9 +51,33 @@ export default async function BalanceSheetPage({
       .from('members')
       .select('id, display_name')
       .eq('household_id', ctx.householdId),
+    supabase
+      .from('transactions')
+      .select('account_id, occurred_on, amount_cents')
+      .eq('household_id', ctx.householdId)
+      .limit(20000),
   ])
 
   const memberName = new Map((members ?? []).map((m) => [m.id, m.display_name]))
+
+  // Cashflow-derived balance as of a month: opening + transactions through the
+  // month end, anchored by a snapshot when one exists at/before it.
+  const txByAccount = groupTxByAccount(
+    (txData ?? []).map((t) => ({
+      account_id: t.account_id as string,
+      occurred_on: t.occurred_on as string,
+      amount_cents: Number(t.amount_cents),
+    })),
+  )
+  const snapsByAccount = groupSnapsByAccount(
+    (snapshots ?? []).map((s) => ({
+      account_id: s.account_id as string,
+      as_of_month: s.as_of_month as string,
+      balance_cents: Number(s.balance_cents),
+    })),
+  )
+  const balanceFor = (acctId: string, type: AccountType, opening: number, target: string) =>
+    accountBalanceAt({ id: acctId, type, opening_balance_cents: opening }, target, txByAccount, snapsByAccount)
 
   // Snapshots arrive newest-first. Index them per account so we can resolve the
   // balance "as of" any month: the first snapshot at-or-before the target.
@@ -61,11 +86,6 @@ export default async function BalanceSheetPage({
     const arr = snapsByAcct.get(s.account_id) ?? []
     arr.push({ as_of: s.as_of_month as string, cents: Number(s.balance_cents) })
     snapsByAcct.set(s.account_id, arr)
-  }
-  const balanceAsOf = (acctId: string, opening: number, target: string, inclusive = true) => {
-    const snaps = snapsByAcct.get(acctId) ?? []
-    const found = snaps.find((s) => (inclusive ? s.as_of <= target : s.as_of < target))
-    return found ? found.cents : opening
   }
   const snapshotAt = (acctId: string, target: string): number | null => {
     const snaps = snapsByAcct.get(acctId) ?? []
@@ -93,7 +113,7 @@ export default async function BalanceSheetPage({
         a.ownership === 'shared'
           ? 'Shared'
           : (a.member_id && memberName.get(a.member_id)) || 'Member',
-      cents: balanceAsOf(a.id, opening, month),
+      cents: balanceFor(a.id, a.type as AccountType, opening, month),
       isLiability: LIABILITY_TYPES.has(a.type as AccountType),
     }
   })
@@ -134,7 +154,7 @@ export default async function BalanceSheetPage({
       ownership: a.ownership as string,
       opening_balance_cents: opening,
       current_balance_cents: snapshotAt(a.id, month),
-      previous_balance_cents: balanceAsOf(a.id, opening, prevMonth),
+      previous_balance_cents: balanceFor(a.id, a.type as AccountType, opening, prevMonth),
       is_liability: LIABILITY_TYPES.has(a.type as AccountType),
     }
   })
