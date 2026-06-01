@@ -122,11 +122,16 @@ export function SetupWizard({
   log: LogEntry[]
 }) {
   const [editingRule, setEditingRule] = useState<Rule | 'new' | null>(null)
+  // The secret is shown once, right after generation. Hold it in memory so
+  // step 3 can bake it straight into the Apps Script — the user never has to
+  // copy the key into a script property by hand. Lost on refresh by design
+  // (we never re-fetch it from the server), which keeps the "shown once" model.
+  const [freshSecret, setFreshSecret] = useState<string | null>(null)
 
   return (
     <div className="flex flex-col gap-5">
       <Step n={1} title="Generate your private webhook">
-        <SecretCard webhookUrl={webhookUrl} hasSecret={hasSecret} />
+        <SecretCard webhookUrl={webhookUrl} hasSecret={hasSecret} onSecret={setFreshSecret} />
       </Step>
 
       <Step n={2} title="Turn on transaction alerts at your bank">
@@ -134,7 +139,7 @@ export function SetupWizard({
       </Step>
 
       <Step n={3} title="Install the Gmail Apps Script">
-        <GmailScriptCard webhookUrl={webhookUrl} />
+        <GmailScriptCard webhookUrl={webhookUrl} secret={freshSecret} />
       </Step>
 
       <Step n={4} title="Define how each email becomes a transaction">
@@ -157,7 +162,15 @@ export function SetupWizard({
 
 // ─── Step 1 — Secret ──────────────────────────────────────────────────────
 
-function SecretCard({ webhookUrl, hasSecret }: { webhookUrl: string; hasSecret: boolean }) {
+function SecretCard({
+  webhookUrl,
+  hasSecret,
+  onSecret,
+}: {
+  webhookUrl: string
+  hasSecret: boolean
+  onSecret: (secret: string) => void
+}) {
   const [state, formAction, pending] = useActionState<RotateSecretState, FormData>(
     rotateSecret,
     undefined,
@@ -172,6 +185,11 @@ function SecretCard({ webhookUrl, hasSecret }: { webhookUrl: string; hasSecret: 
   }
 
   const newlyMintedSecret = state && 'ok' in state && state.ok ? state.secret : null
+
+  // Hand the freshly-minted secret up so step 3 bakes it into the script.
+  useEffect(() => {
+    if (newlyMintedSecret) onSecret(newlyMintedSecret)
+  }, [newlyMintedSecret, onSecret])
 
   return (
     <div className="flex flex-col gap-4">
@@ -325,9 +343,9 @@ function BankAlertHelp() {
 
 // ─── Step 3 — Gmail Apps Script ───────────────────────────────────────────
 
-function GmailScriptCard({ webhookUrl }: { webhookUrl: string }) {
+function GmailScriptCard({ webhookUrl, secret }: { webhookUrl: string; secret: string | null }) {
   const [copied, setCopied] = useState(false)
-  const code = appsScriptCode(webhookUrl)
+  const code = appsScriptCode(webhookUrl, secret)
 
   function copy() {
     navigator.clipboard?.writeText(code).then(() => {
@@ -338,6 +356,26 @@ function GmailScriptCard({ webhookUrl }: { webhookUrl: string }) {
 
   return (
     <div className="flex flex-col gap-3">
+      {secret ? (
+        <div
+          className="rounded-[10px] border px-3 py-2 text-[12px] font-medium"
+          style={{ borderColor: 'var(--color-leaf)', background: 'var(--color-leaf-tint)', color: 'var(--color-leaf-deep)' }}
+        >
+          ✓ Your secret is already baked into the script below — no script property to set.
+          Just paste, run <code className="rounded bg-[var(--color-paper)] px-1.5 py-0.5 font-mono text-[11px]">setup</code>, done.
+        </div>
+      ) : (
+        <div
+          className="rounded-[10px] border px-3 py-2 text-[12px] leading-relaxed"
+          style={{ borderColor: 'var(--color-honey)', background: 'var(--color-paper-2)', color: 'var(--color-ink-2)' }}
+        >
+          Press <b>Rotate secret</b> in step 1 and the script below comes back with your key
+          already baked in — nothing to copy. Otherwise set the{' '}
+          <code className="rounded bg-[var(--color-cream-2)] px-1.5 py-0.5 font-mono text-[11px]">SECRET</code> script
+          property by hand (step 3 below).
+        </div>
+      )}
+
       <ol className="ml-5 list-decimal space-y-1 text-[13.5px] leading-relaxed text-[var(--color-ink-2)]">
         <li>
           Open{' '}
@@ -351,22 +389,24 @@ function GmailScriptCard({ webhookUrl }: { webhookUrl: string }) {
           </a>
           {' '}and click <b>New project</b>.
         </li>
-        <li>Replace the contents of <code className="rounded bg-[var(--color-cream-2)] px-1.5 py-0.5 font-mono text-[11.5px]">Code.gs</code> with the script below.</li>
-        <li>
-          Set <code className="rounded bg-[var(--color-cream-2)] px-1.5 py-0.5 font-mono text-[11.5px]">SECRET</code> in <b>Project Settings → Script properties</b>
-          {' '}to the secret you copied in step 1.
-        </li>
+        <li>Replace the contents of <code className="rounded bg-[var(--color-cream-2)] px-1.5 py-0.5 font-mono text-[11.5px]">Code.gs</code> with the script below{secret ? ' (secret already baked in)' : ''}.</li>
+        {!secret && (
+          <li>
+            Set <code className="rounded bg-[var(--color-cream-2)] px-1.5 py-0.5 font-mono text-[11.5px]">SECRET</code> in <b>Project Settings → Script properties</b>
+            {' '}to the secret from step 1. <span className="text-[var(--color-ink-3)]">(Or rotate the secret to skip this — see note above.)</span>
+          </li>
+        )}
         <li>
           <b>Label your alerts in Gmail.</b> Gmail → Settings → Filters → create a filter on
-          your bank&rsquo;s sender, then <b>Apply label</b> → new label{' '}
+          your bank&rsquo;s sender, then <b>Apply label</b> →{' '}
           <code className="rounded bg-[var(--color-cream-2)] px-1.5 py-0.5 font-mono text-[11.5px]">bank-alerts</code>.
-          {' '}<span className="text-[var(--color-ink-3)]">Required — the script only reads mail under this label. Tick &ldquo;also apply to matching conversations&rdquo; to backfill existing alerts.</span>
+          {' '}<span className="text-[var(--color-ink-3)]"><code className="font-mono">setup</code> creates this label for you, but only a filter routes mail into it. Tick &ldquo;also apply to matching conversations&rdquo; to backfill existing alerts.</span>
         </li>
         <li>
-          In the editor, pick <code className="rounded bg-[var(--color-cream-2)] px-1.5 py-0.5 font-mono text-[11.5px]">installTrigger</code> from the
+          In the editor, pick <code className="rounded bg-[var(--color-cream-2)] px-1.5 py-0.5 font-mono text-[11.5px]">setup</code> from the
           function dropdown and click <b>Run</b>. Approve Gmail access when prompted —
-          this creates the <b>hourly</b> trigger and pulls existing alerts right away.
-          {' '}<span className="text-[var(--color-ink-3)]">(Hourly is plenty; you can also pull on demand from the app.)</span>
+          this creates the label, installs the <b>hourly</b> trigger, and pulls existing alerts right away.
+          {' '}<span className="text-[var(--color-ink-3)]">(One run does everything. Hourly is plenty; you can also pull on demand from the app.)</span>
         </li>
         <li>
           <b>For on-demand sync:</b> click <b>Deploy → New deployment</b> → type <b>Web app</b>,
@@ -403,17 +443,23 @@ function GmailScriptCard({ webhookUrl }: { webhookUrl: string }) {
   )
 }
 
-function appsScriptCode(webhookUrl: string): string {
+function appsScriptCode(webhookUrl: string, secret: string | null): string {
+  // The secret is 64 hex chars (gen_random_bytes(32) → hex), so it is safe to
+  // drop straight into a single-quoted JS literal — no escaping needed.
+  const bakedSecret = secret ?? ''
   return `// Forwards Gmail messages labelled "bank-alerts" to Maple.
-// Script properties:
-//   SECRET        (required)  — your Maple webhook secret from step 1
-//   LABEL_NAME    (optional)  — Gmail label to scan; defaults to "bank-alerts"
-//   LOOKBACK_DAYS (optional)  — how far back to scan each run; defaults to 30.
-//                               Bump to e.g. 365 once for a one-time backfill,
-//                               then lower it again.
 //
-// Run installTrigger() ONCE to create the hourly trigger and authorize Gmail.
-// The doGet() entry point lets Maple's "Sync now" button invoke this on demand.
+// EASIEST SETUP — pick "setup" in the function dropdown above and click Run, once.
+// It creates the Gmail label, installs the hourly trigger, authorizes Gmail, and
+// pulls your existing alerts immediately. Nothing else to configure.
+//
+// Script properties (optional overrides):
+//   SECRET        — your Maple webhook secret. Baked in below when you copy the
+//                   script right after pressing "Generate/Rotate secret";
+//                   otherwise set it here (Project Settings ▸ Script properties).
+//   LABEL_NAME    — Gmail label to scan; defaults to "bank-alerts".
+//   LOOKBACK_DAYS — how far back to scan each run; defaults to 30. Bump to 365
+//                   once for a one-time backfill, then lower it again.
 //
 // Note: GmailApp only supports labels at the thread level, and bank alerts
 // with identical subjects often share a thread — so we do NOT track "already
@@ -423,24 +469,49 @@ function appsScriptCode(webhookUrl: string): string {
 // run as often as you like.
 
 const WEBHOOK_URL = '${webhookUrl}';
+const SECRET = '${bakedSecret}';
 
-// Run this ONCE from the editor (pick installTrigger in the function dropdown,
-// then Run). Creates the hourly trigger, authorizes Gmail, and pulls now.
+// ── Run this ONCE ──────────────────────────────────────────────────────────
+// Pick "setup" in the function dropdown, click Run, approve Gmail access.
+// Persists the secret, creates the label, installs the hourly trigger, and
+// pulls your existing alerts right now.
+function setup() {
+  if (SECRET) PropertiesService.getScriptProperties().setProperty('SECRET', SECRET);
+  ensureLabel_(labelName_());
+  installTrigger();
+  const result = forwardBankAlerts();
+  Logger.log('Setup complete. First run: ' + JSON.stringify(result));
+  return result;
+}
+
+// (Re)creates the hourly trigger. setup() calls this; you can also run it on
+// its own to reinstall the schedule.
 function installTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'forwardBankAlerts') ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('forwardBankAlerts').timeBased().everyHours(1).create();
-  const result = forwardBankAlerts();
-  Logger.log('Trigger installed. First run: ' + JSON.stringify(result));
+}
+
+function labelName_() {
+  return PropertiesService.getScriptProperties().getProperty('LABEL_NAME') || 'bank-alerts';
+}
+
+function secret_() {
+  return SECRET || PropertiesService.getScriptProperties().getProperty('SECRET') || '';
+}
+
+// Make the label exist so it shows up in Gmail's filter UI and the search never
+// errors. A Gmail filter is still what routes incoming mail into it.
+function ensureLabel_(name) {
+  if (!GmailApp.getUserLabelByName(name)) GmailApp.createLabel(name);
 }
 
 function forwardBankAlerts() {
-  const props = PropertiesService.getScriptProperties();
-  const secret = props.getProperty('SECRET');
-  if (!secret) throw new Error('Set the SECRET script property first (Project Settings ▸ Script properties).');
-  const labelName = props.getProperty('LABEL_NAME') || 'bank-alerts';
-  const lookback = props.getProperty('LOOKBACK_DAYS') || '30';
+  const secret = secret_();
+  if (!secret) throw new Error('No secret set. In Maple, press "Generate/Rotate secret", re-copy this script (the key bakes in), and run setup — or set the SECRET script property by hand.');
+  const labelName = labelName_();
+  const lookback = PropertiesService.getScriptProperties().getProperty('LOOKBACK_DAYS') || '30';
   const query = 'label:' + labelName + ' newer_than:' + lookback + 'd';
 
   let imported = 0;
@@ -473,8 +544,8 @@ function forwardBankAlerts() {
         const code = res.getResponseCode();
         if (code === 401) {
           // Bad/stale secret. Stop loudly instead of silently dropping every
-          // alert — update the SECRET script property and re-run.
-          throw new Error('Maple rejected the secret (HTTP 401). Set the SECRET script property to the current value from Maple step 1, then re-run.');
+          // alert — rotate in Maple, re-copy the script, and run setup again.
+          throw new Error('Maple rejected the secret (HTTP 401). In Maple, press "Generate/Rotate secret", re-copy this script, and run setup again.');
         }
         if (code !== 200) {
           failures++;
