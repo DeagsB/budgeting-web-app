@@ -105,7 +105,12 @@ export function TxControls({
             onBlur={() => navigate({ search: searchValue })}
             placeholder="Search descriptions…"
             aria-label="Search transactions"
-            className="maple-input pl-10"
+            // `.maple-input` is unlayered CSS and sets `padding` shorthand, which
+            // beats Tailwind's layered `pl-10` — so the left padding must be set
+            // inline to clear the search icon. (Right pad makes room for the
+            // native search-clear affordance.)
+            className="maple-input"
+            style={{ paddingLeft: '2.5rem', paddingRight: '1rem' }}
           />
         </div>
 

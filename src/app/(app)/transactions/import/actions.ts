@@ -10,6 +10,7 @@ import {
   type ExistingTx,
   type HistoryEntry,
 } from '@/lib/statement-reconcile'
+import { cleanTitle } from '@/lib/title'
 
 export type ImportState =
   | { error: string }
@@ -170,7 +171,7 @@ export async function commitImport(
       if (r.description && r.description.trim()) {
         await supabase
           .from('transactions')
-          .update({ description: r.description })
+          .update({ description: cleanTitle(r.description) ?? r.description })
           .eq('id', r.matched_tx_id)
           .eq('household_id', ctx.householdId)
       }
@@ -185,7 +186,7 @@ export async function commitImport(
         occurred_on: r.occurred_on,
         account_id: r.account_id,
         member_id: r.member_id,
-        description: r.description,
+        description: cleanTitle(r.description) ?? r.description,
         amount_cents: r.amount_cents,
         source: r.source ?? 'csv_import',
         external_id: r.external_id ?? null,

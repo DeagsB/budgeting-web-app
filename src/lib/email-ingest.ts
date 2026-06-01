@@ -1,6 +1,8 @@
 // Pure functions for parsing a forwarded bank-alert email against a set of
 // per-household regex rules. No I/O — the route handler does the DB work.
 
+import { cleanTitle } from './title'
+
 export type IngestRule = {
   id: string
   name: string
@@ -140,13 +142,16 @@ export function parseEmail(
       continue
     }
 
-    let description: string | null = null
+    let capturedDesc: string | null = null
     if (rule.description_regex) {
       const re = safeRegex(rule.description_regex)
       const m = re ? email.body.match(re) : null
-      description = m ? (m[1] ?? m[0]).trim() : null
+      capturedDesc = m ? (m[1] ?? m[0]).trim() : null
     }
-    if (!description) description = email.subject || null
+    // Tidy the captured merchant ("TIM HORTONS #5" → "Tim Hortons"); fall back
+    // to the email subject when nothing usable was captured.
+    let description = cleanTitle(capturedDesc)
+    if (!description) description = email.subject?.trim() || null
 
     let occurredOn: string
     if (rule.date_regex) {

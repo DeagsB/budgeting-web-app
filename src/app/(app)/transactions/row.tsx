@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { updateTransaction, deleteTransaction } from './actions'
 import { CategorySelect } from './category-select'
+import { QuickCategorize } from './quick-categorize'
 import { SplitEditor } from './split-editor'
 import { ConfirmButton } from '@/components/ui/confirm-button'
 import { Amount } from '@/components/ui/amount'
@@ -30,14 +31,19 @@ export function TransactionRow({
   accounts,
   categories,
   members,
+  isUncategorized = false,
+  topCategoryIds = [],
 }: {
   transaction: TransactionVM
   accounts: { id: string; name: string }[]
   categories: { id: string; parent_id: string | null; name: string }[]
   members: { id: string; name: string }[]
+  isUncategorized?: boolean
+  topCategoryIds?: string[]
 }) {
   const [editing, setEditing] = useState(false)
   const [showSplits, setShowSplits] = useState(false)
+  const [categorizing, setCategorizing] = useState(false)
 
   // ───────── EDIT MODE ─────────
   if (editing) {
@@ -192,7 +198,13 @@ export function TransactionRow({
           </div>
 
           <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-ink-3">
-            <span className="truncate">{t.categorySummary}</span>
+            {isUncategorized ? (
+              <span className="inline-flex items-center rounded-full bg-butter px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-ink">
+                Uncategorized
+              </span>
+            ) : (
+              <span className="truncate">{t.categorySummary}</span>
+            )}
             <span>·</span>
             <span>{t.accountName}</span>
             <span>·</span>
@@ -202,6 +214,20 @@ export function TransactionRow({
           {/* Row actions — always visible (no hover gating) with ≥44px tap
               targets so they work on touch without a hover state. */}
           <div className="-ml-1 mt-1.5 flex flex-wrap items-center gap-1 text-[12px]">
+            {isUncategorized && (
+              <button
+                type="button"
+                onClick={() => setCategorizing((v) => !v)}
+                aria-expanded={categorizing}
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md bg-leaf px-2.5 font-semibold text-paper transition-colors hover:bg-leaf/90"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z" />
+                  <circle cx="7" cy="7" r="1.2" fill="currentColor" />
+                </svg>
+                {categorizing ? 'Close' : 'Categorize'}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setShowSplits((v) => !v)}
@@ -230,6 +256,17 @@ export function TransactionRow({
           </div>
         </div>
       </div>
+
+      {categorizing && (
+        <div className="border-t border-hair bg-cream-2 px-5 py-4">
+          <QuickCategorize
+            transactionId={t.id}
+            categories={categories}
+            topCategoryIds={topCategoryIds}
+            onDone={() => setCategorizing(false)}
+          />
+        </div>
+      )}
 
       {showSplits && (
         <div className="border-t border-hair bg-cream-2 px-5 py-5">

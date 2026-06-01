@@ -123,6 +123,188 @@ export async function updateTransaction(fd: FormData): Promise<void> {
   revalidate()
 }
 
+type DbClient = Awaited<ReturnType<typeof createClient>>
+
+/**
+ * Resolve a category id to one that genuinely belongs to this household, or
+ * null. Guards against a spoofed FormData value attaching a foreign-household
+ * category to our own splits (the FK and RLS don't enforce same-household).
+ */
+async function resolveCategoryId(
+  supabase: DbClient,
+  householdId: string,
+  category_id: string | null,
+): Promise<string | null> {
+  if (!category_id) return null
+  const { data } = await supabase
+    .from('categories')
+    .select('id')
+    .eq('id', category_id)
+    .eq('household_id', householdId)
+    .maybeSingle()
+  return data?.id ?? null
+}
+
+/**
+ * Set (or clear) the category of one or more transactions.
+ *
+ * Because an uncategorized (or single-category) transaction always has exactly
+ * one split spanning the full amount, categorising is an in-place UPDATE of
+ * that split's category_id — atomic, and it preserves the splits-sum-equals-
+ * total invariant with no delete/insert window. Multi-split transactions are
+ * skipped (re-categorising them would destroy the user's allocation).
+ *
+ * `primaryIds` are always (re)categorised — the user acted on them directly.
+ * `siblingIds` (the "apply to similar" fan-out) are only touched while still
+ * uncategorized, so a same-merchant row the user already gave an explicit
+ * category isn't silently clobbered.
+ */
+async function setCategoryForTransactions(
+  supabase: DbClient,
+  householdId: string,
+  opts: { primaryIds: string[]; siblingIds?: string[]; category_id: string | null },
+): Promise<void> {
+  const primarySet = new Set(opts.primaryIds.filter(Boolean))
+  const allIds = Array.from(new Set([...primarySet, ...(opts.siblingIds ?? []).filter(Boolean)]))
+  if (allIds.length === 0) return
+
+  const safeCategoryId = await resolveCategoryId(supabase, householdId, opts.category_id)
+
+  const [{ data: txs }, { data: splits }] = await Promise.all([
+    supabase
+      .from('transactions')
+      .select('id, amount_cents')
+      .in('id', allIds)
+      .eq('household_id', householdId),
+    supabase
+      .from('transaction_splits')
+      .select('transaction_id, category_id')
+      .in('transaction_id', allIds),
+  ])
+
+  const splitsByTx = new Map<string, (string | null)[]>()
+  for (const s of splits ?? []) {
+    const arr = splitsByTx.get(s.transaction_id) ?? []
+    arr.push(s.category_id)
+    splitsByTx.set(s.transaction_id, arr)
+  }
+  const amountByTx = new Map((txs ?? []).map((t) => [t.id, t.amount_cents]))
+
+  const updateIds: string[] = []
+  const insertIds: string[] = []
+  for (const id of allIds) {
+    if (!amountByTx.has(id)) continue // not in this household
+    const cats = splitsByTx.get(id) ?? []
+    if (cats.length > 1) continue // multi-split — already categorised, leave it
+    if (!primarySet.has(id) && cats.length === 1 && cats[0] !== null) continue // sibling already categorised
+    if (cats.length === 1) updateIds.push(id)
+    else insertIds.push(id) // 0 splits (defensive) — needs a fresh row
+  }
+
+  if (updateIds.length > 0) {
+    const { error } = await supabase
+      .from('transaction_splits')
+      .update({ category_id: safeCategoryId })
+      .in('transaction_id', updateIds)
+    if (error) throw new Error(error.message)
+  }
+  if (insertIds.length > 0) {
+    const { error } = await supabase.from('transaction_splits').insert(
+      insertIds.map((id) => ({
+        household_id: householdId,
+        transaction_id: id,
+        category_id: safeCategoryId,
+        amount_cents: amountByTx.get(id)!,
+        sort_order: 0,
+      })),
+    )
+    if (error) throw new Error(error.message)
+  }
+}
+
+/**
+ * Lightweight single-transaction categorisation used by the inline
+ * quick-categorize control on the transactions list. Just the category — no
+ * full edit-form round trip. Throws on a DB failure so the client can surface
+ * it instead of silently no-op'ing.
+ */
+export async function setTransactionCategory(fd: FormData): Promise<void> {
+  const id = String(fd.get('id') ?? '')
+  if (!id) return
+  const category_id = String(fd.get('category_id') ?? '').trim() || null
+
+  const ctx = await getHouseholdContext()
+  if (!ctx) return
+
+  const supabase = await createClient()
+  await setCategoryForTransactions(supabase, ctx.householdId, { primaryIds: [id], category_id })
+  revalidate()
+}
+
+/**
+ * Apply the common "triage" attributes to an uncategorized transaction in one
+ * shot: category, owning member, and description. Optionally fans the chosen
+ * category out to `similar_ids` (other uncategorized transactions sharing the
+ * same merchant) so a recurring payee can be cleared in a single tap.
+ *
+ * `description` is only written when the field is present in the payload, so a
+ * caller that omits it leaves the existing description untouched. Throws on a
+ * DB failure so the client can surface it.
+ */
+export async function applyTransactionAttributes(fd: FormData): Promise<void> {
+  const id = String(fd.get('id') ?? '')
+  if (!id) return
+
+  const category_id = String(fd.get('category_id') ?? '').trim() || null
+  const member_id = String(fd.get('member_id') ?? '').trim() || null
+  const hasDescription = fd.has('description')
+  const description = hasDescription
+    ? String(fd.get('description') ?? '').trim().slice(0, 500) || null
+    : undefined
+  const similarIds = String(fd.get('similar_ids') ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+
+  const ctx = await getHouseholdContext()
+  if (!ctx) return
+
+  const supabase = await createClient()
+
+  // Only assign a member that actually belongs to this household.
+  let safeMemberId: string | null = null
+  if (member_id) {
+    const { data } = await supabase
+      .from('members')
+      .select('id')
+      .eq('id', member_id)
+      .eq('household_id', ctx.householdId)
+      .maybeSingle()
+    safeMemberId = data?.id ?? null
+  }
+
+  const patch: { member_id: string | null; description?: string | null } = { member_id: safeMemberId }
+  if (description !== undefined) patch.description = description
+  const { error: updateError } = await supabase
+    .from('transactions')
+    .update(patch)
+    .eq('id', id)
+    .eq('household_id', ctx.householdId)
+  if (updateError) throw new Error(updateError.message)
+
+  // Category (+ same category for any "apply to similar" siblings).
+  await setCategoryForTransactions(supabase, ctx.householdId, {
+    primaryIds: [id],
+    siblingIds: similarIds,
+    category_id,
+  })
+
+  revalidate()
+  // member_id (the payer) drives the shared-expense settlement views.
+  revalidatePath('/shared')
+  revalidatePath('/settlements')
+}
+
 export async function deleteTransaction(fd: FormData): Promise<void> {
   const id = String(fd.get('id') ?? '')
   if (!id) return

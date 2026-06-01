@@ -11,6 +11,9 @@ import { MapleLabel } from '@/components/ui/label'
 import { TransactionRow } from './row'
 import { SyncNowButton } from './sync-button'
 import { TxControls } from './tx-controls'
+import { UncategorizedReview, type TriageTxn } from './uncategorized-review'
+import { PullToSync } from '@/components/pull-to-sync'
+import { looksCryptic } from '@/lib/title'
 
 type Txn = {
   id: string
@@ -43,30 +46,40 @@ export default async function TransactionsPage({
 
   const supabase = await createClient()
 
-  const [{ data: accounts }, { data: categories }, { data: members }, { data: household }] = await Promise.all([
-    supabase
-      .from('accounts')
-      .select('id, name, type')
-      .eq('household_id', ctx.householdId)
-      .is('archived_at', null)
-      .order('name'),
-    supabase
-      .from('categories')
-      .select('id, parent_id, name, code')
-      .eq('household_id', ctx.householdId)
-      .is('archived_at', null)
-      .order('sort_order'),
-    supabase
-      .from('members')
-      .select('id, display_name')
-      .eq('household_id', ctx.householdId)
-      .order('sort_order'),
-    supabase
-      .from('households')
-      .select('gmail_sync_url')
-      .eq('id', ctx.householdId)
-      .single(),
-  ])
+  const [{ data: accounts }, { data: categories }, { data: members }, { data: household }, { data: recentSplits }] =
+    await Promise.all([
+      supabase
+        .from('accounts')
+        .select('id, name, type')
+        .eq('household_id', ctx.householdId)
+        .is('archived_at', null)
+        .order('name'),
+      supabase
+        .from('categories')
+        .select('id, parent_id, name, code')
+        .eq('household_id', ctx.householdId)
+        .is('archived_at', null)
+        .order('sort_order'),
+      supabase
+        .from('members')
+        .select('id, display_name')
+        .eq('household_id', ctx.householdId)
+        .order('sort_order'),
+      supabase
+        .from('households')
+        .select('gmail_sync_url')
+        .eq('id', ctx.householdId)
+        .single(),
+      // Recent categorised splits → "most-used categories" for the quick-pick
+      // chips on uncategorized rows and in the triage queue.
+      supabase
+        .from('transaction_splits')
+        .select('category_id')
+        .eq('household_id', ctx.householdId)
+        .not('category_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(400),
+    ])
   const hasSyncUrl = !!household?.gmail_sync_url
 
   let q = supabase
@@ -141,6 +154,53 @@ export default async function TransactionsPage({
   const categoryOptions = (categories ?? []).map((c) => ({ id: c.id, parent_id: c.parent_id, name: c.name }))
   const memberOptions = (members ?? []).map((m) => ({ id: m.id, name: m.display_name }))
 
+  // Most-used categories (ranked by recent usage, padded with the first few
+  // categories so a fresh household still shows quick-pick chips).
+  const topCategoryIds = (() => {
+    const tally = new Map<string, number>()
+    for (const r of recentSplits ?? []) {
+      if (r.category_id) tally.set(r.category_id, (tally.get(r.category_id) ?? 0) + 1)
+    }
+    const validIds = new Set(categoryOptions.map((c) => c.id))
+    const ranked = [...tally.entries()]
+      .filter(([id]) => validIds.has(id))
+      .sort((a, b) => b[1] - a[1])
+      .map(([id]) => id)
+    for (const c of categoryOptions) {
+      if (ranked.length >= 6) break
+      if (!ranked.includes(c.id)) ranked.push(c.id)
+    }
+    return ranked.slice(0, 6)
+  })()
+
+  // A transaction is "uncategorized" when it has at most one split and that
+  // split has no category. Multi-split transactions are always categorized.
+  // It "needs a title" when its description is missing or still looks like a
+  // raw bank descriptor. Either condition surfaces it in the triage queue.
+  const uncategorizedIds = new Set<string>()
+  const attentionIds = new Set<string>()
+  for (const t of transactions) {
+    const splits = splitsByTx.get(t.id) ?? []
+    const isUncat = splits.length <= 1 && (splits[0]?.category_id ?? null) === null
+    if (isUncat) uncategorizedIds.add(t.id)
+    if (isUncat || looksCryptic(t.description)) attentionIds.add(t.id)
+  }
+
+  const attentionVMs: TriageTxn[] = transactions
+    .filter((t) => attentionIds.has(t.id))
+    .map((t) => {
+      const splits = splitsByTx.get(t.id) ?? []
+      return {
+        id: t.id,
+        occurredLabel: formatDate(t.occurred_on),
+        amount_cents: t.amount_cents,
+        description: t.description,
+        accountName: accountName.get(t.account_id) ?? '—',
+        member_id: t.member_id,
+        category_id: splits[0]?.category_id ?? null,
+      }
+    })
+
   const monthHref = (iso: string) => {
     const qs = new URLSearchParams()
     qs.set('month', iso)
@@ -152,6 +212,7 @@ export default async function TransactionsPage({
   }
 
   return (
+    <PullToSync>
     <div className="flex flex-col gap-6 pb-10">
       <PageHeader
         eyebrow="Transactions"
@@ -218,6 +279,15 @@ export default async function TransactionsPage({
           members={memberOptions}
         />
       )}
+
+      {/* Triage — banner + step-through queue for transactions that need a
+          category and/or a real title. */}
+      <UncategorizedReview
+        transactions={attentionVMs}
+        categories={categoryOptions}
+        members={memberOptions}
+        topCategoryIds={topCategoryIds}
+      />
 
       {/* Transactions list */}
       <section className="overflow-hidden rounded-lg border border-hair bg-paper">
@@ -291,6 +361,8 @@ export default async function TransactionsPage({
                           accounts={accountOptions}
                           categories={categoryOptions}
                           members={memberOptions}
+                          isUncategorized={uncategorizedIds.has(t.id)}
+                          topCategoryIds={topCategoryIds}
                         />
                       )
                     })}
@@ -302,5 +374,6 @@ export default async function TransactionsPage({
         )}
       </section>
     </div>
+    </PullToSync>
   )
 }
