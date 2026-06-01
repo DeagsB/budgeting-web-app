@@ -12,7 +12,7 @@
  * No Workbox, no build step, no precache manifest — change this file by hand.
  */
 
-const CACHE_VERSION = 'maple-v1'
+const CACHE_VERSION = 'maple-v2'
 const STATIC_CACHE = `${CACHE_VERSION}-static`
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`
 const OFFLINE_URL = '/offline.html'
@@ -109,3 +109,49 @@ async function staleWhileRevalidate(req) {
     .catch(() => cached)
   return cached || network
 }
+
+// ─── Web Push ──────────────────────────────────────────────────────────────
+// The server sends a JSON payload { title, body, url, tag }. iOS shows these
+// only for the home-screen-installed PWA (iOS 16.4+).
+
+self.addEventListener('push', (event) => {
+  let data = {}
+  try {
+    data = event.data ? event.data.json() : {}
+  } catch {
+    data = { title: 'Maple', body: event.data ? event.data.text() : '' }
+  }
+  const title = data.title || 'Maple'
+  const options = {
+    body: data.body || '',
+    icon: '/icon',
+    badge: '/icon',
+    tag: data.tag || undefined,
+    data: { url: data.url || '/dashboard' },
+  }
+  event.waitUntil(self.registration.showNotification(title, options))
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const url = (event.notification.data && event.notification.data.url) || '/dashboard'
+  event.waitUntil(
+    (async () => {
+      const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      for (const client of all) {
+        // Focus an existing window and route it to the target.
+        if ('focus' in client) {
+          if ('navigate' in client) {
+            try {
+              await client.navigate(url)
+            } catch {
+              /* cross-origin or not allowed — just focus */
+            }
+          }
+          return client.focus()
+        }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(url)
+    })(),
+  )
+})

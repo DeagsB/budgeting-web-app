@@ -6,6 +6,8 @@ import { MapleLabel } from '@/components/ui/label'
 import { HouseholdForm } from './household-form'
 import { MembersList } from './members-list'
 import { CategoriesList } from './categories-list'
+import { NotificationSettings } from './notifications'
+import { DEFAULT_PREFS, type NotificationPrefs } from './notification-prefs'
 
 /**
  * Setup — the canonical home for household name, members, and categories.
@@ -17,7 +19,7 @@ export default async function SetupPage() {
   const supabase = await createClient()
 
   const [{ data: household }, { data: members }, { data: categories }] = await Promise.all([
-    supabase.from('households').select('id, name').eq('id', ctx.householdId).single(),
+    supabase.from('households').select('id, name, notification_prefs').eq('id', ctx.householdId).single(),
     supabase
       .from('members')
       .select('id, display_name, sort_order, archived_at')
@@ -66,6 +68,13 @@ export default async function SetupPage() {
           }))}
         />
       </Card>
+
+      <NotificationSettings
+        prefs={{
+          ...DEFAULT_PREFS,
+          ...((household?.notification_prefs as Partial<NotificationPrefs> | null) ?? {}),
+        }}
+      />
     </div>
   )
 }
