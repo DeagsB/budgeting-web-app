@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { parseMoneyToCents } from '@/lib/format'
 
-export type LoanState = { error: string } | undefined
+export type LoanState = { error: string } | { ok: true } | undefined
 export type RateChangeState = { error: string } | { ok: true } | undefined
 
 export async function saveLoanDetails(_prev: LoanState, fd: FormData): Promise<LoanState> {
@@ -47,7 +47,7 @@ export async function saveLoanDetails(_prev: LoanState, fd: FormData): Promise<L
 
   revalidatePath('/loans')
   revalidatePath('/dashboard')
-  return undefined
+  return { ok: true }
 }
 
 export async function addRateChange(

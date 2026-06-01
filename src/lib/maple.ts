@@ -65,55 +65,18 @@ export function smoothPath(
   return d
 }
 
-// Category ink + tint color tables. Ink is used on chips/badges; tint is the
-// background surface behind the ink. Dark-mode tints are translucent so they
-// blend with the paper surface.
-export const CATEGORY_INK: Record<string, string> = {
-  Groceries: '#10B981',
-  Dining: '#EF4444',
-  Transport: '#F59E0B',
-  Housing: '#6366F1',
-  Subscriptions: '#06B6D4',
-  Savings: '#8B5CF6',
-  Entertainment: '#EC4899',
-  Health: '#14B8A6',
-  Income: '#2E7D32',
-  Utilities: '#6366F1',
-}
-
-export function categoryInk(name: string | null | undefined): string {
-  if (!name) return 'var(--color-ink-2)'
-  return CATEGORY_INK[name] ?? 'var(--color-ink-2)'
-}
-
-export function categoryTintLight(name: string | null | undefined): string {
-  const map: Record<string, string> = {
-    Groceries: '#E0EFDB',
-    Dining: '#F6E0DB',
-    Transport: '#FBEFD4',
-    Housing: '#E0E0F5',
-    Subscriptions: '#D8EFF5',
-    Savings: '#E5DCF5',
-    Entertainment: '#F8DDEC',
-    Health: '#D4EFE9',
-    Income: '#D4EACD',
-    Utilities: '#E0E0F5',
-  }
-  return name ? (map[name] ?? 'var(--color-paper-2)') : 'var(--color-paper-2)'
-}
-
-export function categoryTintDark(name: string | null | undefined): string {
-  const map: Record<string, string> = {
-    Groceries: 'rgba(16,185,129,0.18)',
-    Dining: 'rgba(239,68,68,0.18)',
-    Transport: 'rgba(245,158,11,0.18)',
-    Housing: 'rgba(99,102,241,0.20)',
-    Subscriptions: 'rgba(6,182,212,0.18)',
-    Savings: 'rgba(139,92,246,0.20)',
-    Entertainment: 'rgba(236,72,153,0.18)',
-    Health: 'rgba(20,184,166,0.18)',
-    Income: 'rgba(46,125,50,0.22)',
-    Utilities: 'rgba(99,102,241,0.20)',
-  }
-  return name ? (map[name] ?? 'rgba(255,255,255,0.07)') : 'rgba(255,255,255,0.07)'
+/**
+ * Evenly-spaced horizontal gridline y-coordinates across a [0, h] box (inset by
+ * `pad` top and bottom so lines don't sit on the frame). Returns `count` inner
+ * lines — the outer edges are intentionally omitted. Pure + deterministic.
+ */
+export function gridlines(
+  h: number,
+  { count = 3, pad = 4 }: { count?: number; pad?: number } = {},
+): number[] {
+  if (count < 1) return []
+  const top = pad
+  const bottom = h - pad
+  const step = (bottom - top) / (count + 1)
+  return Array.from({ length: count }, (_, i) => top + step * (i + 1))
 }

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { formatMoney } from '@/lib/format'
+import { Amount } from '@/components/ui/amount'
 import { toggleShared, saveShareOverride, clearShares } from './actions'
 
 type Txn = {
@@ -31,8 +32,6 @@ export function SharedRow({
   // Positive amount = expense (outflow). Sign in the list follows the Maple
   // convention on transactions.
   const isExpense = t.amount_cents > 0
-  const amountColor = isExpense ? 'var(--color-ink)' : 'var(--color-leaf)'
-  const sign = t.amount_cents < 0 ? '+' : ''
   const totalAbs = Math.abs(t.amount_cents)
 
   const shareSum = shares.reduce((s, sh) => s + sh.amount_cents, 0)
@@ -44,74 +43,75 @@ export function SharedRow({
   return (
     <li className="flex flex-col">
       <div className="flex items-start gap-3 px-5 py-4 text-[14px] sm:gap-4">
-        {/* Maple-branded tick checkbox */}
+        {/* Maple-branded tick checkbox — 44px tap target wraps the 24px glyph */}
         <form
           action={(fd) =>
             startTransition(async () => {
               await toggleShared(fd)
             })
           }
-          className="shrink-0 pt-0.5"
+          className="-my-2 -ml-2 shrink-0"
         >
           <input type="hidden" name="transaction_id" value={t.id} />
           <button
             type="submit"
             disabled={pending}
-            aria-label={isShared ? 'Unshare' : 'Share'}
-            className={
-              'flex h-6 w-6 items-center justify-center rounded-[7px] border transition-all active:scale-90 ' +
-              (isShared
-                ? 'border-[var(--color-leaf)] bg-[var(--color-leaf)] text-white shadow-[0_1px_3px_rgba(24,98,56,0.25)]'
-                : 'border-[var(--color-hair)] bg-[var(--color-paper)] hover:border-[var(--color-ink-3)]')
-            }
+            aria-label={isShared ? 'Unshare transaction' : 'Share transaction'}
+            aria-pressed={isShared}
+            className="flex h-11 w-11 items-center justify-center disabled:opacity-50"
           >
-            {isShared && (
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M20 6L9 17l-5-5" />
-              </svg>
-            )}
+            <span
+              aria-hidden
+              className={
+                'flex h-6 w-6 items-center justify-center rounded-sm border transition-all active:scale-90 ' +
+                (isShared
+                  ? 'border-leaf bg-leaf text-paper shadow-[var(--shadow-card)]'
+                  : 'border-hair bg-paper hover:border-ink-3')
+              }
+            >
+              {isShared && (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+              )}
+            </span>
           </button>
         </form>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-3">
-            <div className="truncate font-medium text-[var(--color-ink)]">
+            <div className="truncate font-medium text-ink">
               {t.description ?? '—'}
             </div>
-            <div
-              className="shrink-0 font-serif text-[16px] tabular-nums tracking-[-0.01em]"
-              style={{ color: amountColor }}
-            >
-              {sign}
-              {formatMoney(totalAbs)}
+            <div className="shrink-0 text-[16px]">
+              <Amount cents={t.amount_cents} sign="auto" tone={isExpense ? 'ink' : 'leaf'} />
             </div>
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-[var(--color-ink-3)]">
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-ink-3">
             <span>{t.occurredLabel}</span>
             <span>·</span>
             <span>{t.payerName ? `${t.payerName} paid` : 'Shared account'}</span>
             {isShared && (
               <>
                 <span>·</span>
-                <span
-                  className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em]"
-                  style={{ background: 'var(--color-leaf-soft)', color: 'var(--color-leaf)' }}
-                >
+                <span className="inline-flex items-center rounded-full bg-leaf-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-leaf">
                   Split {splitCount}-way
                 </span>
               </>
             )}
           </div>
           {isShared && (
-            <div className="mt-2 flex items-center gap-3 text-[12px]">
+            <div className="mt-1 flex items-center gap-1 text-[12px]">
               <button
                 type="button"
                 onClick={() => setEditing((v) => !v)}
-                className="font-semibold text-[var(--color-ink-2)] underline-offset-2 hover:text-[var(--color-ink)] hover:underline"
+                className="inline-flex min-h-[44px] items-center font-semibold text-ink-2 underline-offset-2 hover:text-ink hover:underline"
               >
                 {editing ? 'Hide split' : 'Edit split'}
               </button>
-              <span className="text-[var(--color-ink-3)]">·</span>
+              <span aria-hidden className="text-ink-3">
+                ·
+              </span>
               <form
                 action={(fd) =>
                   startTransition(async () => {
@@ -123,8 +123,7 @@ export function SharedRow({
                 <button
                   type="submit"
                   disabled={pending}
-                  className="font-semibold transition-colors hover:underline"
-                  style={{ color: 'var(--color-maple)' }}
+                  className="inline-flex min-h-[44px] items-center font-semibold text-maple transition-colors hover:underline disabled:opacity-50"
                 >
                   Clear
                 </button>
@@ -135,7 +134,7 @@ export function SharedRow({
       </div>
 
       {isShared && editing && (
-        <div className="border-t border-[var(--color-hair)] bg-[var(--color-cream-2)] px-5 py-5">
+        <div className="border-t border-hair bg-cream-2 px-5 py-5">
           <SplitEditor
             transactionId={t.id}
             totalAbs={totalAbs}
@@ -149,21 +148,23 @@ export function SharedRow({
       )}
 
       {isShared && !editing && (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-[var(--color-hair)] bg-[var(--color-cream-2)]/60 px-5 py-2.5 text-[11.5px] text-[var(--color-ink-2)]">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-hair bg-cream-2/60 px-5 py-2.5 text-[11.5px] text-ink-2">
           {t.payerName && (
             <span>
-              <strong className="font-semibold text-[var(--color-ink)]">{t.payerName}</strong> keeps{' '}
-              <span className="tabular-nums text-[var(--color-ink)]">{formatMoney(payerShareCents)}</span>
+              <strong className="font-semibold text-ink">{t.payerName}</strong> keeps{' '}
+              <span className="tabular-nums text-ink">{formatMoney(payerShareCents)}</span>
             </span>
           )}
           {shares.map((s) => {
             const name = members.find((m) => m.id === s.member_id)?.name ?? 'Removed'
             return (
               <span key={s.member_id} className="inline-flex items-center gap-1">
-                <span className="text-[var(--color-ink-3)]">·</span>
-                <strong className="font-semibold text-[var(--color-ink)]">{name}</strong>{' '}
+                <span aria-hidden className="text-ink-3">
+                  ·
+                </span>
+                <strong className="font-semibold text-ink">{name}</strong>{' '}
                 <span>owes</span>
-                <span className="tabular-nums text-[var(--color-ink)]">{formatMoney(s.amount_cents)}</span>
+                <span className="tabular-nums text-ink">{formatMoney(s.amount_cents)}</span>
               </span>
             )
           })}
@@ -226,36 +227,38 @@ function SplitEditor({
       {/* Header + equal-split action */}
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
             Split editor
           </div>
-          <div className="mt-0.5 font-serif text-[18px] leading-tight tracking-[-0.01em] text-[var(--color-ink)]">
+          <div className="mt-0.5 font-serif text-[18px] leading-tight tracking-[-0.01em] text-ink">
             Total <span className="tabular-nums">{formatMoney(totalAbs)}</span>
           </div>
           {payerName && (
-            <div className="mt-0.5 text-[12px] text-[var(--color-ink-2)]">
-              <strong className="font-semibold text-[var(--color-ink)]">{payerName}</strong> keeps{' '}
-              <span className="tabular-nums text-[var(--color-ink)]">{formatMoney(leftover)}</span>
+            <div className="mt-0.5 text-[12px] text-ink-2">
+              <strong className="font-semibold text-ink">{payerName}</strong> keeps{' '}
+              <span className="tabular-nums text-ink">{formatMoney(leftover)}</span>
             </div>
           )}
         </div>
         <button
           type="button"
           onClick={setEqual}
-          className="shrink-0 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-1.5 text-[12px] font-semibold text-[var(--color-ink)] transition-colors hover:bg-[var(--color-cream)]"
+          className="inline-flex min-h-[44px] shrink-0 items-center rounded-full border border-hair bg-paper px-3 text-[12px] font-semibold text-ink transition-colors hover:bg-cream"
         >
           Split equally
         </button>
       </div>
 
-      {/* Progress bar toward total */}
-      <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-paper)]">
+      {/* Progress bar toward total — color + "over total" text both signal overshoot */}
+      <div className="h-1.5 overflow-hidden rounded-full bg-paper">
         <div
-          className="h-full rounded-full transition-all duration-300"
-          style={{
-            width: `${Math.round(progress * 100)}%`,
-            background: overshoot ? 'var(--color-maple)' : 'var(--color-leaf)',
-          }}
+          role="progressbar"
+          aria-valuenow={Math.round(progress * 100)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={overshoot ? 'Shares over total' : 'Shares allocated'}
+          className={`h-full rounded-full transition-all duration-300 ${overshoot ? 'bg-maple' : 'bg-leaf'}`}
+          style={{ width: `${Math.round(progress * 100)}%` }}
         />
       </div>
 
@@ -263,29 +266,33 @@ function SplitEditor({
       <div className="grid gap-2 sm:grid-cols-2">
         {nonPayerMembers.map((m) => {
           const cents = amounts[m.id] ?? 0
+          const inputId = `share-${transactionId}-${m.id}`
           return (
             <label
               key={m.id}
-              className="flex items-center justify-between gap-3 rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2.5 text-[13.5px] transition-colors focus-within:border-[var(--color-leaf)]"
+              htmlFor={inputId}
+              className="flex min-h-[44px] items-center justify-between gap-3 rounded-md border border-hair bg-paper px-3 py-2.5 text-[13.5px] transition-colors focus-within:border-leaf"
             >
-              <span className="min-w-0 truncate text-[var(--color-ink)]">
-                {m.name} <span className="text-[var(--color-ink-3)]">owes</span>
+              <span className="min-w-0 truncate text-ink">
+                {m.name} <span className="text-ink-3">owes</span>
               </span>
               <div className="flex items-center">
-                <span className="text-[12px] text-[var(--color-ink-3)]">$</span>
+                <span className="text-[12px] text-ink-3">$</span>
                 <input
+                  id={inputId}
                   name={`share:${m.id}`}
                   type="text"
                   inputMode="decimal"
                   value={cents === 0 ? '' : (cents / 100).toFixed(2)}
                   placeholder="0.00"
+                  aria-label={`${m.name} owes`}
                   onChange={(e) => {
                     const cleaned = e.target.value.replace(/[^0-9.]/g, '')
                     const n = Number(cleaned)
                     const nextCents = Number.isFinite(n) ? Math.round(n * 100) : 0
                     setAmounts((prev) => ({ ...prev, [m.id]: nextCents }))
                   }}
-                  className="w-20 bg-transparent text-right font-serif text-[15px] tabular-nums text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-3)]"
+                  className="w-20 bg-transparent text-right font-serif text-[15px] tabular-nums text-ink outline-none placeholder:text-ink-3"
                 />
               </div>
             </label>
@@ -294,11 +301,9 @@ function SplitEditor({
       </div>
 
       {overshoot && (
-        <p
-          className="rounded-[10px] px-3 py-2 text-[12.5px] font-medium"
-          style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
-        >
-          Shares can&rsquo;t exceed the transaction total ({formatMoney(sum)} &gt; {formatMoney(totalAbs)}).
+        <p className="rounded-md bg-maple-soft px-3 py-2 text-[12.5px] font-medium text-maple">
+          Over total — shares can&rsquo;t exceed the transaction total ({formatMoney(sum)} &gt;{' '}
+          {formatMoney(totalAbs)}).
         </p>
       )}
 
@@ -306,14 +311,14 @@ function SplitEditor({
         <button
           type="submit"
           disabled={pending || overshoot}
-          className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-ink)] px-4 py-2.5 text-[13px] font-semibold text-[var(--color-paper)] transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full bg-leaf px-5 text-[13px] font-semibold text-paper shadow-[var(--shadow-card)] transition-transform active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pending ? 'Saving…' : 'Save split'}
         </button>
         <button
           type="button"
           onClick={onClose}
-          className="text-[13px] font-semibold text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
+          className="inline-flex min-h-[44px] items-center text-[13px] font-semibold text-ink-2 transition-colors hover:text-ink"
         >
           Cancel
         </button>

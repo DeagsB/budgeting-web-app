@@ -2,6 +2,8 @@
 
 import { useActionState } from 'react'
 import { formatDate } from '@/lib/format'
+import { Field } from '@/components/ui/field'
+import { Button } from '@/components/ui/button'
 import { MapleLabel } from '@/components/ui/label'
 import { ConfirmButton } from '@/components/ui/confirm-button'
 import { addRateChange, deleteRateChange, type RateChangeState } from './actions'
@@ -30,13 +32,16 @@ export function RateHistory({
     undefined,
   )
 
+  const error = state && 'error' in state ? state.error : null
+  const saved = !!state && 'ok' in state && state.ok
+
   return (
-    <div className="rounded-[14px] border border-[var(--color-hair)] bg-[var(--color-paper-2)] p-4">
+    <div className="rounded-md border border-hair bg-paper-2 p-4">
       <div className="flex items-baseline justify-between gap-2">
         <MapleLabel>Rate history</MapleLabel>
-        <p className="text-[11.5px] text-[var(--color-ink-3)]">
+        <p className="text-[11.5px] text-ink-3">
           Starting{' '}
-          <span className="font-semibold tabular-nums text-[var(--color-ink-2)]">
+          <span className="font-semibold tabular-nums text-ink-2">
             {(baseRateBps / 100).toFixed(3)}%
           </span>{' '}
           since {formatDate(originationDate)}
@@ -44,24 +49,24 @@ export function RateHistory({
       </div>
 
       {rateChanges.length > 0 && (
-        <ul className="mt-3 overflow-hidden rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-paper)]">
+        <ul className="mt-3 overflow-hidden rounded-md border border-hair bg-paper">
           {rateChanges.map((r, i) => (
             <li
               key={r.id}
               className={
                 'flex items-center justify-between px-3 py-2 text-[12.5px] ' +
-                (i > 0 ? 'border-t border-[var(--color-hair)]' : '')
+                (i > 0 ? 'border-t border-hair' : '')
               }
             >
               <div className="min-w-0">
-                <span className="font-serif text-[14px] tabular-nums text-[var(--color-ink)]">
+                <span className="font-serif text-[14px] tabular-nums text-ink">
                   {(r.annual_rate_bps / 100).toFixed(3)}%
                 </span>
-                <span className="ml-2 text-[11.5px] text-[var(--color-ink-3)]">
+                <span className="ml-2 text-[11.5px] text-ink-3">
                   effective {formatDate(r.effective_month)}
                 </span>
                 {r.note && (
-                  <span className="ml-2 text-[11.5px] text-[var(--color-ink-3)]">· {r.note}</span>
+                  <span className="ml-2 text-[11.5px] text-ink-3">· {r.note}</span>
                 )}
               </div>
               <ConfirmButton
@@ -70,9 +75,9 @@ export function RateHistory({
                 prompt="Remove this rate change?"
                 confirmLabel="Remove"
                 destructive
-                className="text-[11.5px] font-semibold underline-offset-2 hover:underline"
+                className="text-[11.5px] font-semibold text-maple underline-offset-2 hover:underline"
               >
-                <span style={{ color: 'var(--color-maple)' }}>Remove</span>
+                Remove
               </ConfirmButton>
             </li>
           ))}
@@ -107,46 +112,27 @@ export function RateHistory({
             className="maple-input sm"
           />
         </Field>
-        <button
-          type="submit"
-          disabled={pending}
-          className="inline-flex items-center gap-2 rounded-full bg-[var(--color-ink)] px-3.5 py-2 text-[12.5px] font-semibold text-[var(--color-paper)] active:scale-[0.98] disabled:opacity-50"
-        >
+        <Button type="submit" variant="primary" size="sm" disabled={pending}>
           {pending ? 'Adding…' : 'Add'}
-        </button>
+        </Button>
       </form>
 
-      <p className="mt-2 text-[11.5px] text-[var(--color-ink-3)]">
+      <p className="mt-2 text-[11.5px] text-ink-3">
         Pick the first of a month. The rate applies to periods whose month is ≥ the effective month.
       </p>
 
-      {state && 'error' in state && state.error && (
-        <p
-          className="mt-2 rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
-          style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
-        >
-          {state.error}
-        </p>
-      )}
-      {state && 'ok' in state && state.ok && (
-        <p
-          className="mt-2 rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
-          style={{ background: 'var(--color-leaf-soft)', color: 'var(--color-leaf)' }}
-        >
-          Saved.
-        </p>
-      )}
+      <div aria-live="polite">
+        {error && (
+          <p className="mt-2 inline-block rounded-sm bg-maple-soft px-3 py-1.5 text-[12.5px] font-medium text-maple">
+            {error}
+          </p>
+        )}
+        {saved && !pending && (
+          <p className="mt-2 inline-block rounded-sm bg-leaf-soft px-3 py-1.5 text-[12.5px] font-medium text-leaf">
+            Rate change saved.
+          </p>
+        )}
+      </div>
     </div>
-  )
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
-        {label}
-      </span>
-      {children}
-    </label>
   )
 }

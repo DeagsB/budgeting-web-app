@@ -1,9 +1,15 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
-import { addMonths, formatDate, formatMoney, monthLabel, monthStartISO } from '@/lib/format'
+import { addMonths, formatDate, monthLabel, monthStartISO } from '@/lib/format'
 import { computePairBalances, netUnorderedPairs } from '@/lib/settlement'
 import { Sparkline, type SparklinePoint } from '@/components/sparkline'
+import { PageHeader } from '@/components/ui/page-header'
+import { Card } from '@/components/ui/card'
+import { StatTile } from '@/components/ui/stat-tile'
+import { Amount } from '@/components/ui/amount'
+import { EmptyState } from '@/components/ui/empty-state'
+import { MonthNav } from '@/components/ui/month-nav'
 import { MapleLabel } from '@/components/ui/label'
 import { RecordSettlementForm } from './record-form'
 import { DeleteSettlementButton } from './delete-button'
@@ -141,55 +147,54 @@ export default async function SettlementsPage({
       value: n.reduce((s, x) => s + x.net_cents, 0),
     }
   })
+  const hasTrend = trend.some((p) => p.value !== 0)
+
+  // Settlement requires at least two members to owe one another.
+  if (memberRows.length < 2) {
+    return (
+      <div className="flex flex-col gap-6 pb-10">
+        <PageHeader eyebrow={`Settlements · ${monthLabel(month)}`} title="Square up, gently." />
+        <EmptyState
+          title="Add a second member to settle up"
+          body="Settlements track who owes whom between household members, so you need at least two before there's anything to square up."
+          action={
+            <Link
+              href="/members"
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-full bg-leaf px-5 text-[14px] font-semibold text-paper shadow-[var(--shadow-card)] transition-transform active:scale-[0.97]"
+            >
+              Manage members
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </Link>
+          }
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-6 pb-10">
-      <header className="flex flex-col gap-1">
-        <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
-          Settlements · {monthLabel(month)}
-        </div>
-        <h1 className="font-serif text-[34px] leading-[1.05] tracking-[-0.02em] text-[var(--color-ink)] md:text-[40px]">
-          Square up, gently.
-        </h1>
-      </header>
+      <PageHeader eyebrow={`Settlements · ${monthLabel(month)}`} title="Square up, gently." />
 
-      <nav className="flex items-center gap-1 text-[13px]">
-        <Link
-          href={{ pathname: '/settlements', query: { month: addMonths(month, -1) } }}
-          className="inline-flex items-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-1.5 font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
-        >
-          ← Previous
-        </Link>
-        <Link
-          href={{ pathname: '/settlements', query: { month: monthStartISO() } }}
-          className="inline-flex items-center rounded-full px-3 py-1.5 font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
-        >
-          This month
-        </Link>
-        <Link
-          href={{ pathname: '/settlements', query: { month: addMonths(month, 1) } }}
-          className="inline-flex items-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-1.5 font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
-        >
-          Next →
-        </Link>
-      </nav>
+      <MonthNav monthISO={month} makeHref={(iso) => `/settlements?month=${iso}`} />
 
       <section className="grid gap-3 sm:grid-cols-3">
-        <Tile label="Shared this month" value={formatMoney(totalOwed)} tone="ink" />
-        <Tile label="Settled via transfer" value={formatMoney(totalSettled)} tone="leaf" />
-        <Tile
+        <StatTile label="Shared this month" value={<Amount cents={totalOwed} tone="ink" />} tone="ink" />
+        <StatTile label="Settled via transfer" value={<Amount cents={totalSettled} tone="leaf" />} tone="leaf" />
+        <StatTile
           label="Still outstanding"
-          value={formatMoney(totalNet)}
+          value={<Amount cents={totalNet} tone={totalNet > 0 ? 'maple' : 'ink'} />}
           tone={totalNet > 0 ? 'maple' : 'ink'}
         />
       </section>
 
       {/* Who owes whom */}
-      <section className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6">
+      <Card>
         <MapleLabel>Who owes whom</MapleLabel>
         {netPairs.length === 0 ? (
-          <p className="mt-3 rounded-[14px] bg-[var(--color-leaf-soft)] px-4 py-3 text-[13.5px] leading-relaxed text-[var(--color-leaf)]">
-            ✓ All settled for {monthLabel(month)}. Flag shared expenses on the{' '}
+          <p className="mt-3 rounded-md bg-leaf-soft px-4 py-3 text-[13.5px] leading-relaxed text-leaf">
+            All settled for {monthLabel(month)}. Flag shared expenses on the{' '}
             <Link href="/shared" className="font-semibold underline">
               Shared
             </Link>{' '}
@@ -200,140 +205,92 @@ export default async function SettlementsPage({
             {netPairs.map((p) => (
               <li
                 key={`${p.from_member_id}:${p.to_member_id}`}
-                className="flex items-center justify-between gap-3 rounded-[14px] border border-[var(--color-hair)] bg-[var(--color-cream-2)]/60 px-4 py-3 text-[14px]"
+                className="flex items-center justify-between gap-3 rounded-md bg-cream-2 px-3 py-2.5 text-[13.5px]"
               >
-                <div className="flex items-center gap-3">
-                  <Avatar name={memberName.get(p.from_member_id) ?? 'Member'} tone="maple" />
-                  <svg width="18" height="12" viewBox="0 0 24 16" fill="none" stroke="var(--color-ink-3)" strokeWidth="1.6" strokeLinecap="round">
-                    <path d="M2 8h18M14 2l6 6-6 6" />
-                  </svg>
-                  <Avatar name={memberName.get(p.to_member_id) ?? 'Member'} tone="leaf" />
-                  <span className="text-[13.5px] text-[var(--color-ink-2)]">
-                    <strong className="text-[var(--color-ink)]">
-                      {memberName.get(p.from_member_id) ?? 'Member'}
-                    </strong>{' '}
-                    owes{' '}
-                    <strong className="text-[var(--color-ink)]">
-                      {memberName.get(p.to_member_id) ?? 'Member'}
-                    </strong>
-                  </span>
-                </div>
-                <span
-                  className="shrink-0 font-serif text-[17px] tabular-nums tracking-[-0.01em]"
-                  style={{ color: 'var(--color-maple)' }}
-                >
-                  {formatMoney(p.net_cents)}
+                <span className="min-w-0 truncate">
+                  <strong className="font-semibold text-ink">
+                    {memberName.get(p.from_member_id) ?? 'Member'}
+                  </strong>{' '}
+                  <span className="text-ink-2">owes</span>{' '}
+                  <strong className="font-semibold text-ink">
+                    {memberName.get(p.to_member_id) ?? 'Member'}
+                  </strong>
+                </span>
+                <span className="shrink-0 rounded-full bg-maple-soft px-2.5 py-1">
+                  <Amount cents={p.net_cents} tone="maple" className="text-[14px]" />
                 </span>
               </li>
             ))}
           </ul>
         )}
-      </section>
+      </Card>
 
       {/* Record payment */}
-      {memberRows.length >= 2 && (
-        <section className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6">
-          <MapleLabel>Record payment</MapleLabel>
-          <p className="mt-1 text-[13px] text-[var(--color-ink-2)]">
-            Log an e-transfer or other reimbursement between household members. It doesn&rsquo;t touch
-            budgets or P&amp;L.
-          </p>
-          <RecordSettlementForm
-            members={memberRows.map((m) => ({ id: m.id, name: m.display_name }))}
-            defaultDate={new Date().toISOString().slice(0, 10)}
-            suggestion={netPairs[0] ?? null}
-          />
-        </section>
-      )}
+      <Card>
+        <MapleLabel>Record payment</MapleLabel>
+        <p className="mt-1 text-[13px] text-ink-2">
+          Log an e-transfer or other reimbursement between household members. It doesn&rsquo;t touch
+          budgets or P&amp;L.
+        </p>
+        <RecordSettlementForm
+          members={memberRows.map((m) => ({ id: m.id, name: m.display_name }))}
+          defaultDate={new Date().toISOString().slice(0, 10)}
+          suggestion={netPairs[0] ?? null}
+        />
+      </Card>
 
       {/* Payments history */}
-      <section className="overflow-hidden rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)]">
-        <header className="border-b border-[var(--color-hair)] px-5 py-3.5">
+      <Card padding="none" className="overflow-hidden">
+        <header className="border-b border-hair px-5 py-3.5">
           <MapleLabel>Payments in {monthLabel(month)}</MapleLabel>
         </header>
         {(monthSettlements ?? []).length === 0 ? (
-          <p className="px-5 py-10 text-center text-[13.5px] text-[var(--color-ink-2)]">
+          <p className="px-5 py-10 text-center text-[13.5px] text-ink-2">
             No payments recorded this month.
           </p>
         ) : (
-          <ul className="divide-y divide-[var(--color-hair)]">
+          <ul className="divide-y divide-hair">
             {(monthSettlements ?? []).map((s) => (
               <li
                 key={s.id}
                 className="flex items-center justify-between gap-3 px-5 py-3.5 text-[14px]"
               >
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[var(--color-ink)]">
+                  <div className="truncate text-ink">
                     <strong>{memberName.get(s.from_member_id) ?? 'Member'}</strong>{' '}
-                    <span className="text-[var(--color-ink-3)]">→</span>{' '}
+                    <span className="text-ink-3" aria-hidden>→</span>{' '}
+                    <span className="sr-only">paid</span>
                     <strong>{memberName.get(s.to_member_id) ?? 'Member'}</strong>
                   </div>
-                  <div className="mt-0.5 text-[12px] text-[var(--color-ink-3)]">
+                  <div className="mt-0.5 text-[12px] text-ink-3">
                     {formatDate(s.settled_on)}
                     {s.note && ` · ${s.note}`}
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span
-                    className="font-serif text-[16px] tabular-nums tracking-[-0.01em]"
-                    style={{ color: 'var(--color-leaf)' }}
-                  >
-                    {formatMoney(Number(s.amount_cents))}
-                  </span>
+                  <Amount cents={Number(s.amount_cents)} tone="leaf" className="text-[16px]" />
                   <DeleteSettlementButton id={s.id} />
                 </div>
               </li>
             ))}
           </ul>
         )}
-      </section>
+      </Card>
 
       {/* Trend */}
-      <section className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6">
+      <Card>
         <MapleLabel>Net outstanding — trailing 12 months</MapleLabel>
-        <div className="mt-3 text-[var(--color-ink)]">
-          <Sparkline points={trend} fill ariaLabel="Monthly net outstanding" />
-        </div>
-      </section>
+        {hasTrend ? (
+          <div className="mt-3 text-ink">
+            <Sparkline points={trend} fill ariaLabel="Monthly net outstanding" />
+          </div>
+        ) : (
+          <p className="mt-3 text-[13.5px] leading-relaxed text-ink-2">
+            No outstanding balances in the last 12 months. Once shared expenses go unsettled, the
+            running total appears here.
+          </p>
+        )}
+      </Card>
     </div>
-  )
-}
-
-function Tile({
-  label,
-  value,
-  tone,
-}: {
-  label: string
-  value: string
-  tone: 'ink' | 'leaf' | 'maple'
-}) {
-  const color =
-    tone === 'leaf' ? 'var(--color-leaf)' : tone === 'maple' ? 'var(--color-maple)' : 'var(--color-ink)'
-  return (
-    <div className="rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-4 md:p-5">
-      <MapleLabel>{label}</MapleLabel>
-      <div
-        className="mt-1.5 font-serif text-[22px] leading-tight tracking-[-0.02em] tabular-nums md:text-[24px]"
-        style={{ color }}
-      >
-        {value}
-      </div>
-    </div>
-  )
-}
-
-function Avatar({ name, tone }: { name: string; tone: 'leaf' | 'maple' }) {
-  const initial = (name.trim()[0] ?? '·').toUpperCase()
-  const bg = tone === 'leaf' ? 'var(--color-leaf-soft)' : 'var(--color-maple-soft)'
-  const fg = tone === 'leaf' ? 'var(--color-leaf)' : 'var(--color-maple)'
-  return (
-    <span
-      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-serif text-[13px]"
-      style={{ background: bg, color: fg }}
-      aria-hidden
-    >
-      {initial}
-    </span>
   )
 }

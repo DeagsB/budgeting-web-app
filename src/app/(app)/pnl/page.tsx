@@ -2,6 +2,13 @@ import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { formatMoney, monthLabel, monthStartISO, addMonths } from '@/lib/format'
 import { MapleLabel } from '@/components/ui/label'
+import { PageHeader } from '@/components/ui/page-header'
+import { MonthNav } from '@/components/ui/month-nav'
+import { StatTile } from '@/components/ui/stat-tile'
+import { Card } from '@/components/ui/card'
+import { Amount } from '@/components/ui/amount'
+import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { colorForCategory } from '@/lib/category-colors'
 import Link from 'next/link'
 
@@ -84,215 +91,197 @@ export default async function PnlPage({
   const thisMonth = buckets.find((b) => b.month === selected) ?? { income: 0, expense: 0, month: selected }
   const ytdIncome = buckets.reduce((s, b) => (b.month <= selected ? s + b.income : s), 0)
   const ytdExpense = buckets.reduce((s, b) => (b.month <= selected ? s + b.expense : s), 0)
+  const net = thisMonth.income - thisMonth.expense
+  const ytdNet = ytdIncome - ytdExpense
 
   const maxBar = Math.max(1, ...buckets.map((b) => Math.max(b.income, b.expense)))
   const topCatMax = Math.max(1, ...topCats.map((c) => c.cents))
   const topCatTotal = topCats.reduce((s, c) => s + c.cents, 0)
 
-  const prevMonth = addMonths(selected, -1)
-  const nextMonth = addMonths(selected, 1)
+  // True when there's no activity at all this year — drives the empty state.
+  const hasAnyActivity = buckets.some((b) => b.income > 0 || b.expense > 0)
+
+  const makeHref = (iso: string) =>
+    iso === monthStartISO() ? '/pnl' : `/pnl?month=${iso}`
 
   return (
     <div className="flex flex-col gap-6 pb-10">
-      <header className="flex flex-col gap-1">
-        <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
-          Profit &amp; Loss
-        </div>
-        <div className="flex items-end justify-between gap-4">
-          <h1 className="font-serif text-[34px] leading-[1.05] tracking-[-0.02em] text-[var(--color-ink)] md:text-[40px]">
-            What came in, what went out.
-          </h1>
-          <nav className="flex shrink-0 items-center gap-1 text-[12.5px]">
-            <Link
-              href={`/pnl?month=${prevMonth}`}
-              className="rounded-full border border-[var(--color-hair)] px-3 py-1.5 font-semibold text-[var(--color-ink-2)] hover:border-[var(--color-ink)] hover:text-[var(--color-ink)]"
-            >
-              ←
-            </Link>
-            <span className="px-3 font-semibold text-[var(--color-ink)]">{monthLabel(selected)}</span>
-            <Link
-              href={`/pnl?month=${nextMonth}`}
-              className="rounded-full border border-[var(--color-hair)] px-3 py-1.5 font-semibold text-[var(--color-ink-2)] hover:border-[var(--color-ink)] hover:text-[var(--color-ink)]"
-            >
-              →
-            </Link>
-          </nav>
-        </div>
-      </header>
+      {/* Header + month nav stack on mobile, sit side-by-side from sm: up. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <PageHeader eyebrow="Profit & Loss" title="What came in, what went out." />
+        <MonthNav monthISO={selected} makeHref={makeHref} className="-ml-2 flex-wrap" />
+      </div>
 
-      {/* Hero numbers */}
-      <section className="grid gap-3 md:grid-cols-3">
-        <Stat label={`${monthLabel(selected)} income`} value={thisMonth.income} tone="leaf" />
-        <Stat label={`${monthLabel(selected)} expenses`} value={thisMonth.expense} tone="maple" />
-        <Stat
-          label={`${monthLabel(selected)} net`}
-          value={thisMonth.income - thisMonth.expense}
-          tone={thisMonth.income - thisMonth.expense >= 0 ? 'leaf' : 'maple'}
-          signed
+      {!hasAnyActivity ? (
+        <EmptyState
+          title={`Nothing recorded for ${selected.slice(0, 4)}`}
+          body="Your profit & loss fills in as transactions land. Import a statement to see income and expenses month by month."
+          action={
+            <Link href="/transactions/import">
+              <Button variant="primary" size="md">
+                Import transactions
+              </Button>
+            </Link>
+          }
         />
-      </section>
+      ) : (
+        <>
+          {/* Hero numbers */}
+          <section className="grid gap-3 md:grid-cols-3">
+            <StatTile
+              label={`${monthLabel(selected)} income`}
+              tone="leaf"
+              value={<Amount cents={thisMonth.income} tone="leaf" />}
+            />
+            <StatTile
+              label={`${monthLabel(selected)} expenses`}
+              tone="maple"
+              value={<Amount cents={thisMonth.expense} tone="maple" />}
+            />
+            <StatTile
+              label={`${monthLabel(selected)} net`}
+              tone={net >= 0 ? 'leaf' : 'maple'}
+              value={<Amount cents={net} sign="always" tone={net >= 0 ? 'leaf' : 'maple'} />}
+              hint={net >= 0 ? 'surplus' : 'shortfall'}
+            />
+          </section>
 
-      {/* Twelve-month bars */}
-      <section className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6">
-        <header className="flex items-baseline justify-between">
-          <MapleLabel>{selected.slice(0, 4)} · monthly</MapleLabel>
-          <div className="flex items-center gap-3 text-[11.5px] text-[var(--color-ink-3)]">
-            <Swatch tone="leaf" /> Income
-            <Swatch tone="maple" /> Expense
-          </div>
-        </header>
-        <div className="mt-5 grid grid-cols-12 items-end gap-1.5">
-          {buckets.map((b) => {
-            const ih = (b.income / maxBar) * 100
-            const eh = (b.expense / maxBar) * 100
-            const isSel = b.month === selected
-            return (
-              <Link key={b.month} href={`/pnl?month=${b.month}`} className="group flex flex-col items-center gap-1.5">
-                <div className="relative flex h-[140px] w-full items-end justify-center gap-0.5">
-                  <div
-                    className="w-1/2 rounded-t-[3px] transition-all group-hover:opacity-100"
-                    style={{
-                      height: `${ih}%`,
-                      background: 'var(--color-leaf)',
-                      opacity: isSel ? 1 : 0.85,
-                    }}
-                  />
-                  <div
-                    className="w-1/2 rounded-t-[3px] transition-all"
-                    style={{
-                      height: `${eh}%`,
-                      background: 'var(--color-maple)',
-                      opacity: isSel ? 1 : 0.85,
-                    }}
-                  />
-                </div>
-                <span
-                  className={
-                    'text-[10px] font-semibold uppercase tracking-[0.06em] tabular-nums ' +
-                    (isSel ? 'text-[var(--color-ink)]' : 'text-[var(--color-ink-3)]')
-                  }
-                >
-                  {b.month.slice(5, 7)}
+          {/* Twelve-month bars. The chart scrolls inside its own wrapper on
+              very small screens so the *page* never scrolls horizontally. */}
+          <Card padding="lg">
+            <header className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
+              <MapleLabel>{selected.slice(0, 4)} · monthly</MapleLabel>
+              <div className="flex items-center gap-3 text-[11.5px] text-ink-3">
+                <Swatch tone="leaf" /> Income
+                <Swatch tone="maple" /> Expense
+              </div>
+            </header>
+            <div className="-mx-1 mt-5 overflow-x-auto hide-scroll">
+              <div className="grid min-w-[440px] grid-cols-12 items-end gap-1.5">
+                {buckets.map((b) => {
+                  const ih = (b.income / maxBar) * 100
+                  const eh = (b.expense / maxBar) * 100
+                  const isSel = b.month === selected
+                  return (
+                    <Link
+                      key={b.month}
+                      href={makeHref(b.month)}
+                      aria-label={`${monthLabel(b.month)}: income ${formatMoney(b.income)}, expense ${formatMoney(b.expense)}`}
+                      className="group flex flex-col items-center gap-1.5"
+                    >
+                      <div className="relative flex h-[140px] w-full items-end justify-center gap-0.5">
+                        <div
+                          className="w-1/2 rounded-t-sm transition-all group-hover:opacity-100"
+                          style={{
+                            height: `${ih}%`,
+                            background: 'var(--color-leaf)',
+                            opacity: isSel ? 1 : 0.85,
+                          }}
+                        />
+                        <div
+                          className="w-1/2 rounded-t-sm transition-all"
+                          style={{
+                            height: `${eh}%`,
+                            background: 'var(--color-maple)',
+                            opacity: isSel ? 1 : 0.85,
+                          }}
+                        />
+                      </div>
+                      <span
+                        className={
+                          'text-[10px] font-semibold uppercase tracking-[0.06em] tabular-nums ' +
+                          (isSel ? 'text-ink' : 'text-ink-3')
+                        }
+                      >
+                        {b.month.slice(5, 7)}
+                      </span>
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+            <footer className="mt-5 flex flex-wrap items-baseline gap-x-6 gap-y-2 border-t border-hair pt-4 text-[13px] text-ink-2">
+              <span>
+                YTD income <Amount cents={ytdIncome} tone="leaf" className="text-[13px]" />
+              </span>
+              <span>
+                YTD expense <Amount cents={ytdExpense} tone="maple" className="text-[13px]" />
+              </span>
+              <span>
+                YTD net{' '}
+                <Amount
+                  cents={ytdNet}
+                  sign="always"
+                  tone={ytdNet >= 0 ? 'leaf' : 'maple'}
+                  className="text-[13px]"
+                />
+              </span>
+            </footer>
+          </Card>
+
+          {/* Category breakdown for selected month. Each row stacks the name
+              above its bar on mobile so labels never crowd the bar, and sits
+              on one row from sm: up. The share-of-spend % rides on a token
+              surface chip (no mix-blend) so it's legible on any bar colour. */}
+          <Card padding="lg">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
+              <MapleLabel>Top categories · {monthLabel(selected)}</MapleLabel>
+              {topCatTotal > 0 && (
+                <span className="text-[11.5px] text-ink-3">
+                  <Amount cents={topCatTotal} className="text-[11.5px]" /> total
                 </span>
-              </Link>
-            )
-          })}
-        </div>
-        <footer className="mt-5 flex flex-wrap items-baseline gap-x-6 gap-y-2 border-t border-[var(--color-hair)] pt-4 text-[13px] text-[var(--color-ink-2)]">
-          <span>
-            YTD income{' '}
-            <b className="tabular-nums text-[var(--color-ink)]">{formatMoney(ytdIncome)}</b>
-          </span>
-          <span>
-            YTD expense{' '}
-            <b className="tabular-nums text-[var(--color-ink)]">{formatMoney(ytdExpense)}</b>
-          </span>
-          <span>
-            YTD net{' '}
-            <b
-              className="tabular-nums"
-              style={{ color: ytdIncome - ytdExpense >= 0 ? 'var(--color-leaf)' : 'var(--color-maple)' }}
-            >
-              {formatMoney(ytdIncome - ytdExpense)}
-            </b>
-          </span>
-        </footer>
-      </section>
-
-      {/* Category breakdown for selected month. Each row's bar uses the
-          category's Maple-aligned hue; share-of-spend % sits inside the bar
-          when wide enough (>20%) and outside when narrow, so the percentage
-          is always legible. */}
-      <section className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6">
-        <div className="flex items-baseline justify-between">
-          <MapleLabel>Top categories · {monthLabel(selected)}</MapleLabel>
-          {topCatTotal > 0 && (
-            <span className="text-[11.5px] text-[var(--color-ink-3)]">
-              <span className="tabular-nums text-[var(--color-ink)]">{formatMoney(topCatTotal)}</span>{' '}
-              total
-            </span>
-          )}
-        </div>
-        {topCats.length === 0 ? (
-          <p className="mt-4 text-[13.5px] text-[var(--color-ink-2)]">
-            No expense splits recorded in {monthLabel(selected)}.
-          </p>
-        ) : (
-          <ol className="mt-4 flex flex-col gap-2.5">
-            {topCats.slice(0, 12).map((c) => {
-              // Bar width is share of the largest category so the biggest
-              // always fills 100%. Share-of-total is a separate stat shown
-              // as a percentage inside the bar.
-              const widthPct = (c.cents / topCatMax) * 100
-              const sharePct = topCatTotal > 0 ? Math.round((c.cents / topCatTotal) * 100) : 0
-              const color = colorForCategory(c.name)
-              const showInsideLabel = widthPct >= 22
-              return (
-                <li key={c.id} className="flex items-center gap-3 text-[13.5px]">
-                  <span className="w-[120px] shrink-0 truncate text-[var(--color-ink)] sm:w-[160px]">
-                    {c.name}
-                  </span>
-                  <div className="relative h-[28px] flex-1 overflow-hidden rounded-[8px] bg-[var(--color-paper-2)]">
-                    <div
-                      className="h-full rounded-[8px] transition-all duration-300"
-                      style={{ width: `${widthPct}%`, background: color }}
-                    />
-                    {showInsideLabel ? (
-                      <span
-                        className="absolute inset-y-0 right-0 flex items-center pr-2 text-[11px] font-semibold tabular-nums text-white/95 mix-blend-luminosity"
-                        style={{ width: `${widthPct}%` }}
-                      >
-                        <span className="ml-auto rounded-full bg-black/15 px-1.5 py-0.5 text-white">
-                          {sharePct}%
+              )}
+            </div>
+            {topCats.length === 0 ? (
+              <p className="mt-4 text-[13.5px] text-ink-2">
+                No expense splits recorded in {monthLabel(selected)}.
+              </p>
+            ) : (
+              <ol className="mt-4 flex flex-col gap-3">
+                {topCats.slice(0, 12).map((c) => {
+                  // Bar width is share of the largest category so the biggest
+                  // always fills 100%. Share-of-total is shown as a percentage.
+                  const widthPct = (c.cents / topCatMax) * 100
+                  const sharePct = topCatTotal > 0 ? Math.round((c.cents / topCatTotal) * 100) : 0
+                  const color = colorForCategory(c.name)
+                  return (
+                    <li
+                      key={c.id}
+                      className="flex flex-col gap-1.5 text-[13.5px] sm:flex-row sm:items-center sm:gap-3"
+                    >
+                      <div className="flex items-baseline justify-between gap-3 sm:w-[160px] sm:shrink-0 sm:justify-start">
+                        <span className="truncate text-ink">{c.name}</span>
+                        <span className="font-serif text-[15px] tabular-nums text-ink sm:hidden">
+                          {formatMoney(c.cents)}
                         </span>
+                      </div>
+                      <div className="relative h-[28px] flex-1 overflow-hidden rounded-md bg-paper-2">
+                        <div
+                          className="h-full rounded-md transition-all duration-300"
+                          style={{ width: `${widthPct}%`, background: color }}
+                          role="progressbar"
+                          aria-valuenow={sharePct}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-label={`${c.name}: ${sharePct}% of spend`}
+                        />
+                        <span className="absolute inset-y-0 right-0 flex items-center pr-1.5">
+                          <span className="rounded-full bg-cream-2 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-ink-2">
+                            {sharePct}%
+                          </span>
+                        </span>
+                      </div>
+                      <span className="hidden w-[100px] shrink-0 text-right font-serif text-[15px] tabular-nums text-ink sm:block">
+                        {formatMoney(c.cents)}
                       </span>
-                    ) : (
-                      <span
-                        className="absolute inset-y-0 flex items-center pl-1.5 text-[11px] font-semibold tabular-nums text-[var(--color-ink-2)]"
-                        style={{ left: `${widthPct}%` }}
-                      >
-                        {sharePct}%
-                      </span>
-                    )}
-                  </div>
-                  <span className="w-[100px] shrink-0 text-right font-serif text-[15px] tabular-nums text-[var(--color-ink)]">
-                    {formatMoney(c.cents)}
-                  </span>
-                </li>
-              )
-            })}
-          </ol>
-        )}
-      </section>
-    </div>
-  )
-}
-
-function Stat({
-  label,
-  value,
-  tone,
-  signed,
-}: {
-  label: string
-  value: number
-  tone: 'leaf' | 'maple'
-  signed?: boolean
-}) {
-  const color = tone === 'leaf' ? 'var(--color-leaf)' : 'var(--color-maple)'
-  const sign = signed && value > 0 ? '+' : signed && value < 0 ? '−' : ''
-  return (
-    <div className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
-        {label}
-      </div>
-      <div
-        className="mt-2 font-serif text-[30px] leading-none tracking-[-0.02em] tabular-nums"
-        style={{ color }}
-      >
-        {sign}
-        {formatMoney(Math.abs(value))}
-      </div>
+                    </li>
+                  )
+                })}
+              </ol>
+            )}
+          </Card>
+        </>
+      )}
     </div>
   )
 }

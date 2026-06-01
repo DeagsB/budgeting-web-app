@@ -8,6 +8,9 @@ import {
   archiveCategory,
   unarchiveCategory,
 } from './actions'
+import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ConfirmButton } from '@/components/ui/confirm-button'
 
 type Cat = {
   id: string
@@ -44,35 +47,47 @@ export function CategoriesList({ categories }: { categories: Cat[] }) {
     <div className="mt-3 flex flex-col gap-3">
       <AddCategory parents={parents.filter((p) => !p.archived)} />
 
-      <div className="mt-2 flex items-baseline justify-between">
-        <span className="text-[12px] text-[var(--color-ink-3)]">
-          {parents.filter((p) => (show === 'archived' ? p.archived : !p.archived)).length} top-level
-        </span>
-        {archivedCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setShow(show === 'archived' ? 'active' : 'archived')}
-            className="text-[12px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline"
-          >
-            {show === 'archived' ? '← Active' : `Archived (${archivedCount}) →`}
-          </button>
-        )}
-      </div>
+      {categories.length === 0 ? (
+        <EmptyState
+          title="Start with a few categories"
+          body="Categories are how you slice spending — Groceries, Rent, Transport. Add a top-level one above, then nest sub-categories under it."
+        />
+      ) : (
+        <>
+          <div className="mt-2 flex items-baseline justify-between">
+            <span className="text-[12px] text-ink-3">
+              {parents.filter((p) => (show === 'archived' ? p.archived : !p.archived)).length}{' '}
+              top-level
+            </span>
+            {archivedCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setShow(show === 'archived' ? 'active' : 'archived')}
+                className="inline-flex min-h-[44px] items-center text-[12px] font-semibold text-ink-2 hover:text-ink hover:underline"
+              >
+                {show === 'archived' ? '← Active' : `Archived (${archivedCount}) →`}
+              </button>
+            )}
+          </div>
 
-      <ul className="divide-y divide-[var(--color-hair)] border-y border-[var(--color-hair)]">
-        {visibleParents.length === 0 && (
-          <li className="py-6 text-center text-[13.5px] text-[var(--color-ink-2)]">
-            {show === 'archived' ? 'Nothing archived.' : 'Add a category above.'}
-          </li>
-        )}
-        {visibleParents.map((p) => (
-          <CategoryBlock
-            key={p.id}
-            parent={p}
-            kids={(childrenOf.get(p.id) ?? []).filter((c) => (show === 'archived' ? c.archived : !c.archived))}
-          />
-        ))}
-      </ul>
+          <ul className="divide-y divide-hair border-y border-hair">
+            {visibleParents.length === 0 && (
+              <li className="py-6 text-center text-[13.5px] text-ink-2">
+                {show === 'archived' ? 'Nothing archived.' : 'Add a category above.'}
+              </li>
+            )}
+            {visibleParents.map((p) => (
+              <CategoryBlock
+                key={p.id}
+                parent={p}
+                kids={(childrenOf.get(p.id) ?? []).filter((c) =>
+                  show === 'archived' ? c.archived : !c.archived,
+                )}
+              />
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   )
 }
@@ -107,13 +122,9 @@ function AddCategory({ parents }: { parents: Cat[] }) {
           </option>
         ))}
       </select>
-      <button
-        type="submit"
-        disabled={pending}
-        className="inline-flex shrink-0 items-center justify-center rounded-full bg-[var(--color-ink)] px-4 py-2.5 text-[12.5px] font-semibold text-[var(--color-paper)] disabled:opacity-50"
-      >
+      <Button type="submit" variant="primary" size="md" disabled={pending} className="shrink-0">
         {pending ? 'Adding…' : 'Add'}
-      </button>
+      </Button>
     </form>
   )
 }
@@ -121,12 +132,18 @@ function AddCategory({ parents }: { parents: Cat[] }) {
 function CategoryBlock({ parent, kids }: { parent: Cat; kids: Cat[] }) {
   const [open, setOpen] = useState(false)
   return (
-    <li className="py-2.5">
-      <CategoryRow cat={parent} top onToggle={() => setOpen(!open)} open={open} hasKids={kids.length > 0} />
+    <li className="py-1.5">
+      <CategoryRow
+        cat={parent}
+        top
+        onToggle={() => setOpen(!open)}
+        open={open}
+        hasKids={kids.length > 0}
+      />
       {open && kids.length > 0 && (
-        <ul className="ml-9 mt-1 border-l border-[var(--color-hair)] pl-3">
+        <ul className="ml-9 mt-1 border-l border-hair pl-3">
           {kids.map((k) => (
-            <li key={k.id} className="py-1.5">
+            <li key={k.id} className="py-1">
               <CategoryRow cat={k} />
             </li>
           ))}
@@ -151,13 +168,16 @@ function CategoryRow({
 }) {
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(cat.name)
+  const [pending, startTransition] = useTransition()
 
   if (editing) {
     return (
       <form
-        action={async (fd) => {
-          await renameCategory(fd)
-          setEditing(false)
+        action={(fd) => {
+          startTransition(async () => {
+            await renameCategory(fd)
+            setEditing(false)
+          })
         }}
         className="flex items-center gap-2"
       >
@@ -167,62 +187,60 @@ function CategoryRow({
           value={value}
           onChange={(e) => setValue(e.target.value)}
           autoFocus
+          required
+          maxLength={60}
           className="maple-input flex-1"
         />
-        <button
-          type="submit"
-          className="inline-flex items-center rounded-full bg-[var(--color-ink)] px-3.5 py-1.5 text-[12px] font-semibold text-[var(--color-paper)]"
-        >
-          Save
-        </button>
-        <button
+        <Button type="submit" variant="primary" size="sm" disabled={pending}>
+          {pending ? 'Saving…' : 'Save'}
+        </Button>
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           onClick={() => {
             setValue(cat.name)
             setEditing(false)
           }}
-          className="text-[12px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
         >
           Cancel
-        </button>
+        </Button>
       </form>
     )
   }
 
   return (
-    <div className={'group flex items-center justify-between gap-3 ' + (cat.archived ? 'opacity-50' : '')}>
+    <div className={'flex items-center justify-between gap-3 ' + (cat.archived ? 'opacity-60' : '')}>
       <div className="flex min-w-0 flex-1 items-center gap-2">
         {top && hasKids ? (
           <button
             type="button"
             onClick={onToggle}
-            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[11px] text-[var(--color-ink-3)] hover:bg-[var(--color-paper-2)] hover:text-[var(--color-ink)]"
+            className="flex h-11 w-7 shrink-0 items-center justify-center rounded text-[11px] text-ink-3 hover:text-ink"
             aria-label={open ? 'Collapse' : 'Expand'}
+            aria-expanded={open}
           >
             {open ? '▾' : '▸'}
           </button>
         ) : top ? (
-          <span className="h-5 w-5 shrink-0" />
+          <span className="h-11 w-7 shrink-0" />
         ) : null}
         <span
           className={
             top
-              ? 'truncate font-serif text-[16px] text-[var(--color-ink)]'
-              : 'truncate text-[14px] text-[var(--color-ink-2)]'
+              ? 'truncate font-serif text-[16px] text-ink'
+              : 'truncate text-[14px] text-ink-2'
           }
         >
           {cat.name}
         </span>
         {cat.rollover && (
-          <span
-            className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em]"
-            style={{ background: 'var(--color-leaf-soft)', color: 'var(--color-leaf)' }}
-          >
+          <span className="rounded-full bg-leaf-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-leaf">
             Rollover
           </span>
         )}
       </div>
-      <div className="flex shrink-0 items-center gap-3 text-[12px] opacity-60 transition-opacity group-hover:opacity-100">
+      <div className="flex shrink-0 items-center gap-1 text-[12px]">
         {!cat.archived && (
           <>
             <form action={toggleRollover}>
@@ -230,7 +248,7 @@ function CategoryRow({
               <input type="hidden" name="rollover" value={cat.rollover ? 'false' : 'true'} />
               <button
                 type="submit"
-                className="font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline"
+                className="inline-flex min-h-[44px] items-center px-2 font-semibold text-ink-2 hover:text-ink hover:underline"
               >
                 {cat.rollover ? 'Stop rollover' : 'Rollover'}
               </button>
@@ -238,7 +256,7 @@ function CategoryRow({
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline"
+              className="inline-flex min-h-[44px] items-center px-2 font-semibold text-ink-2 hover:text-ink hover:underline"
             >
               Rename
             </button>
@@ -247,17 +265,25 @@ function CategoryRow({
         {cat.archived ? (
           <form action={unarchiveCategory}>
             <input type="hidden" name="id" value={cat.id} />
-            <button type="submit" className="font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline">
+            <button
+              type="submit"
+              className="inline-flex min-h-[44px] items-center px-2 font-semibold text-ink-2 hover:text-ink hover:underline"
+            >
               Unarchive
             </button>
           </form>
         ) : (
-          <form action={archiveCategory}>
-            <input type="hidden" name="id" value={cat.id} />
-            <button type="submit" className="font-semibold hover:underline" style={{ color: 'var(--color-maple)' }}>
-              Archive
-            </button>
-          </form>
+          <ConfirmButton
+            action={archiveCategory}
+            formData={{ id: cat.id }}
+            prompt={`Archive “${cat.name}”?`}
+            description="Archived categories are hidden from budgets and the transaction picker. Existing transactions keep their category. You can unarchive anytime."
+            confirmLabel="Archive"
+            destructive
+            className="inline-flex min-h-[44px] items-center px-2 font-semibold text-maple hover:underline"
+          >
+            Archive
+          </ConfirmButton>
         )}
       </div>
     </div>

@@ -8,7 +8,7 @@ export function BulkActions({ accountId, month }: { accountId: string; month: st
   const [pending, startTransition] = useTransition()
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <form
         action={(fd) =>
           startTransition(async () => {
@@ -21,9 +21,9 @@ export function BulkActions({ accountId, month }: { accountId: string; month: st
         <button
           type="submit"
           disabled={pending}
-          className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3.5 py-2 text-[12.5px] font-semibold text-[var(--color-ink)] transition-colors hover:bg-[var(--color-cream-2)] disabled:opacity-50"
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-hair bg-paper px-4 text-[12.5px] font-semibold text-ink transition-colors hover:bg-cream-2 disabled:opacity-50"
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M20 6L9 17l-5-5" />
           </svg>
           Share all unflagged
@@ -36,9 +36,9 @@ export function BulkActions({ accountId, month }: { accountId: string; month: st
         description="Each transaction reverts to single-member ownership. The original transactions are not deleted."
         confirmLabel="Unshare all"
         destructive
-        className="inline-flex items-center rounded-full px-3.5 py-2 text-[12.5px] font-semibold transition-colors"
+        className="inline-flex min-h-[44px] items-center rounded-full px-4 text-[12.5px] font-semibold text-maple transition-colors hover:bg-maple-soft"
       >
-        <span style={{ color: 'var(--color-maple)' }}>Unshare all</span>
+        Unshare all
       </ConfirmButton>
     </div>
   )

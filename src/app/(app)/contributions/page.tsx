@@ -1,8 +1,9 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
-import { formatMoney } from '@/lib/format'
-import { MapleLabel } from '@/components/ui/label'
+import { PageHeader } from '@/components/ui/page-header'
+import { StatTile } from '@/components/ui/stat-tile'
+import { Amount } from '@/components/ui/amount'
 import { ContributionTable } from './table'
 
 type RegisteredType = 'tfsa' | 'rrsp' | 'fhsa'
@@ -237,52 +238,56 @@ export default async function ContributionsPage({
     { opening: 0, allowance: 0, contributed: 0, available: 0 },
   )
 
+  const isCurrentYear = year === currentYear
+
   return (
     <div className="flex flex-col gap-6 pb-10">
-      <header className="flex flex-col gap-1">
-        <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
-          Contributions · {year}
-        </div>
-        <h1 className="font-serif text-[34px] leading-[1.05] tracking-[-0.02em] text-[var(--color-ink)] md:text-[40px]">
-          TFSA, RRSP, FHSA — room left.
-        </h1>
-        <p className="mt-2 max-w-[640px] text-[14px] leading-relaxed text-[var(--color-ink-2)]">
-          Carry-forward room and current-year contributions per member, with the CRA annual
-          allowance applied. Override anything if your Notice of Assessment shows a different
-          number.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow={`Contributions · ${year}`}
+        title="TFSA, RRSP, FHSA — room left."
+        subtitle="Carry-forward room and current-year contributions per member, with the CRA annual allowance applied. Override anything if your Notice of Assessment shows a different number."
+      />
 
-      <nav className="grid grid-cols-3 gap-2 text-[13px]">
+      <nav aria-label="Choose year" className="grid grid-cols-3 gap-2 text-[13px]">
         <Link
           href={{ pathname: '/contributions', query: { year: year - 1 } }}
-          className="inline-flex items-center justify-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2 font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
+          className="inline-flex min-h-[44px] items-center justify-center gap-1 rounded-full border border-hair bg-paper px-3 font-medium text-ink-2 hover:text-ink"
         >
           ← {year - 1}
         </Link>
         <Link
           href={{ pathname: '/contributions', query: { year: currentYear } }}
-          className="inline-flex items-center justify-center rounded-full border border-[var(--color-hair)] bg-[var(--color-paper-2)] px-3 py-2 font-semibold text-[var(--color-ink)]"
+          aria-current={isCurrentYear ? 'page' : undefined}
+          className={
+            isCurrentYear
+              ? 'inline-flex min-h-[44px] items-center justify-center rounded-full border border-leaf bg-leaf-tint px-3 font-semibold text-leaf-deep'
+              : 'inline-flex min-h-[44px] items-center justify-center rounded-full border border-hair bg-paper px-3 font-medium text-ink-2 hover:text-ink'
+          }
         >
           This year
         </Link>
         <Link
           href={{ pathname: '/contributions', query: { year: year + 1 } }}
-          className="inline-flex items-center justify-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2 font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
+          className="inline-flex min-h-[44px] items-center justify-center gap-1 rounded-full border border-hair bg-paper px-3 font-medium text-ink-2 hover:text-ink"
         >
           {year + 1} →
         </Link>
       </nav>
 
       <section className="grid gap-3 sm:grid-cols-4">
-        <Tile label="Opening (Jan 1)" value={formatMoney(totals.opening)} />
-        <Tile label={`${year} allowance`} value={formatMoney(totals.allowance)} />
-        <Tile label={`Contributed ${year}`} value={formatMoney(totals.contributed)} />
-        <Tile label="Available" value={formatMoney(totals.available)} tone="leaf" />
+        <StatTile label="Opening (Jan 1)" value={<Amount cents={totals.opening} />} />
+        <StatTile label={`${year} allowance`} value={<Amount cents={totals.allowance} />} />
+        <StatTile label={`Contributed ${year}`} value={<Amount cents={totals.contributed} />} />
+        <StatTile
+          label="Available"
+          value={<Amount cents={totals.available} tone={totals.available < 0 ? 'maple' : 'leaf'} />}
+          tone={totals.available < 0 ? 'maple' : 'leaf'}
+          foot={totals.available < 0 ? 'over contributed' : undefined}
+        />
       </section>
 
       {memberRows.length === 0 ? (
-        <p className="rounded-[20px] border border-dashed border-[var(--color-hair)] bg-[var(--color-paper-2)] px-5 py-8 text-center text-[13.5px] text-[var(--color-ink-2)]">
+        <p className="rounded-lg border border-dashed border-hair bg-paper-2 px-5 py-8 text-center text-[13.5px] text-ink-2">
           Add members first.
         </p>
       ) : (
@@ -295,38 +300,14 @@ export default async function ContributionsPage({
         />
       )}
 
-      <p className="rounded-[14px] border border-[var(--color-hair)] bg-[var(--color-paper-2)] px-4 py-3 text-[12px] leading-relaxed text-[var(--color-ink-2)]">
-        Opening room is the carry-forward balance at Jan 1. For <span className="font-semibold text-[var(--color-ink)]">RRSP</span>, paste the
-        number from your latest Notice of Assessment; for <span className="font-semibold text-[var(--color-ink)]">TFSA</span>/FHSA, the app suggests
+      <p className="rounded-md border border-hair bg-paper-2 px-4 py-3 text-[12px] leading-relaxed text-ink-2">
+        Opening room is the carry-forward balance at Jan 1. For <span className="font-semibold text-ink">RRSP</span>, paste the
+        number from your latest Notice of Assessment; for <span className="font-semibold text-ink">TFSA</span>/FHSA, the app suggests
         next year&apos;s opening based on prior-year data (TFSA includes withdrawals that restore
         on Jan 1; FHSA + RRSP do not). Suggested values appear as placeholders — edit and hit Save
         to lock them in. Allowance defaults to the CRA annual limit; use the override to paste a
         personalised figure.
       </p>
-    </div>
-  )
-}
-
-function Tile({
-  label,
-  value,
-  tone,
-}: {
-  label: string
-  value: string
-  tone?: 'leaf' | 'maple' | 'ink'
-}) {
-  const color =
-    tone === 'leaf' ? 'var(--color-leaf)' : tone === 'maple' ? 'var(--color-maple)' : 'var(--color-ink)'
-  return (
-    <div className="rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-4">
-      <MapleLabel>{label}</MapleLabel>
-      <div
-        className="mt-1.5 font-serif text-[20px] leading-tight tracking-[-0.02em] tabular-nums md:text-[22px]"
-        style={{ color }}
-      >
-        {value}
-      </div>
     </div>
   )
 }

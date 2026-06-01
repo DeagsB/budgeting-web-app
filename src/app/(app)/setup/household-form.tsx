@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { renameHousehold } from './actions'
+import { Button } from '@/components/ui/button'
 
 /** Inline-editable household name. Click the name → becomes an input. */
 export function HouseholdForm({ id, name }: { id: string; name: string }) {
@@ -11,24 +12,20 @@ export function HouseholdForm({ id, name }: { id: string; name: string }) {
 
   if (!editing) {
     return (
-      <div className="mt-3 flex items-baseline justify-between gap-4">
-        <span className="font-serif text-[28px] leading-[1.1] tracking-[-0.02em] text-[var(--color-ink)]">
+      <div className="mt-3 flex items-center justify-between gap-4">
+        <span className="font-serif text-[28px] leading-[1.1] tracking-[-0.02em] text-ink">
           {name || 'Untitled household'}
         </span>
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="shrink-0 text-[12.5px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline"
-        >
+        <Button variant="secondary" size="sm" onClick={() => setEditing(true)} className="shrink-0">
           Rename
-        </button>
+        </Button>
       </div>
     )
   }
 
   return (
     <form
-      className="mt-3 flex items-center gap-2"
+      className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center"
       action={(fd) => {
         startTransition(async () => {
           await renameHousehold(fd)
@@ -44,25 +41,24 @@ export function HouseholdForm({ id, name }: { id: string; name: string }) {
         autoFocus
         required
         maxLength={80}
-        className="maple-input font-serif text-[22px] tracking-[-0.01em]"
+        className="maple-input flex-1 font-serif text-[22px] tracking-[-0.01em]"
       />
-      <button
-        type="submit"
-        disabled={pending}
-        className="inline-flex items-center rounded-full bg-[var(--color-ink)] px-4 py-2 text-[12.5px] font-semibold text-[var(--color-paper)] disabled:opacity-50"
-      >
-        {pending ? 'Saving…' : 'Save'}
-      </button>
-      <button
-        type="button"
-        onClick={() => {
-          setValue(name)
-          setEditing(false)
-        }}
-        className="text-[12.5px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
-      >
-        Cancel
-      </button>
+      <div className="flex items-center gap-2">
+        <Button type="submit" variant="primary" size="sm" disabled={pending}>
+          {pending ? 'Saving…' : 'Save'}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            setValue(name)
+            setEditing(false)
+          }}
+        >
+          Cancel
+        </Button>
+      </div>
     </form>
   )
 }

@@ -22,6 +22,7 @@ import {
 } from './actions'
 import { BANK_PRESETS } from '@/lib/bank-presets'
 import { ConfirmButton } from '@/components/ui/confirm-button'
+import { DataTable } from '@/components/ui/data-table'
 
 type Account = { id: string; name: string; last_four: string | null }
 type Member = { id: string; name: string }
@@ -128,21 +129,58 @@ export function SetupWizard({
   // (we never re-fetch it from the server), which keeps the "shown once" model.
   const [freshSecret, setFreshSecret] = useState<string | null>(null)
 
+  // Per-step completion, derived from the same server props the wizard already
+  // receives. Presentation only — nothing here changes how the script or secret
+  // are generated.
+  //  1. Secret exists (already set, or freshly minted this session).
+  //  2. Bank alerts: a manual toggle at the bank — can't be detected, so it
+  //     stays informational ('manual'), never blocking.
+  //  3. Script install depends on a secret being available to bake in.
+  //  4. At least one rule defined.
+  //  5. Something has actually arrived (a log entry) or on-demand sync is wired.
+  const secretReady = hasSecret || !!freshSecret
+  const hasRules = rules.length > 0
+  const hasArrived = log.length > 0
+  const stepStatus: Record<number, StepStatus> = {
+    1: secretReady ? 'done' : 'todo',
+    2: 'manual',
+    3: secretReady ? 'done' : 'todo',
+    4: hasRules ? 'done' : 'todo',
+    5: hasArrived ? 'done' : 'todo',
+  }
+
+  // Count the auto-detectable steps that are done (steps 1, 3, 4, 5 — step 2 is
+  // a manual bank toggle we can't verify, so it's excluded from the tally).
+  const trackable = [1, 3, 4, 5]
+  const doneCount = trackable.filter((n) => stepStatus[n] === 'done').length
+  const progress = doneCount / trackable.length
+
   return (
     <div className="flex flex-col gap-5">
-      <Step n={1} title="Generate your private webhook">
+      <ProgressSummary doneCount={doneCount} total={trackable.length} progress={progress} />
+
+      <Step n={1} title="Generate your private webhook" status={stepStatus[1]}>
         <SecretCard webhookUrl={webhookUrl} hasSecret={hasSecret} onSecret={setFreshSecret} />
       </Step>
 
-      <Step n={2} title="Turn on transaction alerts at your bank">
+      <Step
+        n={2}
+        title="Turn on transaction alerts at your bank"
+        status={stepStatus[2]}
+      >
         <BankAlertHelp />
       </Step>
 
-      <Step n={3} title="Install the Gmail Apps Script">
+      <Step n={3} title="Install the Gmail Apps Script" status={stepStatus[3]}>
         <GmailScriptCard webhookUrl={webhookUrl} secret={freshSecret} />
       </Step>
 
-      <Step n={4} title="Define how each email becomes a transaction">
+      <Step
+        n={4}
+        title="Define how each email becomes a transaction"
+        status={stepStatus[4]}
+        hint={hasRules ? `${rules.length} rule${rules.length === 1 ? '' : 's'} defined` : undefined}
+      >
         <RulesSection
           rules={rules}
           accounts={accounts}
@@ -153,9 +191,64 @@ export function SetupWizard({
         />
       </Step>
 
-      <Step n={5} title="Watch alerts arrive">
+      <Step
+        n={5}
+        title="Test it, then watch alerts arrive"
+        status={stepStatus[5]}
+        hint={hasArrived ? `${log.length} entr${log.length === 1 ? 'y' : 'ies'} logged` : undefined}
+      >
         <VerifyLog log={log} gmailSyncUrl={gmailSyncUrl} />
       </Step>
+    </div>
+  )
+}
+
+type StepStatus = 'todo' | 'done' | 'manual'
+
+// Top-of-wizard tally so the user sees how far along setup is at a glance.
+function ProgressSummary({
+  doneCount,
+  total,
+  progress,
+}: {
+  doneCount: number
+  total: number
+  progress: number
+}) {
+  const allDone = doneCount >= total
+  return (
+    <div
+      className="flex flex-col gap-2 rounded-[14px] border px-4 py-3"
+      style={{
+        borderColor: allDone ? 'var(--color-leaf)' : 'var(--color-hair)',
+        background: allDone ? 'var(--color-leaf-tint)' : 'var(--color-cream-2)',
+      }}
+    >
+      <div className="flex items-baseline justify-between gap-3">
+        <span
+          className="text-[10.5px] font-bold uppercase tracking-[0.08em]"
+          style={{ color: allDone ? 'var(--color-leaf-deep)' : 'var(--color-ink-3)' }}
+        >
+          Setup progress
+        </span>
+        <span className="font-serif text-[14px] tabular-nums text-[var(--color-ink)]">
+          {doneCount} / {total} {allDone ? '· ready' : 'done'}
+        </span>
+      </div>
+      <div className="h-1.5 w-full rounded-full bg-[var(--color-paper)]">
+        <div
+          role="progressbar"
+          aria-valuenow={doneCount}
+          aria-valuemin={0}
+          aria-valuemax={total}
+          aria-label="Auto-import setup progress"
+          className="h-full rounded-full"
+          style={{
+            width: `${Math.round(progress * 100)}%`,
+            background: 'var(--color-leaf)',
+          }}
+        />
+      </div>
     </div>
   )
 }
@@ -1101,82 +1194,15 @@ function VerifyLog({
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Sync URL editor + Sync now */}
-      <div
-        className="rounded-[12px] border p-4"
-        style={{ borderColor: 'var(--color-leaf)', background: 'var(--color-leaf-tint)' }}
-      >
-        <div
-          className="text-[10.5px] font-bold uppercase tracking-[0.08em]"
-          style={{ color: 'var(--color-leaf-deep)' }}
-        >
-          On-demand sync
-        </div>
-        <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--color-ink-2)]">
-          Hourly trigger handles steady-state. For when you just bought something and
-          want it in the app now, paste the Apps Script <b>/exec</b> URL here and use
-          the Sync button.
-        </p>
-        <form action={urlAction} className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
-          <label className="flex flex-1 flex-col gap-1">
-            <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
-              Apps Script Web App URL
-            </span>
-            <input
-              type="url"
-              name="url"
-              defaultValue={gmailSyncUrl ?? ''}
-              placeholder="https://script.google.com/macros/s/AKfy…/exec"
-              className="maple-input font-mono text-[12px]"
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={urlPending}
-            className="rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-4 py-2 text-[12.5px] font-semibold text-[var(--color-ink)] disabled:opacity-50"
-          >
-            {urlPending ? 'Saving…' : 'Save URL'}
-          </button>
-          <button
-            type="button"
-            onClick={fireSync}
-            disabled={syncPending || !gmailSyncUrl}
-            title={!gmailSyncUrl ? 'Save the URL first.' : 'Trigger Gmail polling now.'}
-            className="rounded-full bg-[var(--color-leaf)] px-4 py-2 text-[12.5px] font-semibold text-[var(--color-paper)] disabled:opacity-50"
-          >
-            {syncPending ? 'Syncing…' : 'Sync now'}
-          </button>
-        </form>
-        {urlState && 'ok' in urlState && (
-          <p className="mt-2 text-[12px] font-medium text-[var(--color-leaf-deep)]">
-            URL saved.
-          </p>
-        )}
-        {urlState && 'error' in urlState && (
-          <p
-            className="mt-2 rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
-            style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
-          >
-            {urlState.error}
-          </p>
-        )}
-        {syncState && 'ok' in syncState && syncState.ok && (
-          <p className="mt-2 text-[12px] font-medium text-[var(--color-leaf-deep)]">
-            Sync ran — script processed {syncState.imported} message{syncState.imported === 1 ? '' : 's'}
-            {syncState.skipped > 0 && `, skipped ${syncState.skipped} already-imported`}.
-          </p>
-        )}
-        {syncState && 'error' in syncState && (
-          <p
-            className="mt-2 rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
-            style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
-          >
-            {syncState.error}
-          </p>
-        )}
-      </div>
+      {/* Lead with the payoff: one click proves ingestion → parse → insert
+          works end-to-end, and the result lands in the log right below. */}
+      <p className="text-[13.5px] leading-relaxed text-[var(--color-ink-2)]">
+        Hit <b>Send test email</b> to push a fake bank alert through the whole
+        pipeline. You&rsquo;ll see it land in the log below within a second — proof
+        the wiring works before a real alert ever arrives.
+      </p>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-cream-2)] px-4 py-3">
+      <div className="flex flex-col gap-3 rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-cream-2)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
             Test the pipeline now
@@ -1186,27 +1212,29 @@ function VerifyLog({
             ingestion + parsing + insert work end-to-end without waiting on a
             real bank.
           </p>
-          {testState && 'ok' in testState && testState.ok && (
-            <p className="mt-1.5 text-[12px] font-medium text-[var(--color-leaf-deep)]">
-              Webhook responded with <b>{testState.status}</b>
-              {testState.transaction_id ? ` — transaction ${testState.transaction_id.slice(0, 8)}…` : ''}.
-              {testState.status === 'inserted' && ' Check Activity to see it.'}
-              {testState.status === 'no_match' && ' Add a matching rule above so the engine can find your test email.'}
-            </p>
-          )}
-          {testState && 'error' in testState && testState.error && (
-            <p className="mt-1.5 text-[12px] font-medium text-[var(--color-maple)]">
-              {testState.error}
-            </p>
-          )}
+          <div aria-live="polite" role="status">
+            {testState && 'ok' in testState && testState.ok && (
+              <p className="mt-1.5 text-[12px] font-medium text-[var(--color-leaf-deep)]">
+                Webhook responded with <b>{testState.status}</b>
+                {testState.transaction_id ? ` — transaction ${testState.transaction_id.slice(0, 8)}…` : ''}.
+                {testState.status === 'inserted' && ' Check Activity to see it.'}
+                {testState.status === 'no_match' && ' Add a matching rule above so the engine can find your test email.'}
+              </p>
+            )}
+            {testState && 'error' in testState && testState.error && (
+              <p className="mt-1.5 text-[12px] font-medium text-[var(--color-maple)]">
+                {testState.error}
+              </p>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-[11.5px] text-[var(--color-ink-2)]">
+        <div className="flex items-center gap-3">
+          <label className="inline-flex min-h-[44px] items-center gap-1.5 text-[12px] text-[var(--color-ink-2)]">
             <input
               type="checkbox"
               checked={polling}
               onChange={(e) => setPolling(e.target.checked)}
-              className="h-3.5 w-3.5 accent-[var(--color-leaf)]"
+              className="h-4 w-4 accent-[var(--color-leaf)]"
             />
             Live
           </label>
@@ -1214,7 +1242,7 @@ function VerifyLog({
             type="button"
             onClick={fireTest}
             disabled={testPending}
-            className="inline-flex items-center gap-2 rounded-full bg-[var(--color-ink)] px-4 py-2 text-[12.5px] font-semibold text-[var(--color-paper)] active:scale-[0.98] disabled:opacity-50"
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-full bg-[var(--color-ink)] px-4 py-2 text-[12.5px] font-semibold text-[var(--color-paper)] active:scale-[0.98] disabled:opacity-50"
           >
             {testPending ? 'Sending…' : 'Send test email'}
           </button>
@@ -1227,7 +1255,7 @@ function VerifyLog({
         </p>
       ) : (
         <div className="overflow-hidden rounded-[14px] border border-[var(--color-hair)]">
-          <table className="w-full min-w-[640px] text-[12.5px]">
+          <DataTable minWidth={640} className="text-[12.5px]">
             <thead
               className="text-left text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]"
               style={{ background: 'var(--color-cream-2)' }}
@@ -1256,7 +1284,7 @@ function VerifyLog({
                     {l.transaction_id && (
                       <Link
                         href="/transactions"
-                        className="ml-2 text-[11px] font-semibold text-[var(--color-ink-2)] underline-offset-2 hover:text-[var(--color-ink)] hover:underline"
+                        className="ml-2 inline-flex min-h-[44px] items-center text-[11px] font-semibold text-[var(--color-ink-2)] underline-offset-2 hover:text-[var(--color-ink)] hover:underline"
                       >
                         view
                       </Link>
@@ -1265,9 +1293,88 @@ function VerifyLog({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </DataTable>
         </div>
       )}
+
+      {/* On-demand sync editor — secondary to the test payoff above, so it sits
+          last. The hourly trigger covers steady-state; this is for "I just
+          bought something, pull it now". */}
+      <div
+        className="rounded-[12px] border p-4"
+        style={{ borderColor: 'var(--color-leaf)', background: 'var(--color-leaf-tint)' }}
+      >
+        <div
+          className="text-[10.5px] font-bold uppercase tracking-[0.08em]"
+          style={{ color: 'var(--color-leaf-deep)' }}
+        >
+          On-demand sync
+        </div>
+        <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--color-ink-2)]">
+          Hourly trigger handles steady-state. For when you just bought something and
+          want it in the app now, paste the Apps Script <b>/exec</b> URL here and use
+          the Sync button.
+        </p>
+        <form action={urlAction} className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+          <label className="flex flex-1 flex-col gap-1">
+            <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+              Apps Script Web App URL
+            </span>
+            <input
+              type="url"
+              name="url"
+              defaultValue={gmailSyncUrl ?? ''}
+              placeholder="https://script.google.com/macros/s/AKfy…/exec"
+              className="maple-input font-mono"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={urlPending}
+            className="inline-flex min-h-[44px] items-center rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-4 py-2 text-[12.5px] font-semibold text-[var(--color-ink)] disabled:opacity-50"
+          >
+            {urlPending ? 'Saving…' : 'Save URL'}
+          </button>
+          <button
+            type="button"
+            onClick={fireSync}
+            disabled={syncPending || !gmailSyncUrl}
+            title={!gmailSyncUrl ? 'Save the URL first.' : 'Trigger Gmail polling now.'}
+            className="inline-flex min-h-[44px] items-center rounded-full bg-[var(--color-leaf)] px-4 py-2 text-[12.5px] font-semibold text-[var(--color-paper)] disabled:opacity-50"
+          >
+            {syncPending ? 'Syncing…' : 'Sync now'}
+          </button>
+        </form>
+        <div aria-live="polite" role="status">
+          {urlState && 'ok' in urlState && (
+            <p className="mt-2 text-[12px] font-medium text-[var(--color-leaf-deep)]">
+              URL saved.
+            </p>
+          )}
+          {urlState && 'error' in urlState && (
+            <p
+              className="mt-2 rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
+              style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
+            >
+              {urlState.error}
+            </p>
+          )}
+          {syncState && 'ok' in syncState && syncState.ok && (
+            <p className="mt-2 text-[12px] font-medium text-[var(--color-leaf-deep)]">
+              Sync ran — script processed {syncState.imported} message{syncState.imported === 1 ? '' : 's'}
+              {syncState.skipped > 0 && `, skipped ${syncState.skipped} already-imported`}.
+            </p>
+          )}
+          {syncState && 'error' in syncState && (
+            <p
+              className="mt-2 rounded-[10px] px-3 py-1.5 text-[12.5px] font-medium"
+              style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
+            >
+              {syncState.error}
+            </p>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -1428,19 +1535,75 @@ function SmartSuggester({
 
 // ─── Layout primitives ────────────────────────────────────────────────────
 
-function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+function Step({
+  n,
+  title,
+  status = 'todo',
+  hint,
+  children,
+}: {
+  n: number
+  title: string
+  status?: StepStatus
+  hint?: string
+  children: React.ReactNode
+}) {
+  const done = status === 'done'
   return (
-    <section className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6">
-      <header className="mb-4 flex items-baseline gap-3">
+    <section
+      className="rounded-[20px] border bg-[var(--color-paper)] p-5 md:p-6"
+      style={{ borderColor: done ? 'var(--color-leaf)' : 'var(--color-hair)' }}
+    >
+      <header className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        {/* Number badge flips to a leaf check once the step's done — the check
+            glyph is the non-color cue. */}
         <span
           className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full font-serif text-[12px] tabular-nums"
-          style={{ background: 'var(--color-ink)', color: 'var(--color-paper)' }}
+          style={{
+            background: done ? 'var(--color-leaf)' : 'var(--color-ink)',
+            color: 'var(--color-paper)',
+          }}
+          aria-hidden
         >
-          {n}
+          {done ? '✓' : n}
         </span>
         <MapleLabel>{title}</MapleLabel>
+        <StepStatusBadge status={status} hint={hint} />
       </header>
       {children}
     </section>
+  )
+}
+
+// Per-step state pill. Carries its own text label so the state reads without
+// relying on colour.
+function StepStatusBadge({ status, hint }: { status: StepStatus; hint?: string }) {
+  if (status === 'done') {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em]"
+        style={{ background: 'var(--color-leaf-soft)', color: 'var(--color-leaf-deep)' }}
+      >
+        ✓ Done{hint ? ` · ${hint}` : ''}
+      </span>
+    )
+  }
+  if (status === 'manual') {
+    return (
+      <span
+        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em]"
+        style={{ background: 'var(--color-cream-2)', color: 'var(--color-ink-3)' }}
+      >
+        At your bank
+      </span>
+    )
+  }
+  return (
+    <span
+      className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em]"
+      style={{ background: 'var(--color-cream-2)', color: 'var(--color-ink-2)' }}
+    >
+      To do
+    </span>
   )
 }

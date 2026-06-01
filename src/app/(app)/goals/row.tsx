@@ -1,9 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useActionState, useEffect, useRef, useState } from 'react'
 import { formatMoney } from '@/lib/format'
-import { updateGoal, toggleAchieved, archiveGoal } from './actions'
+import { updateGoal, toggleAchieved, archiveGoal, type GoalState } from './actions'
 import { ConfirmButton } from '@/components/ui/confirm-button'
+import { Amount } from '@/components/ui/amount'
+import { Button } from '@/components/ui/button'
+import { Field } from '@/components/ui/field'
 
 type Goal = {
   id: string
@@ -35,145 +38,66 @@ export function GoalRow({
 
   if (editing) {
     return (
-      <section className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper-2)] p-5 md:p-6">
-        <form
-          action={async (fd) => {
-            await updateGoal(fd)
-            setEditing(false)
-          }}
-          className="grid gap-3 sm:grid-cols-3"
-        >
-          <input type="hidden" name="id" value={goal.id} />
-
-          <EditField label="Name" span={2}>
-            <input
-              name="name"
-              defaultValue={goal.name}
-              required
-              maxLength={120}
-              className="maple-input"
-            />
-          </EditField>
-          <EditField label="Target date">
-            <input
-              name="target_date"
-              type="date"
-              defaultValue={goal.target_date ?? ''}
-              className="maple-input"
-            />
-          </EditField>
-          <EditField label="Target amount">
-            <input
-              name="target_amount"
-              type="text"
-              inputMode="decimal"
-              defaultValue={(goal.target_amount_cents / 100).toFixed(2)}
-              required
-              className="maple-input tabular-nums"
-            />
-          </EditField>
-          <EditField label="Current progress">
-            <input
-              name="current_amount"
-              type="text"
-              inputMode="decimal"
-              defaultValue={(goal.current_amount_cents / 100).toFixed(2)}
-              className="maple-input tabular-nums"
-            />
-          </EditField>
-          <EditField label="Funding account">
-            <select
-              name="funding_account_id"
-              defaultValue={goal.funding_account_id ?? ''}
-              className="maple-select"
-            >
-              <option value="">—</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-          </EditField>
-          <EditField label="Notes" span={3}>
-            <input
-              name="note"
-              defaultValue={goal.note ?? ''}
-              maxLength={1000}
-              className="maple-input"
-            />
-          </EditField>
-
-          <div className="flex items-center justify-end gap-3 sm:col-span-3">
-            <button
-              type="button"
-              onClick={() => setEditing(false)}
-              className="rounded-full px-4 py-2 text-[13px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="inline-flex items-center gap-2 rounded-full bg-[var(--color-ink)] px-5 py-2.5 text-[13px] font-semibold text-[var(--color-paper)] active:scale-[0.98]"
-            >
-              Save
-            </button>
-          </div>
-        </form>
-      </section>
+      <EditCard
+        goal={goal}
+        accounts={accounts}
+        onDone={() => setEditing(false)}
+      />
     )
   }
 
   return (
     <section
       className={
-        'rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6 ' +
+        'rounded-xl border border-hair bg-paper p-5 shadow-[var(--shadow-card)] md:p-6 ' +
         (done ? 'opacity-70' : '')
       }
     >
-      <div className="flex items-baseline justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
         <div className="min-w-0">
-          <div className="flex items-baseline gap-2">
-            <h3 className="font-serif text-[19px] tracking-[-0.01em] text-[var(--color-ink)]">
+          <div className="flex flex-wrap items-baseline gap-2">
+            <h3 className="font-serif text-[19px] tracking-[-0.01em] text-ink">
               {goal.name}
             </h3>
+            {/* Goals carry no member attribution, so they're always shared. */}
+            <span className="inline-flex items-center rounded-full bg-leaf-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-leaf">
+              Shared
+            </span>
             {done && (
-              <span
-                className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em]"
-                style={{ background: 'var(--color-leaf-soft)', color: 'var(--color-leaf)' }}
-              >
+              <span className="inline-flex items-center rounded-full bg-leaf-tint px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-leaf-deep">
                 Achieved
               </span>
             )}
           </div>
           {(goal.targetDateLabel || goal.fundingAccountName) && (
-            <p className="mt-1 text-[11.5px] text-[var(--color-ink-3)]">
+            <p className="mt-1 text-[11.5px] text-ink-3">
               {goal.targetDateLabel && <>Due {goal.targetDateLabel}</>}
               {goal.targetDateLabel && goal.fundingAccountName && ' · '}
               {goal.fundingAccountName && <>Funding · {goal.fundingAccountName}</>}
             </p>
           )}
         </div>
-        <div className="flex items-center gap-3 text-[12px]">
+
+        {/* Always-visible actions with ≥44px tap targets so they work on touch
+            without a hover state. */}
+        <div className="-ml-1 flex flex-wrap items-center gap-1 text-[12px] sm:-mr-1 sm:ml-0 sm:justify-end">
           <button
             type="button"
             onClick={() => setEditing(true)}
-            className="font-semibold text-[var(--color-ink-2)] underline-offset-2 hover:text-[var(--color-ink)] hover:underline"
+            className="inline-flex min-h-[44px] items-center rounded-md px-2 font-semibold text-ink-2 transition-colors hover:bg-cream-2 hover:text-ink"
           >
             Edit
           </button>
-          <span className="text-[var(--color-hair)]">·</span>
           <form action={toggleAchieved}>
             <input type="hidden" name="id" value={goal.id} />
             <input type="hidden" name="achieved" value={done ? '0' : '1'} />
             <button
               type="submit"
-              className="font-semibold text-[var(--color-ink-2)] underline-offset-2 hover:text-[var(--color-ink)] hover:underline"
+              className="inline-flex min-h-[44px] items-center rounded-md px-2 font-semibold text-ink-2 transition-colors hover:bg-cream-2 hover:text-ink"
             >
               {done ? 'Reopen' : 'Mark achieved'}
             </button>
           </form>
-          <span className="text-[var(--color-hair)]">·</span>
           <ConfirmButton
             action={archiveGoal}
             formData={{ id: goal.id }}
@@ -181,24 +105,29 @@ export function GoalRow({
             description="Archived goals are hidden from the active list but kept in history."
             confirmLabel="Archive"
             destructive
-            className="font-semibold underline-offset-2 hover:underline"
+            className="inline-flex min-h-[44px] items-center rounded-md px-2 font-semibold text-maple transition-colors hover:bg-maple-soft"
           >
-            <span style={{ color: 'var(--color-maple)' }}>Archive</span>
+            Archive
           </ConfirmButton>
         </div>
       </div>
 
       <div className="mt-4 flex items-baseline justify-between gap-4">
-        <div className="font-serif text-[18px] tabular-nums text-[var(--color-ink)]">
-          {formatMoney(goal.current_amount_cents)}
-          <span className="text-[var(--color-ink-3)]"> of {formatMoney(goal.target_amount_cents)}</span>
+        <div className="font-serif text-[18px] tabular-nums text-ink">
+          <Amount cents={goal.current_amount_cents} className="text-[18px]" />
+          <span className="text-ink-3"> of {formatMoney(goal.target_amount_cents)}</span>
         </div>
-        <span className="text-[13px] font-semibold tabular-nums text-[var(--color-ink-2)]">
+        <span className="text-[13px] font-semibold tabular-nums text-ink-2">
           {percent}%
         </span>
       </div>
-      <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--color-paper-2)]">
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-paper-2">
         <div
+          role="progressbar"
+          aria-valuenow={percent}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`${goal.name} progress`}
           className="h-full rounded-full transition-all duration-300"
           style={{
             width: `${percent}%`,
@@ -206,12 +135,12 @@ export function GoalRow({
           }}
         />
       </div>
-      <div className="mt-1.5 text-[11.5px] text-[var(--color-ink-3)]">
+      <div className="mt-1.5 text-[11.5px] text-ink-3">
         {remaining > 0 ? `${formatMoney(remaining)} to go` : 'Target reached'}
       </div>
 
       {goal.note && (
-        <p className="mt-3 rounded-[10px] bg-[var(--color-paper-2)] px-3 py-2 text-[12.5px] leading-relaxed text-[var(--color-ink-2)]">
+        <p className="mt-3 rounded-md bg-paper-2 px-3 py-2 text-[12.5px] leading-relaxed text-ink-2">
           {goal.note}
         </p>
       )}
@@ -219,22 +148,106 @@ export function GoalRow({
   )
 }
 
-function EditField({
-  label,
-  span,
-  children,
+function EditCard({
+  goal,
+  accounts,
+  onDone,
 }: {
-  label: string
-  span?: 2 | 3
-  children: React.ReactNode
+  goal: Goal
+  accounts: { id: string; name: string }[]
+  onDone: () => void
 }) {
-  const sc = span === 3 ? 'sm:col-span-3' : span === 2 ? 'sm:col-span-2' : ''
+  const [state, formAction, pending] = useActionState<GoalState, FormData>(updateGoal, undefined)
+  // Close the editor once a submit completes without an error.
+  const wasPending = useRef(false)
+  useEffect(() => {
+    if (wasPending.current && !pending && !state?.error) onDone()
+    wasPending.current = pending
+    // `onDone` is stable from the caller; depend only on the action outcome.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending, state])
+
   return (
-    <label className={`flex flex-col gap-1 ${sc}`}>
-      <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
-        {label}
-      </span>
-      {children}
-    </label>
+    <section className="rounded-xl border border-hair bg-paper-2 p-5 shadow-[var(--shadow-card)] md:p-6">
+      <form action={formAction} className="grid gap-3 sm:grid-cols-3">
+        <input type="hidden" name="id" value={goal.id} />
+
+        <Field label="Name" required className="sm:col-span-2">
+          <input
+            name="name"
+            defaultValue={goal.name}
+            required
+            maxLength={120}
+            className="maple-input"
+          />
+        </Field>
+        <Field label="Target date">
+          <input
+            name="target_date"
+            type="date"
+            defaultValue={goal.target_date ?? ''}
+            className="maple-input"
+          />
+        </Field>
+        <Field label="Target amount" required>
+          <input
+            name="target_amount"
+            type="text"
+            inputMode="decimal"
+            defaultValue={(goal.target_amount_cents / 100).toFixed(2)}
+            required
+            className="maple-input tabular-nums"
+          />
+        </Field>
+        <Field label="Current progress">
+          <input
+            name="current_amount"
+            type="text"
+            inputMode="decimal"
+            defaultValue={(goal.current_amount_cents / 100).toFixed(2)}
+            className="maple-input tabular-nums"
+          />
+        </Field>
+        <Field label="Funding account">
+          <select
+            name="funding_account_id"
+            defaultValue={goal.funding_account_id ?? ''}
+            className="maple-select"
+          >
+            <option value="">—</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Notes" className="sm:col-span-3">
+          <input
+            name="note"
+            defaultValue={goal.note ?? ''}
+            maxLength={1000}
+            className="maple-input"
+          />
+        </Field>
+
+        <div className="flex flex-col-reverse items-stretch gap-3 sm:col-span-3 sm:flex-row sm:items-center sm:justify-end">
+          {state?.error && (
+            <p
+              role="alert"
+              className="rounded-md bg-maple-soft px-3 py-2 text-[12.5px] font-medium text-maple"
+            >
+              {state.error}
+            </p>
+          )}
+          <Button type="button" variant="ghost" onClick={onDone} disabled={pending}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" disabled={pending}>
+            {pending ? 'Saving…' : 'Save'}
+          </Button>
+        </div>
+      </form>
+    </section>
   )
 }

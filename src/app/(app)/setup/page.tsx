@@ -1,12 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
+import { PageHeader } from '@/components/ui/page-header'
+import { Card } from '@/components/ui/card'
 import { MapleLabel } from '@/components/ui/label'
 import { HouseholdForm } from './household-form'
 import { MembersList } from './members-list'
 import { CategoriesList } from './categories-list'
 
 /**
- * Setup — one page for household name, members, and categories.
+ * Setup — the canonical home for household name, members, and categories.
  * Three cards stacked so it reads like a preferences screen.
  */
 export default async function SetupPage() {
@@ -30,27 +32,18 @@ export default async function SetupPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-10">
-      <header className="flex flex-col gap-1">
-        <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
-          Setup
-        </div>
-        <h1 className="font-serif text-[34px] leading-[1.05] tracking-[-0.02em] text-[var(--color-ink)] md:text-[40px]">
-          Make it yours.
-        </h1>
-        <p className="mt-2 max-w-[620px] text-[14px] leading-relaxed text-[var(--color-ink-2)]">
-          Household name, who&rsquo;s in it, and how you slice your spending.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="Setup"
+        title="Make it yours."
+        subtitle="Household name, who’s in it, and how you slice your spending."
+      />
 
-      <section className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6">
+      <Card padding="lg">
         <MapleLabel>Household</MapleLabel>
-        <HouseholdForm
-          id={household?.id ?? ''}
-          name={household?.name ?? ''}
-        />
-      </section>
+        <HouseholdForm id={household?.id ?? ''} name={household?.name ?? ''} />
+      </Card>
 
-      <section className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6">
+      <Card padding="lg">
         <MapleLabel>Members</MapleLabel>
         <MembersList
           members={(members ?? []).map((m) => ({
@@ -59,9 +52,9 @@ export default async function SetupPage() {
             archived: !!m.archived_at,
           }))}
         />
-      </section>
+      </Card>
 
-      <section className="rounded-[20px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-5 md:p-6">
+      <Card padding="lg">
         <MapleLabel>Categories</MapleLabel>
         <CategoriesList
           categories={(categories ?? []).map((c) => ({
@@ -72,7 +65,7 @@ export default async function SetupPage() {
             archived: !!c.archived_at,
           }))}
         />
-      </section>
+      </Card>
     </div>
   )
 }

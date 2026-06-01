@@ -11,12 +11,16 @@ function parseHours(str: string): number {
   return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : 0
 }
 
-export async function saveTimeOff(fd: FormData): Promise<void> {
+export type SaveTimeOffResult = { ok: true } | { ok: false; error: string }
+
+export async function saveTimeOff(fd: FormData): Promise<SaveTimeOffResult> {
   const month = String(fd.get('period_month') ?? '')
-  if (!/^\d{4}-\d{2}-01$/.test(month)) return
+  if (!/^\d{4}-\d{2}-01$/.test(month)) {
+    return { ok: false, error: 'Invalid month.' }
+  }
 
   const ctx = await getHouseholdContext()
-  if (!ctx) return
+  if (!ctx) return { ok: false, error: 'Not authorized.' }
 
   const upserts: {
     household_id: string
@@ -46,11 +50,16 @@ export async function saveTimeOff(fd: FormData): Promise<void> {
     })
   }
 
-  if (upserts.length === 0) return
+  if (upserts.length === 0) {
+    return { ok: false, error: 'Nothing to save.' }
+  }
   const supabase = await createClient()
-  await supabase
+  const { error } = await supabase
     .from('time_off_entries')
     .upsert(upserts, { onConflict: 'member_id,period_month' })
 
+  if (error) return { ok: false, error: error.message }
+
   revalidatePath('/time-off')
+  return { ok: true }
 }

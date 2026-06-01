@@ -8,12 +8,20 @@ import { parseMoneyToCents } from '@/lib/format'
 type RegisteredType = 'tfsa' | 'rrsp' | 'fhsa'
 const REGISTERED = new Set<RegisteredType>(['tfsa', 'rrsp', 'fhsa'])
 
-export async function saveContributionRooms(fd: FormData): Promise<void> {
+export type SaveContributionRoomsResult = { ok: true } | { ok: false; error: string }
+
+export async function saveContributionRooms(
+  fd: FormData,
+): Promise<SaveContributionRoomsResult> {
   const year = Number(fd.get('year'))
-  if (!Number.isFinite(year) || year < 2000 || year > 2100) return
+  if (!Number.isFinite(year) || year < 2000 || year > 2100) {
+    return { ok: false, error: 'Invalid year.' }
+  }
 
   const ctx = await getHouseholdContext()
-  if (!ctx) return
+  if (!ctx) {
+    return { ok: false, error: 'Your session expired. Please sign in again.' }
+  }
 
   const rows: {
     household_id: string
@@ -49,11 +57,18 @@ export async function saveContributionRooms(fd: FormData): Promise<void> {
     })
   }
 
-  if (rows.length === 0) return
+  // Nothing parseable to write — treat as a no-op success so the UI doesn't
+  // flash an error when a user saves an unchanged form.
+  if (rows.length === 0) return { ok: true }
+
   const supabase = await createClient()
-  await supabase
+  const { error } = await supabase
     .from('member_contribution_rooms')
     .upsert(rows, { onConflict: 'member_id,account_type,year' })
+  if (error) {
+    return { ok: false, error: 'Could not save your rooms. Please try again.' }
+  }
 
   revalidatePath('/contributions')
+  return { ok: true }
 }

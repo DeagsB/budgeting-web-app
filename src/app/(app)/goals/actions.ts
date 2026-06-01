@@ -60,23 +60,25 @@ export async function createGoal(_prev: GoalState, fd: FormData): Promise<GoalSt
   return undefined
 }
 
-export async function updateGoal(fd: FormData): Promise<void> {
+export async function updateGoal(_prev: GoalState, fd: FormData): Promise<GoalState> {
   const id = String(fd.get('id') ?? '')
-  if (!id) return
+  if (!id) return { error: 'Goal not found.' }
   const parsed = parseForm(fd)
-  if (!parsed.ok) return
+  if (!parsed.ok) return { error: parsed.error }
 
   const ctx = await getHouseholdContext()
-  if (!ctx) return
+  if (!ctx) return { error: 'Not authorized.' }
 
   const supabase = await createClient()
-  await supabase
+  const { error } = await supabase
     .from('goals')
     .update(parsed.ok)
     .eq('id', id)
     .eq('household_id', ctx.householdId)
+  if (error) return { error: error.message }
 
   revalidatePath('/goals')
+  return undefined
 }
 
 export async function toggleAchieved(fd: FormData): Promise<void> {

@@ -2,6 +2,9 @@
 
 import { useState, useTransition } from 'react'
 import { addMember, renameMember, archiveMember, unarchiveMember } from './actions'
+import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ConfirmButton } from '@/components/ui/confirm-button'
 
 type Member = { id: string; name: string; archived: boolean }
 
@@ -9,38 +12,49 @@ export function MembersList({ members }: { members: Member[] }) {
   const [show, setShow] = useState<'active' | 'archived'>('active')
   const visible = members.filter((m) => (show === 'archived' ? m.archived : !m.archived))
   const archivedCount = members.filter((m) => m.archived).length
+  const activeCount = members.filter((m) => !m.archived).length
 
   return (
     <div className="mt-3 flex flex-col gap-3">
       {/* Add */}
       <AddMember />
 
-      {/* List header */}
-      <div className="mt-2 flex items-baseline justify-between">
-        <span className="text-[12px] text-[var(--color-ink-3)]">
-          {visible.length} {show === 'archived' ? 'archived' : 'active'}
-        </span>
-        {archivedCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setShow(show === 'archived' ? 'active' : 'archived')}
-            className="text-[12px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline"
-          >
-            {show === 'archived' ? '← Active' : `Archived (${archivedCount}) →`}
-          </button>
-        )}
-      </div>
+      {/* First-run guidance — no active members yet and nothing archived either */}
+      {activeCount === 0 && archivedCount === 0 ? (
+        <EmptyState
+          title="Add the first member"
+          body="A member is anyone whose money flows through this household. You can assign accounts, transactions, and budgets to each one — or mark them shared."
+        />
+      ) : (
+        <>
+          {/* List header */}
+          <div className="mt-2 flex items-baseline justify-between">
+            <span className="text-[12px] text-ink-3">
+              {visible.length} {show === 'archived' ? 'archived' : 'active'}
+            </span>
+            {archivedCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setShow(show === 'archived' ? 'active' : 'archived')}
+                className="inline-flex min-h-[44px] items-center text-[12px] font-semibold text-ink-2 hover:text-ink hover:underline"
+              >
+                {show === 'archived' ? '← Active' : `Archived (${archivedCount}) →`}
+              </button>
+            )}
+          </div>
 
-      <ul className="divide-y divide-[var(--color-hair)] border-y border-[var(--color-hair)]">
-        {visible.length === 0 && (
-          <li className="py-6 text-center text-[13.5px] text-[var(--color-ink-2)]">
-            {show === 'archived' ? 'Nothing archived.' : 'Add someone above.'}
-          </li>
-        )}
-        {visible.map((m) => (
-          <MemberRow key={m.id} member={m} />
-        ))}
-      </ul>
+          <ul className="divide-y divide-hair border-y border-hair">
+            {visible.length === 0 && (
+              <li className="py-6 text-center text-[13.5px] text-ink-2">
+                {show === 'archived' ? 'Nothing archived.' : 'Add someone above.'}
+              </li>
+            )}
+            {visible.map((m) => (
+              <MemberRow key={m.id} member={m} />
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   )
 }
@@ -56,7 +70,7 @@ function AddMember() {
           if (el) el.value = ''
         })
       }}
-      className="flex items-center gap-2"
+      className="flex flex-col gap-2 sm:flex-row sm:items-center"
     >
       <input
         id="new-member"
@@ -67,13 +81,9 @@ function AddMember() {
         placeholder="Add a member — first name is fine"
         className="maple-input flex-1"
       />
-      <button
-        type="submit"
-        disabled={pending}
-        className="inline-flex shrink-0 items-center rounded-full bg-[var(--color-ink)] px-4 py-2.5 text-[12.5px] font-semibold text-[var(--color-paper)] disabled:opacity-50"
-      >
+      <Button type="submit" variant="primary" size="md" disabled={pending} className="shrink-0">
         {pending ? 'Adding…' : 'Add'}
-      </button>
+      </Button>
     </form>
   )
 }
@@ -81,14 +91,17 @@ function AddMember() {
 function MemberRow({ member }: { member: Member }) {
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(member.name)
+  const [pending, startTransition] = useTransition()
 
   if (editing) {
     return (
-      <li className="flex items-center gap-2 py-3">
+      <li className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center">
         <form
-          action={async (fd) => {
-            await renameMember(fd)
-            setEditing(false)
+          action={(fd) => {
+            startTransition(async () => {
+              await renameMember(fd)
+              setEditing(false)
+            })
           }}
           className="flex flex-1 items-center gap-2"
         >
@@ -98,46 +111,50 @@ function MemberRow({ member }: { member: Member }) {
             value={value}
             onChange={(e) => setValue(e.target.value)}
             autoFocus
+            required
+            maxLength={80}
             className="maple-input flex-1"
           />
-          <button
-            type="submit"
-            className="inline-flex items-center rounded-full bg-[var(--color-ink)] px-3.5 py-1.5 text-[12px] font-semibold text-[var(--color-paper)]"
-          >
-            Save
-          </button>
+          <Button type="submit" variant="primary" size="sm" disabled={pending}>
+            {pending ? 'Saving…' : 'Save'}
+          </Button>
         </form>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           onClick={() => {
             setValue(member.name)
             setEditing(false)
           }}
-          className="text-[12px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
         >
           Cancel
-        </button>
+        </Button>
       </li>
     )
   }
 
   return (
-    <li className={'group flex items-center justify-between gap-3 py-3 ' + (member.archived ? 'opacity-50' : '')}>
-      <div className="flex items-center gap-3">
+    <li
+      className={
+        'flex items-center justify-between gap-3 py-2 ' + (member.archived ? 'opacity-60' : '')
+      }
+    >
+      <div className="flex min-w-0 items-center gap-3">
         <div
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold"
-          style={{ background: 'var(--color-leaf-soft)', color: 'var(--color-leaf)' }}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-leaf-soft text-[13px] font-semibold text-leaf"
+          aria-hidden
         >
-          {member.name.charAt(0).toUpperCase()}
+          {member.name.charAt(0).toUpperCase() || '?'}
         </div>
-        <span className="font-serif text-[16px] text-[var(--color-ink)]">{member.name}</span>
+        <span className="truncate font-serif text-[16px] text-ink">{member.name}</span>
       </div>
-      <div className="flex items-center gap-3 text-[12px] opacity-60 transition-opacity group-hover:opacity-100">
+      <div className="flex shrink-0 items-center gap-1 text-[12px]">
         {!member.archived && (
           <button
             type="button"
             onClick={() => setEditing(true)}
-            className="font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline"
+            className="inline-flex min-h-[44px] items-center px-2 font-semibold text-ink-2 hover:text-ink hover:underline"
           >
             Rename
           </button>
@@ -145,17 +162,25 @@ function MemberRow({ member }: { member: Member }) {
         {member.archived ? (
           <form action={unarchiveMember}>
             <input type="hidden" name="id" value={member.id} />
-            <button type="submit" className="font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)] hover:underline">
+            <button
+              type="submit"
+              className="inline-flex min-h-[44px] items-center px-2 font-semibold text-ink-2 hover:text-ink hover:underline"
+            >
               Unarchive
             </button>
           </form>
         ) : (
-          <form action={archiveMember}>
-            <input type="hidden" name="id" value={member.id} />
-            <button type="submit" className="font-semibold hover:underline" style={{ color: 'var(--color-maple)' }}>
-              Archive
-            </button>
-          </form>
+          <ConfirmButton
+            action={archiveMember}
+            formData={{ id: member.id }}
+            prompt={`Archive “${member.name}”?`}
+            description="Archived members are hidden from pickers but their accounts and transactions stay intact. You can unarchive them anytime."
+            confirmLabel="Archive"
+            destructive
+            className="inline-flex min-h-[44px] items-center px-2 font-semibold text-maple hover:underline"
+          >
+            Archive
+          </ConfirmButton>
         )}
       </div>
     </li>

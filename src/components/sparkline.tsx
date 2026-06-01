@@ -4,6 +4,7 @@
 // rather than interactive analytics.
 
 import { formatMoney } from '@/lib/format'
+import { gridlines as gridlineYs, smoothPath as smoothPathOf } from '@/lib/maple'
 
 export type SparklinePoint = {
   label: string
@@ -16,6 +17,8 @@ export function Sparkline({
   color = 'currentColor',
   fill = false,
   showAxis = true,
+  smoothPath = false,
+  gridlines = false,
   ariaLabel,
 }: {
   points: SparklinePoint[]
@@ -23,12 +26,16 @@ export function Sparkline({
   color?: string
   fill?: boolean
   showAxis?: boolean
+  /** Draw the line as a smoothed cubic-Bezier curve instead of straight segments. */
+  smoothPath?: boolean
+  /** Render faint evenly-spaced horizontal gridlines behind the series. */
+  gridlines?: boolean
   ariaLabel?: string
 }) {
   if (points.length === 0) {
     return (
       <div
-        className="flex items-center justify-center rounded border border-dashed border-gray-300 bg-gray-50 text-xs text-gray-500"
+        className="flex items-center justify-center rounded border border-dashed border-hair bg-paper-2 text-xs text-ink-3"
         style={{ height }}
       >
         No data yet
@@ -50,9 +57,12 @@ export function Sparkline({
   const xs = points.map((_, i) => padding.left + i * xStep)
   const ys = points.map((p) => padding.top + innerH - ((p.value - minV) / range) * innerH)
 
-  const line = points
-    .map((_, i) => `${i === 0 ? 'M' : 'L'} ${xs[i].toFixed(2)} ${ys[i].toFixed(2)}`)
-    .join(' ')
+  const coords: [number, number][] = xs.map((x, i) => [x, ys[i]])
+
+  const line =
+    smoothPath && coords.length > 1
+      ? smoothPathOf(coords)
+      : coords.map(([x, y], i) => `${i === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`).join(' ')
 
   const areaPath = `${line} L ${xs[xs.length - 1].toFixed(2)} ${(
     padding.top +
@@ -61,6 +71,10 @@ export function Sparkline({
 
   // Zero baseline
   const zeroY = padding.top + innerH - ((0 - minV) / range) * innerH
+
+  const gridYs = gridlines
+    ? gridlineYs(innerH, { count: 3, pad: 0 }).map((y) => padding.top + y)
+    : []
 
   return (
     <svg
@@ -72,6 +86,17 @@ export function Sparkline({
       aria-label={ariaLabel}
       style={{ color }}
     >
+      {gridYs.map((y, i) => (
+        <line
+          key={`grid-${i}`}
+          x1={padding.left}
+          x2={padding.left + innerW}
+          y1={y}
+          y2={y}
+          stroke="currentColor"
+          strokeOpacity="0.08"
+        />
+      ))}
       {minV < 0 && maxV > 0 && (
         <line
           x1={padding.left}

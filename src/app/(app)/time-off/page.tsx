@@ -1,7 +1,12 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
-import { addMonths, monthLabel, monthStartISO } from '@/lib/format'
+import { monthLabel, monthStartISO } from '@/lib/format'
+import { PageHeader } from '@/components/ui/page-header'
+import { MonthNav } from '@/components/ui/month-nav'
+import { StatTile } from '@/components/ui/stat-tile'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Button } from '@/components/ui/button'
 import { TimeOffTable } from './table'
 
 type Entry = {
@@ -13,6 +18,10 @@ type Entry = {
   flex_used_hours: number
 }
 
+function fmtHours(h: number): string {
+  return `${h.toFixed(2)} h`
+}
+
 export default async function TimeOffPage({
   searchParams,
 }: {
@@ -21,7 +30,6 @@ export default async function TimeOffPage({
   const params = await searchParams
   const month =
     params.month && /^\d{4}-\d{2}-01$/.test(params.month) ? params.month : monthStartISO()
-  const nextMonth = addMonths(month, 1)
 
   const ctx = await getHouseholdContext()
   if (!ctx) return null
@@ -74,74 +82,86 @@ export default async function TimeOffPage({
     cumulativeByMember.set(e.member_id, cur)
   }
 
+  const memberRows = members ?? []
+
+  const rows = memberRows.map((m) => {
+    const e = monthEntryByMember.get(m.id)
+    const prior = cumulativeByMember.get(m.id) ?? {
+      vac_accrued: 0,
+      vac_used: 0,
+      flex_accrued: 0,
+      flex_used: 0,
+    }
+    const vac_accrued = e?.vacation_accrued_hours ?? 0
+    const vac_used = e?.vacation_used_hours ?? 0
+    const flex_accrued = e?.flex_accrued_hours ?? 0
+    const flex_used = e?.flex_used_hours ?? 0
+    return {
+      member_id: m.id,
+      memberName: m.display_name,
+      vacation_accrued: vac_accrued,
+      vacation_used: vac_used,
+      flex_accrued: flex_accrued,
+      flex_used: flex_used,
+      vacation_balance: prior.vac_accrued + vac_accrued - prior.vac_used - vac_used,
+      flex_balance: prior.flex_accrued + flex_accrued - prior.flex_used - flex_used,
+    }
+  })
+
   return (
     <div className="flex flex-col gap-6 pb-10">
-      <header className="flex flex-col gap-1">
-        <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
-          Time off · {monthLabel(month)}
-        </div>
-        <h1 className="font-serif text-[34px] leading-[1.05] tracking-[-0.02em] text-[var(--color-ink)] md:text-[40px]">
-          Vacation, accounted for.
-        </h1>
-        <p className="mt-2 max-w-[560px] text-[14px] leading-relaxed text-[var(--color-ink-2)]">
-          Vacation and FLEX hours per member, accrued and used. Balances are cumulative
-          through the end of the selected month.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow={`Time off · ${monthLabel(month)}`}
+        title="Vacation, accounted for."
+        subtitle="Vacation and FLEX hours per member, accrued and used. Balances are cumulative through the end of the selected month."
+      />
 
-      <nav className="grid grid-cols-3 gap-2 text-[13px]">
-        <Link
-          href={{ pathname: '/time-off', query: { month: addMonths(month, -1) } }}
-          className="inline-flex items-center justify-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2 font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
-        >
-          ← Previous
-        </Link>
-        <Link
-          href={{ pathname: '/time-off', query: { month: monthStartISO() } }}
-          className="inline-flex items-center justify-center rounded-full border border-[var(--color-hair)] bg-[var(--color-paper-2)] px-3 py-2 font-semibold text-[var(--color-ink)]"
-        >
-          This month
-        </Link>
-        <Link
-          href={{ pathname: '/time-off', query: { month: nextMonth } }}
-          className="inline-flex items-center justify-center gap-1 rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2 font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
-        >
-          Next →
-        </Link>
-      </nav>
+      <MonthNav
+        monthISO={month}
+        makeHref={(iso) => `/time-off?month=${iso}`}
+      />
 
-      {(members ?? []).length === 0 ? (
-        <p className="rounded-[20px] border border-dashed border-[var(--color-hair)] bg-[var(--color-paper-2)] px-5 py-8 text-center text-[13.5px] text-[var(--color-ink-2)]">
-          Add members first.
-        </p>
-      ) : (
-        <TimeOffTable
-          month={month}
-          rows={(members ?? []).map((m) => {
-            const e = monthEntryByMember.get(m.id)
-            const prior = cumulativeByMember.get(m.id) ?? {
-              vac_accrued: 0,
-              vac_used: 0,
-              flex_accrued: 0,
-              flex_used: 0,
-            }
-            const vac_accrued = e?.vacation_accrued_hours ?? 0
-            const vac_used = e?.vacation_used_hours ?? 0
-            const flex_accrued = e?.flex_accrued_hours ?? 0
-            const flex_used = e?.flex_used_hours ?? 0
-            return {
-              member_id: m.id,
-              memberName: m.display_name,
-              vacation_accrued: vac_accrued,
-              vacation_used: vac_used,
-              flex_accrued: flex_accrued,
-              flex_used: flex_used,
-              vacation_balance:
-                prior.vac_accrued + vac_accrued - prior.vac_used - vac_used,
-              flex_balance: prior.flex_accrued + flex_accrued - prior.flex_used - flex_used,
-            }
-          })}
+      {memberRows.length === 0 ? (
+        <EmptyState
+          title="No members yet"
+          body="Time off is tracked per household member. Add at least one member to start logging vacation and FLEX hours."
+          action={
+            <Link href="/setup">
+              <Button variant="primary" size="md">
+                Go to setup
+              </Button>
+            </Link>
+          }
         />
+      ) : (
+        <>
+          <section aria-label="Balances by member" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {rows.map((r) => {
+              const vacOver = r.vacation_balance < 0
+              const flexOver = r.flex_balance < 0
+              return (
+                <StatTile
+                  key={r.member_id}
+                  label={r.memberName}
+                  tone={vacOver ? 'maple' : 'leaf'}
+                  value={fmtHours(r.vacation_balance)}
+                  hint="Vacation balance"
+                  foot={
+                    <span className={flexOver ? 'text-maple' : 'text-ink-2'}>
+                      FLEX {fmtHours(r.flex_balance)}
+                      {flexOver ? ' · overdrawn' : ''}
+                    </span>
+                  }
+                  aria-label={`${r.memberName}: vacation balance ${fmtHours(r.vacation_balance)}${
+                    vacOver ? ', overdrawn' : ''
+                  }; FLEX balance ${fmtHours(r.flex_balance)}${flexOver ? ', overdrawn' : ''}`}
+                />
+              )
+            })}
+          </section>
+
+          <TimeOffTable month={month} rows={rows} />
+        </>
       )}
     </div>
   )
