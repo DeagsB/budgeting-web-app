@@ -71,6 +71,23 @@ export default async function ImportPage() {
         </Link>
       </section>
 
+      <section className="flex flex-col gap-4 rounded-lg border border-hair bg-cream-2 p-5 md:flex-row md:items-center md:justify-between md:gap-6 md:p-6">
+        <div className="min-w-0">
+          <MapleLabel>Connect a bank</MapleLabel>
+          <p className="mt-1.5 max-w-[520px] text-[13.5px] leading-relaxed text-ink-2">
+            Want the real merchant on every row instead of a &ldquo;withdrawal warning&rdquo;? Link your
+            bank through Plaid — transactions sync in automatically, with names and amounts. Free for up
+            to 10 banks; it enriches your email alerts rather than duplicating them.
+          </p>
+        </div>
+        <Link
+          href="/transactions/import/plaid-setup"
+          className="inline-flex min-h-[44px] shrink-0 items-center gap-2 self-start rounded-full border border-hair bg-paper px-5 py-3 text-[13.5px] font-semibold text-ink shadow-[var(--shadow-card)] transition-transform active:scale-[0.98] md:self-auto"
+        >
+          Connect a bank <span aria-hidden>→</span>
+        </Link>
+      </section>
+
       <section className="rounded-lg border border-hair bg-cream-2 p-5 md:p-6">
         <MapleLabel>What we look for</MapleLabel>
         <div className="mt-3 grid gap-3 sm:grid-cols-3">

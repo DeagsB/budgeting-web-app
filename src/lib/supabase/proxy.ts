@@ -53,6 +53,9 @@ export async function updateSession(request: NextRequest) {
     // Public ingestion webhooks authenticate via per-household secret in the
     // request body, not via cookies — don't bounce unauth callers to /sign-in.
     pathname.startsWith('/api/ingest') ||
+    // Plaid webhook (verified via signed JWT) + cron sync (CRON_SECRET) are
+    // called by external services with no session cookie.
+    pathname.startsWith('/api/plaid') ||
     // PWA install assets must be reachable without a session. Browsers and
     // OS install prompts fetch these with no cookies attached.
     pathname === '/manifest.webmanifest' ||
