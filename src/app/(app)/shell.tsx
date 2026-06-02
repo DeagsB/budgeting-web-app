@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { signOut } from '../(auth)/actions'
 import { Button } from '@/components/ui/button'
+import { PullToSync } from '@/components/pull-to-sync'
 
 /**
  * Maple shell. Light + dark are driven by the `.dark` class on <html>
@@ -318,7 +319,9 @@ export function AppShell({
           className="mx-auto max-w-[720px] px-4 py-5 md:max-w-[1080px] md:px-10 md:py-10"
           style={{ paddingBottom: 'calc(72px + env(safe-area-inset-bottom) + 16px)' }}
         >
-          {children}
+          {/* Pull-to-sync wraps every screen so the gesture is universal — a
+              pull-down at the top of any page triggers a Gmail sync + refresh. */}
+          <PullToSync>{children}</PullToSync>
         </div>
       </main>
 

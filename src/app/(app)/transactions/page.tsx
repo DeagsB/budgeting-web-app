@@ -12,7 +12,6 @@ import { TransactionRow } from './row'
 import { SyncNowButton } from './sync-button'
 import { TxControls } from './tx-controls'
 import { UncategorizedReview, type TriageTxn } from './uncategorized-review'
-import { PullToSync } from '@/components/pull-to-sync'
 import { looksCryptic } from '@/lib/title'
 
 type Txn = {
@@ -212,7 +211,6 @@ export default async function TransactionsPage({
   }
 
   return (
-    <PullToSync>
     <div className="flex flex-col gap-6 pb-10">
       <PageHeader
         eyebrow="Transactions"
@@ -374,6 +372,5 @@ export default async function TransactionsPage({
         )}
       </section>
     </div>
-    </PullToSync>
   )
 }
