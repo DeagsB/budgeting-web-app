@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { setTransactionCategory } from './actions'
 import { CategorySelect } from './category-select'
+import { NewCategoryInline } from './new-category-inline'
 import { Button } from '@/components/ui/button'
 
 type Category = { id: string; parent_id: string | null; name: string }
@@ -88,6 +89,7 @@ export function QuickCategorize({
         >
           {showAll ? 'Less' : 'More…'}
         </button>
+        <NewCategoryInline categories={categories} onCreated={(id) => apply(id)} variant="sheet" />
       </div>
 
       {error && (

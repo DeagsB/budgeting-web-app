@@ -2,12 +2,12 @@
 
 import { useState, useMemo, useTransition } from 'react'
 import {
-  addCategory,
   renameCategory,
   toggleRollover,
   archiveCategory,
   unarchiveCategory,
 } from './actions'
+import { createCategoryReturning } from '@/app/(app)/categories/actions'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ConfirmButton } from '@/components/ui/confirm-button'
@@ -94,39 +94,55 @@ export function CategoriesList({ categories }: { categories: Cat[] }) {
 
 function AddCategory({ parents }: { parents: Cat[] }) {
   const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
   return (
-    <form
-      action={(fd) => {
-        startTransition(async () => {
-          await addCategory(fd)
-          const el = document.getElementById('new-category') as HTMLInputElement | null
-          if (el) el.value = ''
-        })
-      }}
-      className="grid gap-2 sm:grid-cols-[1fr_180px_auto]"
-    >
-      <input
-        id="new-category"
-        name="name"
-        type="text"
-        required
-        maxLength={60}
-        aria-label="New category name"
-        placeholder="Category name — e.g. Groceries"
-        className="maple-input"
-      />
-      <select name="parent_id" aria-label="Parent category" className="maple-select" defaultValue="">
-        <option value="">— Top level —</option>
-        {parents.map((p) => (
-          <option key={p.id} value={p.id}>
-            under {p.name}
-          </option>
-        ))}
-      </select>
-      <Button type="submit" variant="primary" size="md" disabled={pending} className="shrink-0">
-        {pending ? 'Adding…' : 'Add'}
-      </Button>
-    </form>
+    <div className="flex flex-col gap-1.5">
+      <form
+        action={(fd) => {
+          const name = String(fd.get('name') ?? '').trim()
+          const parentId = String(fd.get('parent_id') ?? '').trim() || null
+          if (!name) return
+          setError(null)
+          startTransition(async () => {
+            const res = await createCategoryReturning({ name, parentId })
+            if (res.ok) {
+              const el = document.getElementById('new-category') as HTMLInputElement | null
+              if (el) el.value = ''
+            } else {
+              setError(res.error)
+            }
+          })
+        }}
+        className="grid gap-2 sm:grid-cols-[1fr_180px_auto]"
+      >
+        <input
+          id="new-category"
+          name="name"
+          type="text"
+          required
+          maxLength={60}
+          aria-label="New category name"
+          placeholder="Category name — e.g. Groceries"
+          className="maple-input"
+        />
+        <select name="parent_id" aria-label="Parent category" className="maple-select" defaultValue="">
+          <option value="">— Top level —</option>
+          {parents.map((p) => (
+            <option key={p.id} value={p.id}>
+              under {p.name}
+            </option>
+          ))}
+        </select>
+        <Button type="submit" variant="primary" size="md" disabled={pending} className="shrink-0">
+          {pending ? 'Adding…' : 'Add'}
+        </Button>
+      </form>
+      {error && (
+        <p role="alert" className="text-[12px] font-medium text-maple">
+          {error}
+        </p>
+      )}
+    </div>
   )
 }
 

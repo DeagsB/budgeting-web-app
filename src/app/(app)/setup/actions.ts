@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
+import { revalidateCategoryConsumers } from '@/lib/categories'
 
 async function hh() {
   const ctx = await getHouseholdContext()
@@ -78,22 +79,10 @@ export async function unarchiveMember(fd: FormData) {
 }
 
 // ───────── categories ─────────
-
-export async function addCategory(fd: FormData) {
-  const h = await hh()
-  if (!h) return
-  const name = String(fd.get('name') ?? '').trim()
-  const parentRaw = String(fd.get('parent_id') ?? '').trim()
-  const parent_id = parentRaw || null
-  if (!name) return
-  const code = codeFromName(name, parent_id)
-  await h.supabase
-    .from('categories')
-    .insert({ household_id: h.ctx.householdId, name, parent_id, code })
-  revalidatePath('/setup')
-  revalidatePath('/budgets')
-  revalidatePath('/transactions')
-}
+//
+// Creation lives in the shared engine (src/lib/categories.ts) so the /setup
+// card and the /categories page can't diverge. The mutations below all bust
+// every category-consuming route via revalidateCategoryConsumers().
 
 export async function renameCategory(fd: FormData) {
   const h = await hh()
@@ -106,9 +95,7 @@ export async function renameCategory(fd: FormData) {
     .update({ name })
     .eq('id', id)
     .eq('household_id', h.ctx.householdId)
-  revalidatePath('/setup')
-  revalidatePath('/budgets')
-  revalidatePath('/transactions')
+  revalidateCategoryConsumers()
 }
 
 export async function toggleRollover(fd: FormData) {
@@ -122,8 +109,7 @@ export async function toggleRollover(fd: FormData) {
     .update({ rollover_enabled })
     .eq('id', id)
     .eq('household_id', h.ctx.householdId)
-  revalidatePath('/setup')
-  revalidatePath('/budgets')
+  revalidateCategoryConsumers()
 }
 
 export async function archiveCategory(fd: FormData) {
@@ -136,9 +122,7 @@ export async function archiveCategory(fd: FormData) {
     .update({ archived_at: new Date().toISOString() })
     .eq('id', id)
     .eq('household_id', h.ctx.householdId)
-  revalidatePath('/setup')
-  revalidatePath('/budgets')
-  revalidatePath('/transactions')
+  revalidateCategoryConsumers()
 }
 
 export async function unarchiveCategory(fd: FormData) {
@@ -151,26 +135,5 @@ export async function unarchiveCategory(fd: FormData) {
     .update({ archived_at: null })
     .eq('id', id)
     .eq('household_id', h.ctx.householdId)
-  revalidatePath('/setup')
-  revalidatePath('/budgets')
-  revalidatePath('/transactions')
-}
-
-// ───────── helpers ─────────
-
-/**
- * categories.code has a strict regex constraint (^[A-Z][A-Z0-9_.]{0,39}$).
- * Generate a compliant code from a category name, uniquified by a short
- * random suffix so duplicates don't collide on the unique(household, code).
- */
-function codeFromName(name: string, parentId: string | null): string {
-  const base = name
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 20)
-  const safe = base && /^[A-Z]/.test(base) ? base : `C_${base || 'CAT'}`
-  const tail = Math.random().toString(36).slice(2, 6).toUpperCase()
-  const dot = parentId ? '.' : '.'
-  return `${safe.slice(0, 32)}${dot}${tail}`.slice(0, 40)
+  revalidateCategoryConsumers()
 }

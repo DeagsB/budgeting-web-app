@@ -1,79 +1,39 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
+import {
+  CODE_RE,
+  createCategoryCore,
+  revalidateCategoryConsumers,
+  type CreateCategoryInput,
+  type CreateCategoryResult,
+} from '@/lib/categories'
 
 export type CategoryState = { error: string } | undefined
 
-const CODE_RE = /^[A-Z][A-Z0-9_.]{0,39}$/
-
-function slugCode(name: string, parentCode?: string | null): string {
-  const base = name
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 20)
-  if (!base) return 'CAT'
-  return parentCode ? `${parentCode}.${base}` : base
-}
-
+/** `useActionState` adapter for the /categories page add form. */
 export async function createCategory(
   _prev: CategoryState,
   fd: FormData,
 ): Promise<CategoryState> {
-  const name = String(fd.get('name') ?? '').trim().slice(0, 80)
-  let code = String(fd.get('code') ?? '').trim().toUpperCase()
-  const parent_id = String(fd.get('parent_id') ?? '').trim() || null
-
-  if (!name) return { error: 'Name is required.' }
-
-  const ctx = await getHouseholdContext()
-  if (!ctx) return { error: 'Not authorized.' }
-
-  const supabase = await createClient()
-
-  // Two-level max: reject if parent is itself a child
-  if (parent_id) {
-    const { data: parent } = await supabase
-      .from('categories')
-      .select('code, parent_id')
-      .eq('id', parent_id)
-      .eq('household_id', ctx.householdId)
-      .single()
-    if (!parent) return { error: 'Parent category not found.' }
-    if (parent.parent_id) return { error: 'Nesting deeper than two levels is not supported.' }
-    if (!code) code = slugCode(name, parent.code)
-  } else if (!code) {
-    code = slugCode(name)
-  }
-
-  if (!CODE_RE.test(code)) {
-    return { error: 'Code must start with A-Z and use only A-Z, 0-9, _, or .' }
-  }
-
-  const { data: maxOrder } = await supabase
-    .from('categories')
-    .select('sort_order')
-    .eq('household_id', ctx.householdId)
-    .eq('parent_id', parent_id as string)
-    .order('sort_order', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  const nextOrder = (maxOrder?.sort_order ?? -1) + 1
-
-  const { error } = await supabase.from('categories').insert({
-    household_id: ctx.householdId,
-    parent_id,
-    name,
-    code,
-    sort_order: nextOrder,
+  const res = await createCategoryCore({
+    name: String(fd.get('name') ?? ''),
+    parentId: String(fd.get('parent_id') ?? '').trim() || null,
+    code: String(fd.get('code') ?? '').trim() || null,
   })
-  if (error) return { error: error.message }
+  return res.ok ? undefined : { error: res.error }
+}
 
-  revalidatePath('/categories')
-  return undefined
+/**
+ * Direct adapter that RETURNS the new id, so callers (e.g. the inline
+ * create-and-apply flow in the transaction categorizer) can immediately assign
+ * the freshly-created category.
+ */
+export async function createCategoryReturning(
+  input: CreateCategoryInput,
+): Promise<CreateCategoryResult> {
+  return createCategoryCore(input)
 }
 
 export async function updateCategory(fd: FormData): Promise<void> {
@@ -93,8 +53,7 @@ export async function updateCategory(fd: FormData): Promise<void> {
     .eq('id', id)
     .eq('household_id', ctx.householdId)
 
-  revalidatePath('/categories')
-  revalidatePath('/budgets')
+  revalidateCategoryConsumers()
 }
 
 export async function archiveCategory(fd: FormData): Promise<void> {
@@ -111,7 +70,7 @@ export async function archiveCategory(fd: FormData): Promise<void> {
     .eq('id', id)
     .eq('household_id', ctx.householdId)
 
-  revalidatePath('/categories')
+  revalidateCategoryConsumers()
 }
 
 export async function unarchiveCategory(fd: FormData): Promise<void> {
@@ -128,5 +87,5 @@ export async function unarchiveCategory(fd: FormData): Promise<void> {
     .eq('id', id)
     .eq('household_id', ctx.householdId)
 
-  revalidatePath('/categories')
+  revalidateCategoryConsumers()
 }

@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from 'react'
 import { applyTransactionAttributes } from './actions'
 import { CategorySelect } from './category-select'
+import { NewCategoryInline } from './new-category-inline'
 import { Sheet } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { formatMoney } from '@/lib/format'
@@ -123,6 +124,16 @@ function TriageQueue({
   const total = transactions.length
   const [pos, setPos] = useState(0)
   const [savedCount, setSavedCount] = useState(0)
+  // Categories created inline during this session, kept so they stay selectable
+  // on later cards in the same walk. Dedupe by id: creating a category
+  // revalidates /transactions, which eventually feeds the new category back in
+  // via the live `categories` prop — without this filter it would appear twice
+  // (duplicate React key + doubled option).
+  const [extraCategories, setExtraCategories] = useState<Category[]>([])
+  const mergedCategories = useMemo(() => {
+    const known = new Set(categories.map((c) => c.id))
+    return [...categories, ...extraCategories.filter((c) => !known.has(c.id))]
+  }, [categories, extraCategories])
   // Track which ids the user already handled in this session so the
   // "apply to similar" sibling lists don't re-offer transactions that have
   // since been categorized — and so a transaction cleared via a sibling is
@@ -216,12 +227,13 @@ function TriageQueue({
       <TriageCard
         key={current.id}
         txn={current}
-        categories={categories}
+        categories={mergedCategories}
         members={members}
         topCategoryIds={topCategoryIds}
         similar={similar}
         onSaved={advance}
         onSkip={skip}
+        onCategoryCreated={(cat) => setExtraCategories((prev) => [...prev, cat])}
       />
     </div>
   )
@@ -237,6 +249,7 @@ function TriageCard({
   similar,
   onSaved,
   onSkip,
+  onCategoryCreated,
 }: {
   txn: TriageTxn
   categories: Category[]
@@ -245,6 +258,7 @@ function TriageCard({
   similar: TriageTxn[]
   onSaved: (ids: string[]) => void
   onSkip: () => void
+  onCategoryCreated: (cat: Category) => void
 }) {
   const [pending, startTransition] = useTransition()
   const [categoryId, setCategoryId] = useState(txn.category_id ?? '')
@@ -323,6 +337,14 @@ function TriageCard({
               </button>
             )
           })}
+          <NewCategoryInline
+            categories={categories}
+            variant="inline"
+            onCreated={(id, name, parent_id) => {
+              onCategoryCreated({ id, name, parent_id })
+              setCategoryId(id)
+            }}
+          />
         </div>
         <CategorySelect
           categories={categories}
