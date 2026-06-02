@@ -43,6 +43,31 @@ type LogView = {
   error_detail: string | null
 }
 
+// OAuth banks (RBC, TD, Scotia…) bounce the browser to the bank's own site and
+// back. The page fully unloads, so the link_token + mode must survive in
+// localStorage to resume Link on return.
+const OAUTH_TOKEN_KEY = 'maple.plaid.linkToken'
+const OAUTH_MODE_KEY = 'maple.plaid.mode'
+const OAUTH_ITEM_KEY = 'maple.plaid.updateItem'
+
+function isOAuthReturn() {
+  return typeof window !== 'undefined' && window.location.search.includes('oauth_state_id')
+}
+
+function clearOAuthArtifacts() {
+  try {
+    localStorage.removeItem(OAUTH_TOKEN_KEY)
+    localStorage.removeItem(OAUTH_MODE_KEY)
+    localStorage.removeItem(OAUTH_ITEM_KEY)
+  } catch {
+    /* private mode / storage disabled — nothing to clean */
+  }
+  // Strip ?oauth_state_id so a refresh doesn't try to resume a spent flow.
+  if (isOAuthReturn()) {
+    window.history.replaceState({}, '', window.location.pathname)
+  }
+}
+
 type DraftMapping = {
   choice: PlaidAccountChoice
   kind: 'existing' | 'create' | 'skip'
@@ -84,6 +109,7 @@ export function PlaidWizard({
 
   const onSuccess = useCallback(
     (publicToken: string, metadata: PlaidLinkOnSuccessMetadata) => {
+      clearOAuthArtifacts()
       if (modeRef.current === 'update') {
         const id = updateItemRef.current
         setNotice('Re-authenticated. Syncing…')
@@ -108,7 +134,38 @@ export function PlaidWizard({
     [router, accounts],
   )
 
-  const { open, ready } = usePlaidLink({ token: linkToken, onSuccess })
+  const onExit = useCallback(() => {
+    // Abandoned (incl. cancelled OAuth) — drop the spent token so a later
+    // attempt starts clean.
+    clearOAuthArtifacts()
+  }, [])
+
+  const { open, ready } = usePlaidLink({
+    token: linkToken,
+    onSuccess,
+    onExit,
+    // On return from an OAuth bank, Link reads the redirect (with oauth_state_id)
+    // back off the URL to resume the in-flight session.
+    ...(isOAuthReturn() ? { receivedRedirectUri: window.location.href } : {}),
+  })
+
+  // Resume an OAuth flow after the bank redirects back: restore the persisted
+  // token + mode and re-open Link to complete the handshake.
+  useEffect(() => {
+    if (!isOAuthReturn()) return
+    let savedToken: string | null = null
+    try {
+      savedToken = localStorage.getItem(OAUTH_TOKEN_KEY)
+      modeRef.current = localStorage.getItem(OAUTH_MODE_KEY) === 'update' ? 'update' : 'connect'
+      updateItemRef.current = localStorage.getItem(OAUTH_ITEM_KEY)
+    } catch {
+      /* storage unavailable */
+    }
+    if (savedToken) {
+      wantOpenRef.current = true
+      setLinkToken(savedToken)
+    }
+  }, [])
 
   // Open Link once the token is set and the SDK is ready.
   useEffect(() => {
@@ -126,8 +183,17 @@ export function PlaidWizard({
     wantOpenRef.current = true
     start(async () => {
       const res = await createLinkToken()
-      if (res && 'ok' in res) setLinkToken(res.linkToken)
-      else {
+      if (res && 'ok' in res) {
+        // Persist so an OAuth bounce to the bank can resume on return.
+        try {
+          localStorage.setItem(OAUTH_TOKEN_KEY, res.linkToken)
+          localStorage.setItem(OAUTH_MODE_KEY, 'connect')
+          localStorage.removeItem(OAUTH_ITEM_KEY)
+        } catch {
+          /* storage unavailable — non-OAuth banks still work */
+        }
+        setLinkToken(res.linkToken)
+      } else {
         wantOpenRef.current = false
         setError((res && 'error' in res ? res.error : null) ?? 'Could not start Plaid.')
       }
@@ -142,8 +208,16 @@ export function PlaidWizard({
     wantOpenRef.current = true
     start(async () => {
       const res = await createUpdateLinkToken(itemId)
-      if (res && 'ok' in res) setLinkToken(res.linkToken)
-      else {
+      if (res && 'ok' in res) {
+        try {
+          localStorage.setItem(OAUTH_TOKEN_KEY, res.linkToken)
+          localStorage.setItem(OAUTH_MODE_KEY, 'update')
+          localStorage.setItem(OAUTH_ITEM_KEY, itemId)
+        } catch {
+          /* storage unavailable */
+        }
+        setLinkToken(res.linkToken)
+      } else {
         wantOpenRef.current = false
         setError((res && 'error' in res ? res.error : null) ?? 'Could not start re-authentication.')
       }

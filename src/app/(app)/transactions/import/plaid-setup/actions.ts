@@ -72,6 +72,16 @@ async function webhookUrl(): Promise<string | undefined> {
   return host ? `${proto}://${host}/api/plaid/webhook` : undefined
 }
 
+// OAuth-only institutions (most major Canadian banks — RBC, TD, Scotia…) require
+// a redirect_uri that the user is sent back to after authenticating on the bank's
+// own site. The value MUST exactly match an "Allowed redirect URI" registered in
+// the Plaid dashboard (Developers → API). We gate on the env var: if it isn't set
+// we omit redirect_uri entirely, which keeps non-OAuth (credential) banks working
+// and avoids the INVALID_FIELD error Plaid throws for an unregistered URI.
+function redirectUri(): string | undefined {
+  return process.env.PLAID_REDIRECT_URI || undefined
+}
+
 // ─── Link token ───────────────────────────────────────────────────────────
 
 export async function createLinkToken(): Promise<LinkTokenState> {
@@ -98,6 +108,7 @@ export async function createLinkToken(): Promise<LinkTokenState> {
       country_codes: plaidCountryCodes(),
       language: 'en',
       webhook: await webhookUrl(),
+      redirect_uri: redirectUri(),
     })
     return { ok: true, linkToken: resp.data.link_token }
   } catch (e) {
@@ -138,6 +149,7 @@ export async function createUpdateLinkToken(itemRowId: string): Promise<LinkToke
       language: 'en',
       access_token: decryptToken(secret.access_token_encrypted as string),
       webhook: await webhookUrl(),
+      redirect_uri: redirectUri(),
     })
     return { ok: true, linkToken: resp.data.link_token }
   } catch (e) {
