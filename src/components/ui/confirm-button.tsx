@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useScrollLock } from '@/lib/use-scroll-lock'
 
 // `document` is only available on the client; this 'use client' file still
 // SSRs once on the server, so the portal render is gated through this guard.
@@ -114,13 +115,8 @@ export function ConfirmModal({
   const panelRef = useRef<HTMLDivElement>(null)
   const restoreFocusRef = useRef<Element | null>(null)
 
-  // Lock body scroll while open so the bottom sheet doesn't drag the page.
-  useEffect(() => {
-    if (!open) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = prev }
-  }, [open])
+  // Lock body scroll while open so the bottom sheet doesn't drag the page (iOS-safe).
+  useScrollLock(open)
 
   // Save the trigger element on open and restore focus to it on close so
   // keyboard users land back where they were.

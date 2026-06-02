@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { signOut } from '../(auth)/actions'
 import { Button } from '@/components/ui/button'
 import { PullToSync } from '@/components/pull-to-sync'
+import { useScrollLock } from '@/lib/use-scroll-lock'
 
 /**
  * Maple shell. Light + dark are driven by the `.dark` class on <html>
@@ -72,6 +73,9 @@ const FOCUSABLE =
  */
 function useOverlay(open: boolean, panelRef: React.RefObject<HTMLDivElement | null>, onClose: () => void) {
   const restoreFocusRef = useRef<Element | null>(null)
+
+  // Lock background scroll while the overlay is open (iOS-safe).
+  useScrollLock(open)
 
   // Save the trigger, move focus into the panel on open, restore on close.
   useEffect(() => {

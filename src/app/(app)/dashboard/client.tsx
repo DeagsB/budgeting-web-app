@@ -10,6 +10,7 @@ import { MapleLabel } from '@/components/ui/label'
 import { Amount } from '@/components/ui/amount'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { useScrollLock } from '@/lib/use-scroll-lock'
 import { StatTile } from '@/components/ui/stat-tile'
 import { Reveal } from '@/components/ui/reveal'
 import { PrivacyBlur } from '@/components/ui/privacy-blur'
@@ -909,6 +910,9 @@ function DashboardEditor({
   onSave: (next: WidgetId[]) => void
 }) {
   const [draft, setDraft] = useState<WidgetId[]>(current)
+
+  // Lock background scroll while the editor is mounted (iOS-safe).
+  useScrollLock(true)
 
   function move(id: WidgetId, dir: -1 | 1) {
     setDraft((prev) => {

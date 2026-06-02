@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { ReactNode } from 'react'
+import { useScrollLock } from '@/lib/use-scroll-lock'
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -40,15 +41,8 @@ export function Sheet({
     setMounted(true)
   }, [])
 
-  // Lock body scroll while open.
-  useEffect(() => {
-    if (!open) return
-    const previous = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = previous
-    }
-  }, [open])
+  // Lock body scroll while open (iOS-safe).
+  useScrollLock(open)
 
   // Save + restore focus across the open lifecycle, and focus the panel on open.
   useEffect(() => {
