@@ -61,7 +61,7 @@ export default async function TransactionsPage({
         .order('sort_order'),
       supabase
         .from('members')
-        .select('id, display_name, split_weight')
+        .select('id, display_name, split_weight, user_id')
         .eq('household_id', ctx.householdId)
         .order('sort_order'),
       supabase
@@ -140,6 +140,18 @@ export default async function TransactionsPage({
   const categoryName = new Map((categories ?? []).map((c) => [c.id, c.name]))
   const memberName = new Map((members ?? []).map((m) => [m.id, m.display_name]))
 
+  // Mirror of the `tx_editable` RLS helper: a row is writable when its account
+  // is visible to this login (the accounts query is itself RLS-filtered) or its
+  // payer is a member this login can act as (own member, or one with no login).
+  // Share-only rows (visible because we owe part of them) are read-only; hide
+  // the write affordances instead of letting the server action bounce.
+  const actableMembers = new Set(
+    (members ?? []).filter((m) => m.user_id === null || m.user_id === ctx.userId).map((m) => m.id),
+  )
+  const canEdit = (t: Txn) =>
+    accountName.has(t.account_id) || (t.member_id !== null && actableMembers.has(t.member_id))
+  const accountLabel = (t: Txn) => accountName.get(t.account_id) ?? 'Private account'
+
   // Group transactions by day for section-style rendering.
   const byDay = new Map<string, Txn[]>()
   for (const t of transactions) {
@@ -182,6 +194,7 @@ export default async function TransactionsPage({
   const uncategorizedIds = new Set<string>()
   const attentionIds = new Set<string>()
   for (const t of transactions) {
+    if (!canEdit(t)) continue // triage actions write; read-only rows never queue
     const splits = splitsByTx.get(t.id) ?? []
     const isUncat = splits.length <= 1 && (splits[0]?.category_id ?? null) === null
     if (isUncat) uncategorizedIds.add(t.id)
@@ -197,7 +210,7 @@ export default async function TransactionsPage({
         occurredLabel: formatDate(t.occurred_on),
         amount_cents: t.amount_cents,
         description: t.description,
-        accountName: accountName.get(t.account_id) ?? '—',
+        accountName: accountLabel(t),
         member_id: t.member_id,
         category_id: splits[0]?.category_id ?? null,
       }
@@ -351,7 +364,8 @@ export default async function TransactionsPage({
                             amount_cents: t.amount_cents,
                             description: t.description,
                             account_id: t.account_id,
-                            accountName: accountName.get(t.account_id) ?? '—',
+                            accountName: accountLabel(t),
+                            canEdit: canEdit(t),
                             primary_category_id: primaryCategoryId,
                             categorySummary,
                             isSplit: splits.length > 1,

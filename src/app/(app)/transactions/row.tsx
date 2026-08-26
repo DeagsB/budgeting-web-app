@@ -27,6 +27,12 @@ type TransactionVM = {
   splits: { category_id: string | null; amount_cents: number }[]
   member_id: string | null
   memberName: string | null
+  /**
+   * False for rows this login can only see because it holds a share of them
+   * (mirrors the `tx_editable` RLS helper). Write affordances are hidden;
+   * the server would reject them anyway.
+   */
+  canEdit?: boolean
 }
 
 export function TransactionRow({
@@ -51,9 +57,10 @@ export function TransactionRow({
   const [showSplits, setShowSplits] = useState(false)
   const [categorizing, setCategorizing] = useState(false)
   const [ruleOpen, setRuleOpen] = useState(false)
+  const canEdit = t.canEdit ?? true
 
   // ───────── EDIT MODE ─────────
-  if (editing) {
+  if (editing && canEdit) {
     const abs = Math.abs(t.amount_cents)
     const dir = t.amount_cents < 0 ? 'in' : 'out'
     return (
@@ -220,7 +227,13 @@ export function TransactionRow({
 
           {/* Row actions — always visible (no hover gating) with ≥44px tap
               targets so they work on touch without a hover state. */}
-          <div className="-ml-1 mt-1.5 flex flex-wrap items-center gap-1 text-[12px]">
+          {!canEdit && (
+            <p className="mt-1.5 text-[12px] text-ink-3">
+              Shared with you by {t.memberName ?? 'another member'} - view only.
+            </p>
+          )}
+          {canEdit && (
+            <div className="-ml-1 mt-1.5 flex flex-wrap items-center gap-1 text-[12px]">
             {isUncategorized && (
               <button
                 type="button"
@@ -267,7 +280,8 @@ export function TransactionRow({
             >
               Delete
             </ConfirmButton>
-          </div>
+            </div>
+          )}
         </div>
       </div>
 

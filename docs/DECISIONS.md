@@ -217,3 +217,125 @@ from a leaf-tinted call-to-action card on the Import page.
 Store all money as **integer minor units** (cents) in a `bigint` column. Currency implicit `CAD` in v1, column included for future-proofing but not exposed in UI.
 
 **Why:** `numeric` works but opens the door to rounding inconsistencies across JS (`number`), PostgreSQL, and display. Integer cents is the boring right answer for currency.
+
+---
+
+## 2026-08-26 - Plaid adopted as the primary ingest (supersedes "no third-party aggregator")
+
+The 2026-04-24 decision rejected Plaid on cost and ToS grounds and made Gmail-forwarded email alerts the primary path.
+Both premises changed.
+Plaid's Production tier is free up to a small number of linked Items, which covers one household.
+The email path depends on each bank's alert format and on a Gmail Apps Script the user must keep alive, and it silently stops when either drifts.
+The user retired the Gmail sync; Plaid is now the only ingest that matters, with OFX/CSV import as the manual fallback.
+
+**Model:** one `plaid_items` row per linked bank login, access token encrypted at rest with `PLAID_TOKEN_KEY`, accounts mapped to app `accounts` rows.
+Sync is `/transactions/sync` cursor-based.
+
+**Production hardening (migration 20260826000001, `src/lib/plaid-sync.ts`):**
+- Cursor is written with compare-and-swap; a run that lost the race discards its page instead of double-inserting.
+- A 5-minute sync lease on the item serialises webhook, daily cron and pull-to-refresh.
+- A pending transaction that posts migrates the existing row (keeps category, splits, shares) instead of delete+insert.
+  Rows the sync cannot update safely (amount changed after the user split or shared it) are flagged `needs_review`.
+- Webhooks fail closed: unsigned or unverifiable payloads are rejected; verified ones enqueue the sync via `after()` so Plaid gets its 200 immediately.
+- `GET /api/cron/daily` (Vercel Cron, `vercel.json`) sweeps every active item as a safety net for missed webhooks.
+- `PLAID_ENV` defaults to `production` on a production build so a forgotten variable cannot point prod at sandbox.
+  `PLAID_WEBHOOK_URL` and `PLAID_REDIRECT_URI` are required in production (`src/lib/env.ts`).
+
+**Considered + rejected:**
+- *Keep email ingest as a co-equal path*: two ingest paths means two dedup vocabularies and two failure modes to explain.
+  The route and tables stay (nothing depends on removing them) but the UI no longer promotes them.
+- *Delete+insert on pending->posted*: simpler, but throws away the user's categorisation on every card purchase.
+
+---
+
+## 2026-08-26 - Web Push adopted (supersedes "push skipped for v1")
+
+The 2026-04-24 PWA decision skipped push because email auto-import was the "tell me about transactions" channel.
+With email ingest retired, push is the only way a Plaid-synced transaction, a budget overspend or a closed settlement period reaches the user without opening the app.
+
+**Model (migration 20260601000001, `src/lib/push.ts`):** `push_subscriptions` holds one row per device that opted in; `households.notification_prefs` selects which events fire.
+Sends go through the service-role client, are best-effort (never fail the webhook that triggered them) and prune dead subscriptions.
+Recipient scoping mirrors row security: a transaction on a member-owned account reaches only that member's login; shared-account and household-level events reach everyone.
+
+**Env:** `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`.
+
+---
+
+## 2026-08-26 - Per-member privacy: private by default, one login per member
+
+A second login in the household must not see the first login's personal accounts.
+Until now nothing tied a login (`household_users`) to a budgeting subject (`members`), so "which member am I" was unanswerable and every login saw everything.
+
+**Model (migrations 20260826000002..000004):**
+- `members.user_id` links a login to at most one member, globally.
+  The column is locked behind SECURITY DEFINER RPCs (`claim_member`, invitation acceptance); clients cannot set it directly.
+- Visibility rule: a login sees household-level rows (household, members, categories, budgets, rules, settlements, connections) plus the money that is theirs.
+  An account is visible when it is `shared`, or owned by a member the caller can act as (their own member, or a member with no login yet).
+  A transaction is visible when its account is visible, or its payer is such a member, or the caller's member holds a share of it.
+  Shares, splits, snapshots and loan rows inherit from their parent.
+- Editing excludes share-only visibility: seeing a bill you owe part of does not let you rewrite it (`tx_editable`).
+- Cross-table checks live in SECURITY DEFINER helpers (`account_visible`, `tx_visible`, `can_access_member`) so no policy re-enters another table's policy; `transactions` and `transaction_shares` would otherwise recurse.
+- Service-role code (Plaid sync, cron, push) bypasses RLS and is unaffected.
+- Existing single-login households had their owner linked to their first member in the migration so nobody was locked out.
+
+**Invitations (`household_invitations`, `/invite/[token]`):** an owner or admin invites an email to take over a specific unlinked member row.
+The raw token travels only in the link; the table stores its SHA-256.
+Invitations expire after 7 days.
+Accepting adds the login to `household_users`, links the member, and absorbs the invitee's own empty household if they had created one.
+The app always shows a copyable link because Supabase's default SMTP only delivers to the project team.
+
+**Considered + rejected:**
+- *Share-everything with an "is private" flag per account*: opt-in privacy leaks by default; the first Plaid link would expose a partner's whole chequing history before they found the toggle.
+- *Separate households per person with cross-household sharing*: every household-level table (budgets, categories, settlements) would need a second scoping axis.
+- *Policies written inline with subselects*: recursion between `transactions` and `transaction_shares` policies, and no single place to audit the rule.
+
+---
+
+## 2026-08-26 - Split ratio on members, first-wins rules, largest-remainder rounding
+
+**Weights live on members (`members.split_weight`, migration 20260826000005).**
+The household default split is a per-member integer weight: 1/1 is 50/50, 3/2 is 60/40, 0 means "never owes".
+This works for any member count and needs no separate settings table; archived members are excluded at read time.
+
+**Rules (`transaction_rules`, `/rules`, `src/lib/transaction-rules*.ts`).**
+"Merchant contains X [amount range] [account] [direction] -> share by household ratio / custom weights / not at all, and/or set category."
+Rules run on every ingest path (Plaid, OFX/CSV, manual add) and can be applied retroactively from the rules page.
+
+Precedence is first-wins per action: rules are ordered by `(sort_order, id)`; the first matching rule that sets a share policy decides sharing, the first that sets a category decides category.
+A rule can therefore say "everything at this merchant is groceries" without touching how it is shared.
+
+Provenance: shares and split categories written by a rule carry the rule id.
+Re-running never overwrites a manual edit (a share row with `rule_id = null` is left alone), and deleting a rule can undo exactly what it wrote.
+
+**Rounding (`src/lib/share-split.ts`).**
+Amounts are integer cents, so a 3-way split of $10.00 cannot be exact.
+Largest-remainder apportionment: floor every exact share, then hand the leftover cents one at a time to the largest fractional parts, ties to earlier `sort_order`.
+The payer's own portion is the implicit remainder and never gets a share row.
+The same function serves "mark shared" and "auto-shared by rule" so the two always agree.
+
+**Considered + rejected:**
+- *Percentages instead of weights*: must sum to 100, breaks the moment a member is archived or added.
+- *Last-wins / most-specific-wins precedence*: "most specific" has no total order once amount ranges and accounts mix; an explicit sort the user controls is predictable.
+- *Round-half-up per share*: totals drift by a cent per transaction and the payer's leftover can go negative.
+
+---
+
+## 2026-08-26 - Settlement periods: stamp membership, carry forward, close on a schedule
+
+The shared-expense tally used to be one ever-growing balance.
+Real households settle up on a rhythm ("end of month, e-transfer the difference") and want a statement that does not change after they paid it.
+
+**Model (migration 20260826000006, `src/lib/settlement*.ts`):**
+- Exactly one `open` period per household (partial unique index).
+  `households.settlement_close_day` (1..28, default 28) is when the daily cron closes it; "Close period now" closes early.
+- Closing stamps every not-yet-stamped share dated on or before the close date with the period id, marks the period closed, and opens the next one from the following day.
+  Membership is by stamp, not by date: a share that arrives late for a closed period lands in the open one, and a share is never counted twice.
+- Balances stored on the period are an audit snapshot of what was notified, never an input to computation.
+- Carry-forward: the open period's statement adds whatever each closed period still nets to after its own settlements, so an unpaid month rolls into the next statement instead of disappearing.
+- "Mark settled" records one settlement per net line in one tap and flips the period to `settled`.
+- Every household starts with an open period; the migration backfilled one from the earliest shared transaction so history lands in the first statement.
+
+**Considered + rejected:**
+- *Membership by transaction date*: a Plaid transaction that posts three days late would silently rewrite a statement the partner already paid.
+- *Recompute closed-period balances live*: cheaper to store nothing, but the whole point is that a closed statement is immutable.
+- *Per-member close days*: a period is a household fact; two members with different close days would never agree on a statement.

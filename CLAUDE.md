@@ -25,15 +25,22 @@ A web app that replicates the structure and formulas of a personal-finance Excel
 - `npm run build` — production build
 - `npm run start` — serve production build
 - `npm run lint` — ESLint
+- `npm run typecheck` — `tsc --noEmit`
+- `npm test` — vitest (pure-logic units: settlement, rules, share-split, plaid sync plan). Run `lint && typecheck && test && build` before every commit; CI runs the same.
 
 ## Architecture
 
 - `src/app/` — App Router routes.
   - `page.tsx` — public landing; reflects auth state.
-  - `dashboard/page.tsx` — authed-user home (stub).
+  - `(app)/` — authed shell: `dashboard`, `transactions`, `budgets`, `accounts`, `shared`, `settlements`, `rules`, `setup`, reports.
+  - `(app)/rules/` — transaction rules UI (`transaction_rules`); engine in `src/lib/transaction-rules*.ts`, shared on every ingest path.
   - `(auth)/` — sign-in + sign-up pages (route group, doesn't affect URL).
   - `(auth)/actions.ts` — `signIn`, `signUp`, `signOut` Server Actions.
   - `auth/confirm/route.ts` — email-confirmation callback (Supabase `verifyOtp`).
+  - `invite/[token]/` — unauthenticated invitation landing; previews via `preview_household_invitation` RPC, accepts via `accept_household_invitation`. Token is only ever in the URL; the DB stores its hash.
+  - `api/cron/daily/route.ts` — the single Vercel Cron entry (`vercel.json`, Hobby allows daily only): Plaid safety-net sweep + settlement auto-close. Bearer `CRON_SECRET`; every job idempotent.
+  - `api/plaid/webhook/route.ts` — signed Plaid webhooks, sync enqueued via `after()`.
+- Per-member privacy: RLS is private-by-default (`account_visible` / `tx_visible` / `tx_editable` helpers, migration `20260826000004`). A login sees shared accounts, its own member's accounts, unlinked members' accounts, and transactions it holds a share of. Share-only rows are read-only; hide write affordances for them in the UI.
 - `src/lib/supabase/` — three client builders:
   - `client.ts` → `createBrowserClient` for Client Components.
   - `server.ts` → `createServerClient` for Server Components / Server Actions / Route Handlers.
@@ -49,6 +56,8 @@ Required env vars (copy `.env.example` → `.env.local`):
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
 Without these the app will crash on first request — sign up for a Supabase project, paste the URL and anon key.
+
+Everything else (`NEXT_PUBLIC_SITE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PLAID_*`, `CRON_SECRET`, VAPID keys) is documented inline in `.env.example`; `src/lib/env.ts` validates the production set at boot and fails closed.
 
 ## Auth model
 
@@ -105,7 +114,7 @@ When adding new screens, mobile-first means writing the mobile layout first and 
 Project `.mcp.json` wires five servers. When planning or implementing, prefer these over guessing:
 
 - **supabase** — Postgres / auth / migrations via MCP. Use `apply_migration` for DDL (not `execute_sql`). Use `execute_sql` for reads and one-off data fixes. `get_logs` for auth/postgres/edge debugging. `get_advisors` after DDL changes.
-- **playwright** — headed browser for end-to-end verification. After any UI change, navigate the dev server (`npm run dev` at :3000), reproduce the change, and screenshot it. Use the test user `playwright-test@budgeting-app.local` — see `memory/reference_playwright_test_users.md` for the direct-insert pattern that bypasses Supabase signup validation.
+- **playwright** — headed browser for end-to-end verification. After any UI change, navigate the dev server (`npm run dev` at :3000), reproduce the change, and screenshot it. Use the test user `playwright-test@budgeting-app.local` — see `memory/reference-playwright-test-user.md` for the direct-insert pattern that bypasses Supabase signup validation.
 - **context7** — fetch current library docs on demand. Use it before writing Next 16 / React 19 / Supabase SSR / Tailwind v4 code — training data is stale.
 - **figma** — design-to-code. Trigger when the user pastes a `figma.com/design/...` URL or explicitly says they want a screen redesigned from Figma. `get_design_context` is the primary tool. Output is *reference*; always adapt to the project's token system + existing components, don't paste raw hex.
 - **shadcn** — component library. Use when the user asks for a specific pattern (dialog, combobox, date picker, toast, sheet, etc.). `search_items_in_registries` to find the right primitive, `get_item_examples_from_registries` for usage, `get_add_command_for_items` to get the `npx shadcn add ...` command. Prefer shadcn primitives over hand-rolling once the user greenlights a UI polish pass.

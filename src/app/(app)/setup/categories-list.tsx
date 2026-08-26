@@ -228,8 +228,16 @@ function CategoryRow({
   }
 
   return (
-    <div className={'flex items-center justify-between gap-3 ' + (cat.archived ? 'opacity-60' : '')}>
-      <div className="flex min-w-0 flex-1 items-center gap-2">
+    // Mobile: name on its own line, actions stacked underneath (indented past
+    // the expand toggle); from `sm` up, one row with actions on the right.
+    // Same pattern as members-list so the two Setup lists read alike.
+    <div
+      className={
+        'flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3 ' +
+        (cat.archived ? 'opacity-60' : '')
+      }
+    >
+      <div className="flex min-w-0 items-center gap-2">
         {top && hasKids ? (
           <button
             type="button"
@@ -253,12 +261,17 @@ function CategoryRow({
           {cat.name}
         </span>
         {cat.rollover && (
-          <span className="rounded-full bg-leaf-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-leaf">
+          <span className="shrink-0 rounded-full bg-leaf-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-leaf">
             Rollover
           </span>
         )}
       </div>
-      <div className="flex shrink-0 items-center gap-1 text-[12px]">
+      <div
+        className={
+          '-ml-2 flex shrink-0 flex-wrap items-center gap-1 text-[12px] sm:ml-0 sm:justify-end sm:pl-0 ' +
+          (top ? 'pl-9' : 'pl-2')
+        }
+      >
         {!cat.archived && (
           <>
             <form action={toggleRollover}>
