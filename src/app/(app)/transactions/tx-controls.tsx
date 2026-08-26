@@ -206,7 +206,7 @@ export function TxControls({
 
       {/* Mobile: active filters as removable chips (44px hit area, smaller pill). */}
       {activeChips.length > 0 && (
-        <div className="hide-scroll -mx-1 -my-1 flex items-center gap-0.5 overflow-x-auto px-1 md:hidden">
+        <div className="hide-scroll -m-1 flex items-center gap-0.5 overflow-x-auto overflow-y-hidden p-1 md:hidden">
           {activeChips.map((c) => (
             <button
               key={c.key}
@@ -234,7 +234,7 @@ export function TxControls({
       )}
 
       {/* Desktop: chip filter rail (scrollbar hidden). */}
-      <div className="hide-scroll -mx-1 hidden items-center gap-2 overflow-x-auto px-1 pb-1 md:flex">
+      <div className="hide-scroll -mx-1 hidden items-center gap-2 overflow-x-auto overflow-y-hidden px-1 pb-1 md:flex">
         <Chip active={memberId === 'shared'} onClick={() => toggle('member', 'shared')} className="shrink-0">
           Shared
         </Chip>
@@ -302,7 +302,7 @@ export function TxControls({
         }}
       >
         <FilterSection label="Member">
-          <div className="hide-scroll -mx-1 overflow-x-auto px-1 py-0.5">
+          <div className="hide-scroll -mx-1 overflow-x-auto overflow-y-hidden px-1 py-0.5">
             <SegmentedControl
               ariaLabel="Filter by member"
               className="whitespace-nowrap"

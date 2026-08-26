@@ -326,6 +326,12 @@ body {
   ::-webkit-scrollbar { width: 0; height: 0; }
 }
 
+/*
+ * Scrollbar chrome suppression for horizontal rails. Always pair this with
+ * `overflow-y-hidden` on the same element: an `overflow-x: auto` box resolves
+ * its cross axis to `auto` too, so any vertical overflow makes the rail
+ * draggable up and down.
+ */
 .hide-scroll::-webkit-scrollbar {
   display: none;
 }

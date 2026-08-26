@@ -168,7 +168,7 @@ export default async function PnlPage({
                 <Swatch tone="maple" /> Expense
               </div>
             </header>
-            <div className="-mx-1 mt-5 overflow-x-auto hide-scroll">
+            <div className="-mx-1 mt-5 overflow-x-auto overflow-y-hidden hide-scroll">
               <div className="grid min-w-[440px] grid-cols-12 items-end gap-1.5">
                 {buckets.map((b) => {
                   const ih = (b.income / maxBar) * 100

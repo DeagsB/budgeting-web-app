@@ -460,7 +460,7 @@ export function DashboardClient({
             .
           </div>
         ) : (
-          <div className="hide-scroll -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 md:mx-0 md:grid md:grid-cols-3 md:gap-4 md:px-0 md:overflow-visible">
+          <div className="hide-scroll -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto overflow-y-hidden px-4 pb-1 md:mx-0 md:grid md:grid-cols-3 md:gap-4 md:px-0 md:overflow-visible">
             {accounts.slice(0, 6).map((a, i) => {
               const isFlipped = !!flipped[a.id]
               const isLiability = LIABILITY_TYPES.has(a.type)
@@ -528,14 +528,14 @@ export function DashboardClient({
                           <div className="text-[10px] font-bold uppercase tracking-[0.10em] opacity-70">
                             This month
                           </div>
-                          <div className="mt-1 truncate font-serif text-[16px] tracking-[-0.01em] opacity-95">
+                          <div className="mt-1 truncate font-serif text-[16px] leading-tight tracking-[-0.01em] opacity-95">
                             {a.name}
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-3 text-[11px]">
+                        <div className="grid grid-cols-2 gap-2 text-[11px]">
                           <div>
                             <div className="opacity-60">{isLoan ? 'Charged' : 'Out'}</div>
-                            <div className="font-serif text-[16px] tabular-nums">
+                            <div className="font-serif text-[16px] leading-tight tabular-nums">
                               <PrivacyBlur hidden={hidden}>
                                 {formatMoney(a.month_outflow_cents)}
                               </PrivacyBlur>
@@ -543,17 +543,17 @@ export function DashboardClient({
                           </div>
                           <div>
                             <div className="opacity-60">{isLoan ? 'Paid' : 'In'}</div>
-                            <div className="font-serif text-[16px] tabular-nums">
+                            <div className="font-serif text-[16px] leading-tight tabular-nums">
                               <PrivacyBlur hidden={hidden}>
                                 {formatMoney(a.month_inflow_cents)}
                               </PrivacyBlur>
                             </div>
                           </div>
-                          <div className="col-span-2 mt-1 flex items-end justify-between border-t border-white/15 pt-2">
+                          <div className="col-span-2 flex items-end justify-between border-t border-white/15 pt-2">
                             <div>
                               <div className="opacity-60">Net</div>
                               <div
-                                className="font-serif text-[18px] tabular-nums"
+                                className="font-serif text-[18px] leading-tight tabular-nums"
                                 style={{ color: monthNet >= 0 ? '#bdf0d2' : '#ffb6a3' }}
                               >
                                 <PrivacyBlur hidden={hidden}>
@@ -563,7 +563,7 @@ export function DashboardClient({
                             </div>
                             <div className="text-right opacity-70">
                               <div className="text-[10px] uppercase tracking-[0.08em]">Activity</div>
-                              <div className="font-serif text-[14px] tabular-nums">
+                              <div className="font-serif text-[14px] leading-tight tabular-nums">
                                 {a.month_tx_count} tx
                               </div>
                             </div>
