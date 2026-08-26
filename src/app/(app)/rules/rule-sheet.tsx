@@ -23,6 +23,7 @@ export type RuleSheetInitial = {
   share_mode: ShareMode
   share_weights?: Record<string, number> | null
   category_id: string | null
+  is_settlement: boolean
 }
 
 type AmountMode = 'any' | 'custom'
@@ -72,7 +73,8 @@ function RuleSheetInner({
   )
   const [direction, setDirection] = useState<RuleDirection>(initial.direction)
   const [shareMode, setShareMode] = useState<ShareMode>(initial.share_mode)
-  const [preview, setPreview] = useState<{ matched: number; shared: number; categorized: number } | null>(null)
+  const [isSettlement, setIsSettlement] = useState(initial.is_settlement)
+  const [preview, setPreview] = useState<{ matched: number; shared: number; categorized: number; settled: number; paymentPrompts: number } | null>(null)
   const [previewing, setPreviewing] = useState(false)
   const lastKey = useRef('')
 
@@ -102,7 +104,9 @@ function RuleSheetInner({
     setPreviewing(true)
     const res = await previewRule(fd)
     setPreviewing(false)
-    if (res && 'ok' in res) setPreview({ matched: res.matched, shared: res.shared, categorized: res.categorized })
+    if (res && 'ok' in res) {
+      setPreview({ matched: res.matched, shared: res.shared, categorized: res.categorized, settled: res.settled, paymentPrompts: res.paymentPrompts })
+    }
   }
 
   const done = state && 'ok' in state
@@ -206,6 +210,23 @@ function RuleSheetInner({
             </select>
           </Field>
 
+          <label className="flex min-h-[44px] items-center gap-3 rounded-md bg-cream-2 px-3 text-[13.5px] text-ink">
+            <input
+              name="is_settlement"
+              type="checkbox"
+              checked={isSettlement}
+              onChange={(e) => setIsSettlement(e.target.checked)}
+              className="h-5 w-5 accent-[var(--color-leaf)]"
+            />
+            <span>
+              Payment between members
+              <span className="block text-[11.5px] text-ink-3">
+                An e-Transfer or reimbursement, not an expense. Matches are recorded as settlements instead of shared.
+              </span>
+            </span>
+          </label>
+
+          {!isSettlement && (
           <div className="flex flex-col gap-1.5">
             <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3">Share</span>
             <SegmentedControl<ShareMode>
@@ -240,6 +261,7 @@ function RuleSheetInner({
               </div>
             )}
           </div>
+          )}
 
           <Field label="Category" hint="Leave blank to keep whatever category the transaction has.">
             <CategorySelect name="category_id" categories={categories} defaultValue={initial.category_id ?? ''} />
@@ -253,7 +275,9 @@ function RuleSheetInner({
                 {previewing
                   ? 'Counting…'
                   : preview
-                    ? `${preview.matched} match in the last 12 months · ${preview.shared} would be shared${preview.categorized ? ` · ${preview.categorized} categorised` : ''}`
+                    ? isSettlement
+                      ? `${preview.matched} match in the last 12 months · ${preview.settled} would be recorded as payments${preview.paymentPrompts ? ` · ${preview.paymentPrompts} to confirm` : ''}`
+                      : `${preview.matched} match in the last 12 months · ${preview.shared} would be shared${preview.categorized ? ` · ${preview.categorized} categorised` : ''}`
                     : 'Transactions you split by hand are never changed.'}
               </span>
             </span>
@@ -273,7 +297,7 @@ function RuleSheetInner({
               Cancel
             </Button>
           </div>
-          {members.length < 2 && shareMode !== 'none' && (
+          {members.length < 2 && shareMode !== 'none' && !isSettlement && (
             <p className="text-[12px] text-ink-3">Sharing needs at least two members. Add one on the Setup page.</p>
           )}
         </form>

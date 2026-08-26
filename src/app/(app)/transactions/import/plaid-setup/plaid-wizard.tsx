@@ -33,7 +33,6 @@ type AccountView = {
   plaid_account_id: string | null
   plaid_item_id: string | null
 }
-type MemberView = { id: string; name: string }
 type LogView = {
   id: string
   ran_at: string
@@ -96,7 +95,6 @@ type DraftMapping = {
   existingAccountId: string
   createType: AccountType
   createOwnership: 'member' | 'shared'
-  createMemberId: string
 }
 
 export function PlaidWizard({
@@ -104,14 +102,15 @@ export function PlaidWizard({
   maxItems,
   items,
   accounts,
-  members,
+  canOwn,
   log,
 }: {
   plaidConfigured: boolean
   maxItems: number
   items: ItemView[]
   accounts: AccountView[]
-  members: MemberView[]
+  /** False until this login has claimed a member; then only joint accounts can be created. */
+  canOwn: boolean
   log: LogView[]
 }) {
   const router = useRouter()
@@ -285,7 +284,6 @@ export function PlaidWizard({
                 kind: 'create' as const,
                 type: d.createType,
                 ownership: d.createOwnership,
-                memberId: d.createOwnership === 'member' ? d.createMemberId || null : null,
               }
             : { kind: 'skip' as const },
     }))
@@ -420,27 +418,12 @@ export function PlaidWizard({
                           patchDraft(i, { createOwnership: e.target.value as 'member' | 'shared' })
                         }
                       >
-                        {ACCOUNT_OWNERSHIP.map((o) => (
+                        {ACCOUNT_OWNERSHIP.filter((o) => canOwn || o.value === 'shared').map((o) => (
                           <option key={o.value} value={o.value}>
                             {o.label}
                           </option>
                         ))}
                       </select>
-                      {d.createOwnership === 'member' && (
-                        <select
-                          aria-label={`Member for ${d.choice.name}`}
-                          className="maple-select sm:col-span-2"
-                          value={d.createMemberId}
-                          onChange={(e) => patchDraft(i, { createMemberId: e.target.value })}
-                        >
-                          <option value="">- Choose a member -</option>
-                          {members.map((m) => (
-                            <option key={m.id} value={m.id}>
-                              {m.name}
-                            </option>
-                          ))}
-                        </select>
-                      )}
                     </div>
                   )}
                 </div>
@@ -613,6 +596,5 @@ function initDraft(choice: PlaidAccountChoice, accounts: AccountView[]): DraftMa
     existingAccountId: byMask?.id ?? '',
     createType: choice.suggestedType,
     createOwnership: 'shared',
-    createMemberId: '',
   }
 }

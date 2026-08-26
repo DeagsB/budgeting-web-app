@@ -44,7 +44,7 @@ export type AccountMapping = {
   suggestedType: AccountType
   target:
     | { kind: 'existing'; accountId: string }
-    | { kind: 'create'; type: AccountType; ownership: 'member' | 'shared'; memberId: string | null }
+    | { kind: 'create'; type: AccountType; ownership: 'member' | 'shared' }
     | { kind: 'skip' }
 }
 
@@ -258,12 +258,16 @@ export async function saveAccountMapping(
         .eq('household_id', ctx.householdId)
       if (error) return { error: humanizeDbError(error, { entity: 'account name' }) }
     } else {
+      // A "Mine" account belongs to the signed-in member; joint accounts have no owner.
+      if (m.target.ownership === 'member' && !ctx.memberId) {
+        return { error: 'Pick which member you are in Setup before creating an account of your own.' }
+      }
       const { error } = await supabase.from('accounts').insert({
         household_id: ctx.householdId,
         name: m.name.slice(0, 80) || 'Account',
         type: m.target.type,
         ownership: m.target.ownership,
-        member_id: m.target.ownership === 'member' ? m.target.memberId : null,
+        member_id: m.target.ownership === 'member' ? ctx.memberId : null,
         opening_balance_cents: 0,
         last_four,
         plaid_account_id: m.plaid_account_id,

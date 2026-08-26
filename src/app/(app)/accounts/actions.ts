@@ -23,13 +23,16 @@ type AccountInput = {
 
 type ParseResult = { error: string; ok?: never } | { ok: AccountInput; error?: never }
 
-function parseForm(fd: FormData): ParseResult {
+/**
+ * `myMemberId` is the signed-in member. A "Mine" account is always owned by
+ * the caller; there is no picker for other members' accounts.
+ */
+function parseForm(fd: FormData, myMemberId: string | null): ParseResult {
   const name = String(fd.get('name') ?? '').trim().slice(0, 80)
   const type = String(fd.get('type') ?? '') as AccountType
   const ownership = String(fd.get('ownership') ?? '') as AccountOwnership
-  const memberRaw = String(fd.get('member_id') ?? '').trim()
   const openingRaw = String(fd.get('opening_balance') ?? '0')
-  const member_id = memberRaw || null
+  const member_id = ownership === 'member' ? myMemberId : null
   const opening_balance_cents = parseMoneyToCents(openingRaw) ?? 0
   const lastFourRaw = String(fd.get('last_four') ?? '').trim()
   let last_four: string | null = null
@@ -44,18 +47,18 @@ function parseForm(fd: FormData): ParseResult {
   if (!TYPES.has(type)) return { error: 'Invalid account type.' }
   if (!OWNERSHIPS.has(ownership)) return { error: "Couldn't save that. Refresh and try again." }
   if (ownership === 'member' && !member_id) {
-    return { error: 'Pick a member for a member-owned account.' }
+    return { error: 'Pick which member you are in Setup before adding an account of your own.' }
   }
 
   return { ok: { name, type, ownership, member_id, opening_balance_cents, last_four } }
 }
 
 export async function createAccount(_prev: AccountState, fd: FormData): Promise<AccountState> {
-  const parsed = parseForm(fd)
-  if (!parsed.ok) return { error: parsed.error }
-
   const ctx = await getHouseholdContext()
   if (!ctx) return { error: 'Not authorized.' }
+
+  const parsed = parseForm(fd, ctx.memberId)
+  if (!parsed.ok) return { error: parsed.error }
 
   const supabase = await createClient()
   const { error } = await supabase.from('accounts').insert({
@@ -73,11 +76,11 @@ export async function updateAccount(fd: FormData): Promise<void> {
   const id = String(fd.get('id') ?? '')
   if (!id) return
 
-  const parsed = parseForm(fd)
-  if (!parsed.ok) return
-
   const ctx = await getHouseholdContext()
   if (!ctx) return
+
+  const parsed = parseForm(fd, ctx.memberId)
+  if (!parsed.ok) return
 
   const supabase = await createClient()
   await supabase

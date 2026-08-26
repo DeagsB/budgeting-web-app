@@ -3,15 +3,22 @@ import type { PeriodLite, SettlementWithPeriod, ShareWithPeriod, TxnLite } from 
 
 /**
  * Everything the period statements need, in three round trips. Works under a
- * member session (RLS-scoped: pairs not involving the caller may be partial
- * in households of three or more) or the service role (complete).
+ * member session or the service role. Under a member session the shares are
+ * RLS-scoped to transactions the caller can see (own, joint, or shared with
+ * them), so in households of three or more, pairs not involving the caller
+ * may be partial. The service role sees everything.
  */
 export type SettlementData = {
   periods: PeriodLite[]
   openPeriod: PeriodLite | null
   transactions: TxnLite[]
   shares: ShareWithPeriod[]
-  settlements: (SettlementWithPeriod & { id: string; note: string | null })[]
+  settlements: (SettlementWithPeriod & {
+    id: string
+    note: string | null
+    paid_transaction_id: string | null
+    received_transaction_id: string | null
+  })[]
   closeDay: number
   lastClosedAtISO: string | null
 }
@@ -29,7 +36,7 @@ export async function loadSettlementData(db: SupabaseClient, householdId: string
       .eq('household_id', householdId),
     db
       .from('settlements')
-      .select('id, from_member_id, to_member_id, amount_cents, settled_on, note, period_id')
+      .select('id, from_member_id, to_member_id, amount_cents, settled_on, note, period_id, paid_transaction_id, received_transaction_id')
       .eq('household_id', householdId)
       .order('settled_on', { ascending: false }),
     db.from('households').select('settlement_close_day').eq('id', householdId).maybeSingle(),
@@ -75,6 +82,8 @@ export async function loadSettlementData(db: SupabaseClient, householdId: string
       settled_on: s.settled_on as string,
       note: (s.note as string | null) ?? null,
       period_id: (s.period_id as string | null) ?? null,
+      paid_transaction_id: (s.paid_transaction_id as string | null) ?? null,
+      received_transaction_id: (s.received_transaction_id as string | null) ?? null,
     })),
     closeDay: Number(household?.settlement_close_day ?? 28),
     lastClosedAtISO: lastClosedAtISO ? lastClosedAtISO.slice(0, 10) : null,

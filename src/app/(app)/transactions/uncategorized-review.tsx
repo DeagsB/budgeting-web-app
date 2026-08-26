@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button'
 import { formatMoney } from '@/lib/format'
 
 type Category = { id: string; parent_id: string | null; name: string }
-type Member = { id: string; name: string }
 
 export type TriageTxn = {
   id: string
@@ -17,7 +16,6 @@ export type TriageTxn = {
   amount_cents: number
   description: string | null
   accountName: string
-  member_id: string | null
   // Current primary category (null = uncategorized). Pre-fills the card so a
   // row that only needs a *title* keeps its existing category on save.
   category_id: string | null
@@ -26,18 +24,16 @@ export type TriageTxn = {
 /**
  * "N transactions need a category" banner + a focused triage queue that steps
  * through every uncategorized transaction in the current month. Each card lets
- * the user set the category, owning member, and description in one save, and
- * optionally fan the category out to other transactions from the same merchant.
+ * the user set the category and description in one save, and optionally fan
+ * the category out to other transactions from the same merchant.
  */
 export function UncategorizedReview({
   transactions,
   categories,
-  members,
   topCategoryIds,
 }: {
   transactions: TriageTxn[]
   categories: Category[]
-  members: Member[]
   topCategoryIds: string[]
 }) {
   const [open, setOpen] = useState(false)
@@ -111,7 +107,6 @@ export function UncategorizedReview({
         <TriageQueue
           transactions={transactions}
           categories={categories}
-          members={members}
           topCategoryIds={topCategoryIds}
           onClose={() => setOpen(false)}
         />
@@ -129,13 +124,11 @@ function normalize(desc: string | null): string {
 function TriageQueue({
   transactions: incoming,
   categories,
-  members,
   topCategoryIds,
   onClose,
 }: {
   transactions: TriageTxn[]
   categories: Category[]
-  members: Member[]
   topCategoryIds: string[]
   onClose: () => void
 }) {
@@ -252,7 +245,6 @@ function TriageQueue({
         key={current.id}
         txn={current}
         categories={mergedCategories}
-        members={members}
         topCategoryIds={topCategoryIds}
         similar={similar}
         onSaved={advance}
@@ -268,7 +260,6 @@ function TriageQueue({
 function TriageCard({
   txn,
   categories,
-  members,
   topCategoryIds,
   similar,
   onSaved,
@@ -277,7 +268,6 @@ function TriageCard({
 }: {
   txn: TriageTxn
   categories: Category[]
-  members: Member[]
   topCategoryIds: string[]
   similar: TriageTxn[]
   onSaved: (ids: string[]) => void
@@ -286,7 +276,6 @@ function TriageCard({
 }) {
   const [pending, startTransition] = useTransition()
   const [categoryId, setCategoryId] = useState(txn.category_id ?? '')
-  const [memberId, setMemberId] = useState(txn.member_id ?? '')
   const [description, setDescription] = useState(txn.description ?? '')
   // Only fan a category out to same-merchant siblings by default when THIS row
   // is itself uncategorized - otherwise the user is likely just fixing a title.
@@ -304,7 +293,6 @@ function TriageCard({
     const fd = new FormData()
     fd.set('id', txn.id)
     fd.set('category_id', categoryId)
-    fd.set('member_id', memberId)
     fd.set('description', description)
     if (applySimilar && similar.length > 0) {
       fd.set('similar_ids', similar.map((s) => s.id).join(','))
@@ -378,23 +366,6 @@ function TriageCard({
         />
       </div>
 
-      {/* Member */}
-      {members.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-ink-3">Owner</span>
-          <div className="-mx-1 flex flex-wrap gap-1.5 px-1">
-            <MemberChip active={memberId === ''} onClick={() => setMemberId('')}>
-              Shared
-            </MemberChip>
-            {members.map((m) => (
-              <MemberChip key={m.id} active={memberId === m.id} onClick={() => setMemberId(m.id)}>
-                {m.name}
-              </MemberChip>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Title (the transaction description) */}
       <label className="flex flex-col gap-1">
         <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-ink-3">
@@ -455,28 +426,3 @@ function TriageCard({
   )
 }
 
-function MemberChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={
-        'inline-flex min-h-[44px] items-center rounded-full border px-3 text-[12.5px] font-semibold transition-colors ' +
-        (active
-          ? 'border-ink bg-ink text-paper'
-          : 'border-hair bg-cream text-ink hover:border-ink-3')
-      }
-    >
-      {children}
-    </button>
-  )
-}

@@ -3,8 +3,9 @@
 // service-role client (bypasses RLS) and prune dead subscriptions.
 //
 // Recipient scoping mirrors row security: a transaction on a member-owned
-// account only reaches that member's login; shared-account transactions and
-// household-level events (budgets, alerts, settlements) reach everyone.
+// account only reaches that member's login (nobody, if the member has no
+// login yet); joint-account transactions and household-level events
+// (budgets, alerts, settlements) reach everyone.
 
 import webpush from 'web-push'
 import { createServiceClient } from '@/lib/supabase/service'
@@ -104,7 +105,7 @@ async function getPrefs(householdId: string): Promise<NotificationPrefs> {
  * Notify about a freshly-inserted transaction. Fires when `new_transaction` is
  * on, or when `large_transaction` is on and the amount clears the threshold.
  * amountCents is signed (positive = outflow). Reaches only the owner of a
- * member-owned account; shared accounts reach the whole household.
+ * member-owned account; joint accounts reach the whole household.
  */
 export async function notifyTransactionInserted(
   householdId: string,
@@ -134,10 +135,11 @@ export async function notifyTransactionInserted(
   }
 
   if (tx.ownerMemberId) {
+    // A member-owned account is visible only to that member's login. A member
+    // with no login yet can see nothing, so nobody is told.
     const userId = await userIdForMember(tx.ownerMemberId)
-    // A member with no login has nobody to tell privately; fall back to the
-    // household, which is exactly who can see that account under RLS.
-    if (userId) return sendPushToUsers([userId], payload)
+    if (userId) await sendPushToUsers([userId], payload)
+    return
   }
   await sendPushToHousehold(householdId, payload)
 }

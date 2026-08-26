@@ -11,7 +11,7 @@ export default async function AutoImportSetupPage() {
   if (!ctx) return null
 
   const supabase = await createClient()
-  const [{ data: household }, { data: accounts }, { data: members }, { data: categories }, { data: rules }, { data: log }] =
+  const [{ data: household }, { data: accounts }, { data: categories }, { data: rules }, { data: log }] =
     await Promise.all([
       supabase
         .from('households')
@@ -24,12 +24,6 @@ export default async function AutoImportSetupPage() {
         .eq('household_id', ctx.householdId)
         .is('archived_at', null)
         .order('name'),
-      supabase
-        .from('members')
-        .select('id, display_name')
-        .eq('household_id', ctx.householdId)
-        .is('archived_at', null)
-        .order('sort_order'),
       supabase
         .from('categories')
         .select('id, name, code, parent_id')
@@ -120,7 +114,7 @@ export default async function AutoImportSetupPage() {
         hasSecret={hasSecret}
         gmailSyncUrl={household?.gmail_sync_url ?? null}
         accounts={(accounts ?? []).map((a) => ({ id: a.id, name: a.name, last_four: a.last_four ?? null }))}
-        members={(members ?? []).map((m) => ({ id: m.id, name: m.display_name }))}
+        myMemberId={ctx.memberId}
         categories={(categories ?? []).map((c) => ({
           id: c.id,
           name: c.name,

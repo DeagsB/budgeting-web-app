@@ -6,13 +6,13 @@ import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { MapleLabel } from '@/components/ui/label'
 import { saveBalances } from './actions'
+import { ownershipLabel } from '@/lib/tx-scope'
 
 export type AccountRow = {
   id: string
   name: string
   type: string
   typeLabel: string
-  memberName: string | null
   ownership: string
   opening_balance_cents: number
   current_balance_cents: number | null
@@ -116,7 +116,7 @@ function Section({
                   <div className="text-[11.5px] text-ink-3">
                     {a.typeLabel}
                     {' · '}
-                    {a.ownership === 'shared' ? 'Shared' : a.memberName ?? 'Member removed'}
+                    {ownershipLabel(a.ownership)}
                   </div>
                 </td>
                 <td className="px-3 py-2.5 text-right align-middle">

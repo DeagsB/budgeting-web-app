@@ -23,6 +23,7 @@ const rule = (over: Partial<TransactionRule> & { id: string }): TransactionRule 
   share_mode: 'household',
   share_weights: null,
   category_id: null,
+  is_settlement: false,
   ...over,
 })
 
@@ -81,6 +82,15 @@ describe('precedence', () => {
     const fx = resolveRuleEffects([rule({ id: 'r', match_text: 'spotify' })], tx())
     expect(fx.shareRule).toBeNull()
     expect(fx.categoryRule).toBeNull()
+    expect(fx.settlementRule).toBeNull()
+  })
+  it('a settlement rule wins over a later share rule and blocks sharing', () => {
+    const pay = rule({ id: 'pay', sort_order: 0, share_mode: 'none', is_settlement: true })
+    const share = rule({ id: 'share', sort_order: 1, share_mode: 'household', category_id: 'c1' })
+    const fx = resolveRuleEffects([share, pay], tx())
+    expect(fx.settlementRule?.id).toBe('pay')
+    expect(fx.shareRule).toBeNull()
+    expect(fx.categoryRule?.id).toBe('share')
   })
 })
 

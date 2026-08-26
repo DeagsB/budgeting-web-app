@@ -51,6 +51,7 @@ export function RulesList({
       direction: 'outflow',
       share_mode: 'household',
       category_id: null,
+      is_settlement: false,
     })
     setOpen(true)
   }
@@ -67,6 +68,7 @@ export function RulesList({
       share_mode: r.share_mode,
       share_weights: r.share_weights,
       category_id: r.category_id,
+      is_settlement: r.is_settlement,
     })
     setOpen(true)
   }
@@ -131,8 +133,13 @@ function RuleRow({ row, first, last, onEdit }: { row: RuleRowVM; first: boolean;
         }
       })
 
-  const shareLabel =
-    r.share_mode === 'household' ? 'Household split' : r.share_mode === 'custom' ? `Custom ${row.customLabel ?? ''}` : 'Not shared'
+  const shareLabel = r.is_settlement
+    ? 'Payment between members'
+    : r.share_mode === 'household'
+      ? 'Household split'
+      : r.share_mode === 'custom'
+        ? `Custom ${row.customLabel ?? ''}`
+        : 'Not shared'
 
   return (
     <li>

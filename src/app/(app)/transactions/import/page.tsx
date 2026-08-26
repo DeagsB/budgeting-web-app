@@ -9,7 +9,7 @@ export default async function ImportPage() {
   if (!ctx) return null
 
   const supabase = await createClient()
-  const [{ data: accounts }, { data: categories }, { data: members }] = await Promise.all([
+  const [{ data: accounts }, { data: categories }] = await Promise.all([
     supabase
       .from('accounts')
       .select('id, name')
@@ -21,11 +21,6 @@ export default async function ImportPage() {
       .select('id, parent_id, name, code')
       .eq('household_id', ctx.householdId)
       .is('archived_at', null)
-      .order('sort_order'),
-    supabase
-      .from('members')
-      .select('id, display_name')
-      .eq('household_id', ctx.householdId)
       .order('sort_order'),
   ])
 
@@ -114,7 +109,6 @@ export default async function ImportPage() {
             name: c.name,
             code: c.code,
           }))}
-          members={(members ?? []).map((m) => ({ id: m.id, name: m.display_name }))}
         />
       )}
     </div>

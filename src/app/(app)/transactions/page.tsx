@@ -13,6 +13,7 @@ import { SyncNowButton } from './sync-button'
 import { TxControls } from './tx-controls'
 import { UncategorizedReview, type TriageTxn } from './uncategorized-review'
 import { looksCryptic } from '@/lib/title'
+import { classifyTx, isTxEditable, parseScope } from '@/lib/tx-scope'
 
 type Txn = {
   id: string
@@ -33,12 +34,13 @@ type Split = {
 export default async function TransactionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; account?: string; category?: string; member?: string; q?: string }>
+  searchParams: Promise<{ month?: string; account?: string; category?: string; scope?: string; q?: string }>
 }) {
   const params = await searchParams
   const month = params.month && /^\d{4}-\d{2}-01$/.test(params.month) ? params.month : monthStartISO()
   const nextMonth = addMonths(month, 1)
   const search = (params.q ?? '').trim()
+  const scope = parseScope(params.scope)
 
   const ctx = await getHouseholdContext()
   if (!ctx) return null
@@ -61,7 +63,7 @@ export default async function TransactionsPage({
         .order('sort_order'),
       supabase
         .from('members')
-        .select('id, display_name, split_weight, user_id')
+        .select('id, display_name, split_weight')
         .eq('household_id', ctx.householdId)
         .order('sort_order'),
       supabase
@@ -91,8 +93,6 @@ export default async function TransactionsPage({
     .order('created_at', { ascending: false })
 
   if (params.account) q = q.eq('account_id', params.account)
-  if (params.member === 'shared') q = q.is('member_id', null)
-  else if (params.member) q = q.eq('member_id', params.member)
   if (search) q = q.ilike('description', `%${search}%`)
 
   const { data: rows } = await q
@@ -100,7 +100,7 @@ export default async function TransactionsPage({
 
   const txIds = transactions.map((t) => t.id)
   let splitsList: Split[] = []
-  let sharedTxIds = new Set<string>()
+  const shareCountByTx = new Map<string, number>()
   const ruleSharedTxIds = new Set<string>()
   if (txIds.length > 0) {
     const [{ data: sp }, { data: sh }] = await Promise.all([
@@ -112,9 +112,25 @@ export default async function TransactionsPage({
       supabase.from('transaction_shares').select('transaction_id, rule_id').in('transaction_id', txIds),
     ])
     splitsList = (sp ?? []) as Split[]
-    sharedTxIds = new Set((sh ?? []).map((r) => r.transaction_id))
-    for (const r of sh ?? []) if (r.rule_id) ruleSharedTxIds.add(r.transaction_id)
+    for (const r of sh ?? []) {
+      shareCountByTx.set(r.transaction_id, (shareCountByTx.get(r.transaction_id) ?? 0) + 1)
+      if (r.rule_id) ruleSharedTxIds.add(r.transaction_id)
+    }
   }
+
+  const accountName = new Map((accounts ?? []).map((a) => [a.id, a.name]))
+  const categoryName = new Map((categories ?? []).map((c) => [c.id, c.name]))
+  const memberName = new Map((members ?? []).map((m) => [m.id, m.display_name]))
+
+  // Mirror of the `tx_editable` RLS helper: a row is writable when its account
+  // is visible to this login (the accounts query is itself RLS-filtered: own
+  // and joint accounts) or the signed-in member paid it. Share-only rows
+  // (visible because we owe part of them) are read-only; hide the write
+  // affordances instead of letting the server action bounce.
+  const canEdit = (t: Txn) =>
+    isTxEditable({ accountVisible: accountName.has(t.account_id), payerId: t.member_id, myMemberId: ctx.memberId })
+  const accountLabel = (t: Txn) => accountName.get(t.account_id) ?? 'Private account'
+  const scopeOf = (t: Txn) => classifyTx({ editable: canEdit(t), shareCount: shareCountByTx.get(t.id) ?? 0 })
 
   if (params.category) {
     const matched = new Set(
@@ -122,6 +138,7 @@ export default async function TransactionsPage({
     )
     transactions = transactions.filter((t) => matched.has(t.id))
   }
+  if (scope) transactions = transactions.filter((t) => scopeOf(t) === scope)
 
   const splitsByTx = new Map<string, Split[]>()
   for (const s of splitsList) {
@@ -129,28 +146,12 @@ export default async function TransactionsPage({
     splitsByTx.get(s.transaction_id)!.push(s)
   }
 
-  // Totals computed from the *filtered* set (account + member + search applied
-  // in the query, category applied above) so the summary always matches the
+  // Totals computed from the *filtered* set (account + search applied in the
+  // query, category + scope applied above) so the summary always matches the
   // visible list. Sign convention: positive cents = outflow, negative = inflow.
   const outflow = transactions.filter((t) => t.amount_cents > 0).reduce((s, t) => s + t.amount_cents, 0)
   const inflow = transactions.filter((t) => t.amount_cents < 0).reduce((s, t) => s - t.amount_cents, 0)
   const net = outflow - inflow
-
-  const accountName = new Map((accounts ?? []).map((a) => [a.id, a.name]))
-  const categoryName = new Map((categories ?? []).map((c) => [c.id, c.name]))
-  const memberName = new Map((members ?? []).map((m) => [m.id, m.display_name]))
-
-  // Mirror of the `tx_editable` RLS helper: a row is writable when its account
-  // is visible to this login (the accounts query is itself RLS-filtered) or its
-  // payer is a member this login can act as (own member, or one with no login).
-  // Share-only rows (visible because we owe part of them) are read-only; hide
-  // the write affordances instead of letting the server action bounce.
-  const actableMembers = new Set(
-    (members ?? []).filter((m) => m.user_id === null || m.user_id === ctx.userId).map((m) => m.id),
-  )
-  const canEdit = (t: Txn) =>
-    accountName.has(t.account_id) || (t.member_id !== null && actableMembers.has(t.member_id))
-  const accountLabel = (t: Txn) => accountName.get(t.account_id) ?? 'Private account'
 
   // Group transactions by day for section-style rendering.
   const byDay = new Map<string, Txn[]>()
@@ -160,12 +161,11 @@ export default async function TransactionsPage({
     byDay.get(key)!.push(t)
   }
 
-  const hasFilter = !!(params.account || params.category || params.member || search)
+  const hasFilter = !!(params.account || params.category || scope || search)
   const clearQuery: Record<string, string> = { month }
 
   const accountOptions = (accounts ?? []).map((a) => ({ id: a.id, name: a.name }))
   const categoryOptions = (categories ?? []).map((c) => ({ id: c.id, parent_id: c.parent_id, name: c.name }))
-  const memberOptions = (members ?? []).map((m) => ({ id: m.id, name: m.display_name }))
   const memberWeights = (members ?? []).map((m) => ({ id: m.id, name: m.display_name, weight: Number(m.split_weight ?? 1) }))
 
   // Most-used categories (ranked by recent usage, padded with the first few
@@ -211,7 +211,6 @@ export default async function TransactionsPage({
         amount_cents: t.amount_cents,
         description: t.description,
         accountName: accountLabel(t),
-        member_id: t.member_id,
         category_id: splits[0]?.category_id ?? null,
       }
     })
@@ -221,7 +220,7 @@ export default async function TransactionsPage({
     qs.set('month', iso)
     if (params.account) qs.set('account', params.account)
     if (params.category) qs.set('category', params.category)
-    if (params.member) qs.set('member', params.member)
+    if (scope) qs.set('scope', scope)
     if (search) qs.set('q', search)
     return `/transactions?${qs.toString()}`
   }
@@ -266,7 +265,6 @@ export default async function TransactionsPage({
       <UncategorizedReview
         transactions={attentionVMs}
         categories={categoryOptions}
-        members={memberOptions}
         topCategoryIds={topCategoryIds}
       />
 
@@ -315,11 +313,9 @@ export default async function TransactionsPage({
           search={search}
           accountId={params.account}
           categoryId={params.category}
-          memberId={params.member}
+          scope={scope ?? undefined}
           accounts={accountOptions}
           categories={categoryOptions}
-          members={memberOptions}
-          defaultMemberId={ctx.memberId}
           overflowActions={
             <>
               <div className="flex min-h-[44px] items-center">
@@ -396,15 +392,15 @@ export default async function TransactionsPage({
                             primary_category_id: primaryCategoryId,
                             categorySummary,
                             isSplit: splits.length > 1,
-                            isShared: sharedTxIds.has(t.id),
+                            isShared: (shareCountByTx.get(t.id) ?? 0) > 0,
                             isRuleShared: ruleSharedTxIds.has(t.id),
                             splits: splits.map((s) => ({ category_id: s.category_id, amount_cents: s.amount_cents })),
                             member_id: t.member_id,
-                            memberName: t.member_id ? (memberName.get(t.member_id) ?? null) : null,
+                            payerName: t.member_id ? (memberName.get(t.member_id) ?? null) : null,
+                            isMine: t.member_id !== null && t.member_id === ctx.memberId,
                           }}
                           accounts={accountOptions}
                           categories={categoryOptions}
-                          members={memberOptions}
                           memberWeights={memberWeights}
                           isUncategorized={uncategorizedIds.has(t.id)}
                           topCategoryIds={topCategoryIds}

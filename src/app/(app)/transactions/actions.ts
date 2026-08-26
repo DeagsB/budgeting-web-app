@@ -13,7 +13,6 @@ function clean(fd: FormData) {
   const occurred_on = String(fd.get('occurred_on') ?? '').trim()
   const account_id = String(fd.get('account_id') ?? '').trim()
   const category_id = String(fd.get('category_id') ?? '').trim() || null
-  const member_id = String(fd.get('member_id') ?? '').trim() || null
   const description = String(fd.get('description') ?? '').trim().slice(0, 500) || null
   const amountRaw = String(fd.get('amount') ?? '')
   const direction = String(fd.get('direction') ?? 'out')
@@ -21,7 +20,7 @@ function clean(fd: FormData) {
   const amount_cents =
     amountAbs === null ? null : direction === 'in' ? -Math.abs(amountAbs) : Math.abs(amountAbs)
 
-  return { occurred_on, account_id, category_id, member_id, description, amount_cents }
+  return { occurred_on, account_id, category_id, description, amount_cents }
 }
 
 function revalidate() {
@@ -31,7 +30,6 @@ function revalidate() {
   revalidatePath('/pnl')
   revalidatePath('/contributions')
   revalidatePath('/shared')
-  revalidatePath('/settlements')
 }
 
 export async function createTransaction(
@@ -45,6 +43,8 @@ export async function createTransaction(
 
   const ctx = await getHouseholdContext()
   if (!ctx) return { error: 'Not authorized.' }
+  // The payer is always the signed-in member; there is no picker.
+  if (!ctx.memberId) return { error: 'Pick which member you are in Setup first.' }
 
   const supabase = await createClient()
   const { data: inserted, error } = await supabase
@@ -53,7 +53,7 @@ export async function createTransaction(
       household_id: ctx.householdId,
       occurred_on: v.occurred_on,
       account_id: v.account_id,
-      member_id: v.member_id,
+      member_id: ctx.memberId,
       description: v.description,
       amount_cents: v.amount_cents,
     })
@@ -93,7 +93,6 @@ export async function updateTransaction(fd: FormData): Promise<void> {
     .update({
       occurred_on: v.occurred_on,
       account_id: v.account_id,
-      member_id: v.member_id,
       description: v.description,
       amount_cents: v.amount_cents,
     })
@@ -254,20 +253,20 @@ export async function setTransactionCategory(fd: FormData): Promise<void> {
 
 /**
  * Apply the common "triage" attributes to an uncategorized transaction in one
- * shot: category, owning member, and description. Optionally fans the chosen
- * category out to `similar_ids` (other uncategorized transactions sharing the
- * same merchant) so a recurring payee can be cleared in a single tap.
+ * shot: category and description. Optionally fans the chosen category out to
+ * `similar_ids` (other uncategorized transactions sharing the same merchant)
+ * so a recurring payee can be cleared in a single tap.
  *
  * `description` is only written when the field is present in the payload, so a
- * caller that omits it leaves the existing description untouched. Throws on a
- * DB failure so the client can surface it.
+ * caller that omits it leaves the existing description untouched. The payer
+ * (`member_id`) is never touched here. Throws on a DB failure so the client
+ * can surface it.
  */
 export async function applyTransactionAttributes(fd: FormData): Promise<void> {
   const id = String(fd.get('id') ?? '')
   if (!id) return
 
   const category_id = String(fd.get('category_id') ?? '').trim() || null
-  const member_id = String(fd.get('member_id') ?? '').trim() || null
   const hasDescription = fd.has('description')
   const description = hasDescription
     ? String(fd.get('description') ?? '').trim().slice(0, 500) || null
@@ -282,26 +281,14 @@ export async function applyTransactionAttributes(fd: FormData): Promise<void> {
 
   const supabase = await createClient()
 
-  // Only assign a member that actually belongs to this household.
-  let safeMemberId: string | null = null
-  if (member_id) {
-    const { data } = await supabase
-      .from('members')
-      .select('id')
-      .eq('id', member_id)
+  if (description !== undefined) {
+    const { error: updateError } = await supabase
+      .from('transactions')
+      .update({ description })
+      .eq('id', id)
       .eq('household_id', ctx.householdId)
-      .maybeSingle()
-    safeMemberId = data?.id ?? null
+    if (updateError) throw new Error(humanizeDbError(updateError))
   }
-
-  const patch: { member_id: string | null; description?: string | null } = { member_id: safeMemberId }
-  if (description !== undefined) patch.description = description
-  const { error: updateError } = await supabase
-    .from('transactions')
-    .update(patch)
-    .eq('id', id)
-    .eq('household_id', ctx.householdId)
-  if (updateError) throw new Error(humanizeDbError(updateError))
 
   // Category (+ same category for any "apply to similar" siblings).
   await setCategoryForTransactions(supabase, ctx.householdId, {
@@ -311,9 +298,6 @@ export async function applyTransactionAttributes(fd: FormData): Promise<void> {
   })
 
   revalidate()
-  // member_id (the payer) drives the shared-expense settlement views.
-  revalidatePath('/shared')
-  revalidatePath('/settlements')
 }
 
 export async function deleteTransaction(fd: FormData): Promise<void> {

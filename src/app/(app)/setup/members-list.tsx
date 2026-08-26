@@ -45,7 +45,7 @@ export function MembersList({
       {activeCount === 0 && archivedCount === 0 ? (
         <EmptyState
           title="Add the first member"
-          body="A member is anyone whose money flows through this household. Each one can have their own login; only what they mark shared is visible to the others."
+          body="A member is anyone whose money flows through this household. Each one signs in with their own login and sees their own accounts, joint accounts, and transactions shared with them."
         />
       ) : (
         <>
@@ -90,7 +90,7 @@ function ClaimPicker({ members }: { members: MemberView[] }) {
     <div className="rounded-[16px] border border-honey bg-paper-2 p-4">
       <div className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-down">Which member are you?</div>
       <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
-        Your login is not attached to a member yet, so you only see shared accounts. Pick yourself to see your own money.
+        Your login is not attached to a member yet, so you only see joint accounts. Pick yourself to see your own money.
       </p>
       <form
         action={(fd) =>

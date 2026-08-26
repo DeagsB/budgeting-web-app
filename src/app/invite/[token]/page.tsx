@@ -55,7 +55,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
               <p className="mt-3 text-[14.5px] leading-relaxed text-[var(--color-ink-2)]">
                 You have been invited to track your money as{' '}
                 <strong className="font-semibold text-[var(--color-ink)]">{preview.member_name}</strong>. Your own
-                accounts stay private; only what you mark as shared is visible to the household.
+                accounts stay private; the household sees only joint accounts and the transactions you share.
               </p>
               <p className="mt-2 text-[12.5px] text-[var(--color-ink-3)]">Sent to {preview.email_hint}</p>
 

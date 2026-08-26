@@ -24,7 +24,6 @@ export type StagedTx = {
   description: string | null
   account_id: string
   category_id: string | null
-  member_id: string | null
   external_id?: string | null // OFX FITID for dedup
   source?: 'csv_import' | 'ofx_import'
   // When set, this row reconciles to an existing transaction (e.g. an email
@@ -188,7 +187,8 @@ export async function commitImport(
         household_id: ctx.householdId,
         occurred_on: r.occurred_on,
         account_id: r.account_id,
-        member_id: r.member_id,
+        // Manual import: the signed-in member is the payer, same as the add form.
+        member_id: ctx.memberId,
         description: cleanTitle(r.description) ?? r.description,
         amount_cents: r.amount_cents,
         source: r.source ?? 'csv_import',

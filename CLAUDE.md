@@ -32,7 +32,7 @@ A web app that replicates the structure and formulas of a personal-finance Excel
 
 - `src/app/` — App Router routes.
   - `page.tsx` — public landing; reflects auth state.
-  - `(app)/` — authed shell: `dashboard`, `transactions`, `budgets`, `accounts`, `shared`, `settlements`, `rules`, `setup`, reports.
+  - `(app)/` — authed shell: `dashboard`, `transactions`, `budgets`, `accounts`, `shared` (splitting + settling up in one place; `settlements` only redirects here), `rules`, `setup`, reports.
   - `(app)/rules/` — transaction rules UI (`transaction_rules`); engine in `src/lib/transaction-rules*.ts`, shared on every ingest path.
   - `(auth)/` — sign-in + sign-up pages (route group, doesn't affect URL).
   - `(auth)/actions.ts` — `signIn`, `signUp`, `signOut` Server Actions.
@@ -40,7 +40,7 @@ A web app that replicates the structure and formulas of a personal-finance Excel
   - `invite/[token]/` — unauthenticated invitation landing; previews via `preview_household_invitation` RPC, accepts via `accept_household_invitation`. Token is only ever in the URL; the DB stores its hash.
   - `api/cron/daily/route.ts` — the single Vercel Cron entry (`vercel.json`, Hobby allows daily only): Plaid safety-net sweep + settlement auto-close. Bearer `CRON_SECRET`; every job idempotent.
   - `api/plaid/webhook/route.ts` — signed Plaid webhooks, sync enqueued via `after()`.
-- Per-member privacy: RLS is private-by-default (`account_visible` / `tx_visible` / `tx_editable` helpers, migration `20260826000004`). A login sees shared accounts, its own member's accounts, unlinked members' accounts, and transactions it holds a share of. Share-only rows are read-only; hide write affordances for them in the UI.
+- Per-member privacy: RLS is private-by-default (`account_visible` / `tx_visible` / `tx_editable` helpers, migrations `20260826000004` + `20260826000007`). A login sees exactly three kinds of money: its own member's accounts and payments, joint accounts (`ownership = 'shared'`), and crossover transactions another member paid that it holds a `transaction_shares` row for. Members without a login are visible to nobody. Crossover rows are read-only; the UI hides write affordances for them (`isTxEditable` / `classifyTx` in `src/lib/tx-scope.ts` mirror the SQL). The payer and account owner are always stamped from `getHouseholdContext().memberId`, never picked from a list.
 - `src/lib/supabase/` — three client builders:
   - `client.ts` → `createBrowserClient` for Client Components.
   - `server.ts` → `createServerClient` for Server Components / Server Actions / Route Handlers.

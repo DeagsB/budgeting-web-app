@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { ACCOUNT_TYPES, ACCOUNT_OWNERSHIP, LIABILITY_TYPES, type AccountType } from '@/lib/domain'
+import { ownershipLabel } from '@/lib/tx-scope'
 import { Amount } from '@/components/ui/amount'
 import { Button } from '@/components/ui/button'
 import { ConfirmButton } from '@/components/ui/confirm-button'
@@ -14,8 +15,6 @@ type Account = {
   type: string
   typeLabel: string
   ownership: string
-  member_id: string | null
-  memberName: string | null
   opening_balance_cents: number
   last_four: string | null
   archived: boolean
@@ -54,15 +53,8 @@ function AccountIcon({ type }: { type: string }) {
   }
 }
 
-export function AccountRow({
-  account,
-  members,
-}: {
-  account: Account
-  members: { id: string; name: string }[]
-}) {
+export function AccountRow({ account }: { account: Account }) {
   const [editing, setEditing] = useState(false)
-  const [ownership, setOwnership] = useState<'member' | 'shared'>(account.ownership as never)
 
   // ───── EDIT ─────
   if (editing) {
@@ -96,35 +88,12 @@ export function AccountRow({
               </select>
             </EditField>
             <EditField label="Ownership">
-              <select
-                name="ownership"
-                value={ownership}
-                onChange={(e) => setOwnership(e.target.value as 'member' | 'shared')}
-                className="maple-select sm"
-              >
+              <select name="ownership" defaultValue={account.ownership} className="maple-select sm">
                 {ACCOUNT_OWNERSHIP.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>
                 ))}
-              </select>
-            </EditField>
-            <EditField label="Member">
-              <select
-                name="member_id"
-                disabled={ownership === 'shared'}
-                defaultValue={account.member_id ?? ''}
-                className="maple-select sm disabled:bg-paper-2 disabled:text-ink-3"
-              >
-                {ownership === 'shared' ? (
-                  <option value="">- Shared -</option>
-                ) : (
-                  members.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))
-                )}
               </select>
             </EditField>
             <EditField label="Opening balance">
@@ -190,9 +159,7 @@ export function AccountRow({
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[12px] text-ink-3">
             <span>{account.typeLabel}</span>
             <span>·</span>
-            <span>
-              {account.ownership === 'shared' ? 'Shared' : (account.memberName ?? 'Member removed')}
-            </span>
+            <span>{ownershipLabel(account.ownership)}</span>
             {account.last_four && (
               <>
                 <span>·</span>

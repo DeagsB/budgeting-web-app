@@ -63,7 +63,7 @@ export default async function SetupPage() {
       <Card padding="lg">
         <MapleLabel>Members</MapleLabel>
         <p className="mt-1 text-[13px] text-ink-2">
-          Each member can have their own login. They see their own accounts plus anything marked shared.
+          Each member signs in with their own login and sees their own accounts, joint accounts, and transactions shared with them. Until a member has a login, nothing can be assigned to them.
         </p>
         <MembersList
           members={(members ?? []).map((m) => ({

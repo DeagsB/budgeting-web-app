@@ -28,7 +28,10 @@ type TransactionVM = {
   isRuleShared?: boolean
   splits: { category_id: string | null; amount_cents: number }[]
   member_id: string | null
-  memberName: string | null
+  /** Display name of the payer, for crossover rows another member paid. */
+  payerName: string | null
+  /** True when the signed-in member is the payer. */
+  isMine: boolean
   /**
    * False for rows this login can only see because it holds a share of them
    * (mirrors the `tx_editable` RLS helper). Write affordances are hidden;
@@ -41,7 +44,6 @@ export function TransactionRow({
   transaction: t,
   accounts,
   categories,
-  members,
   memberWeights,
   isUncategorized = false,
   topCategoryIds = [],
@@ -49,9 +51,8 @@ export function TransactionRow({
   transaction: TransactionVM
   accounts: { id: string; name: string }[]
   categories: { id: string; parent_id: string | null; name: string }[]
-  members: { id: string; name: string }[]
   /** Members with household split weights, for the "Always share" rule sheet. */
-  memberWeights?: RuleSheetMember[]
+  memberWeights: RuleSheetMember[]
   isUncategorized?: boolean
   topCategoryIds?: string[]
 }) {
@@ -146,18 +147,7 @@ export function TransactionRow({
               )}
             </div>
 
-            <div className="sm:col-span-3">
-              <MicroLabel>Member</MicroLabel>
-              <select name="member_id" defaultValue={t.member_id ?? ''} className="maple-select sm">
-                <option value="">Shared</option>
-                {members.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="sm:col-span-3">
+            <div className="sm:col-span-6">
               <MicroLabel>Description</MicroLabel>
               <input
                 name="description"
@@ -238,15 +228,22 @@ export function TransactionRow({
             )}
             <span>·</span>
             <span>{t.accountName}</span>
-            <span>·</span>
-            <span>{t.memberName ?? 'Shared'}</span>
+            {/* Payer: nothing for your own rows; "Joint" when nobody in
+                particular paid (ingested onto a joint account); the payer's
+                name on rows another member paid. */}
+            {!t.isMine && (
+              <>
+                <span>·</span>
+                <span>{t.member_id === null ? 'Joint' : (t.payerName ?? 'Another member')}</span>
+              </>
+            )}
           </div>
 
           {/* Row actions - always visible (no hover gating) with ≥44px tap
               targets so they work on touch without a hover state. */}
           {!canEdit && (
             <p className="mt-1.5 text-[12px] text-ink-3">
-              Shared with you by {t.memberName ?? 'another member'} - view only.
+              Shared with you by {t.payerName ?? 'another member'} - view only.
             </p>
           )}
           {canEdit && (
@@ -359,7 +356,7 @@ export function TransactionRow({
         }
         accounts={accounts}
         categories={categories}
-        members={memberWeights ?? members.map((m) => ({ ...m, weight: 1 }))}
+        members={memberWeights}
       />
     </li>
   )

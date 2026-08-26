@@ -16,7 +16,10 @@ export type SaveRuleState =
   | undefined
 
 export type SimpleState = { ok: true } | { error: string } | undefined
-export type PreviewState = { ok: true; matched: number; shared: number; categorized: number } | { error: string } | undefined
+export type PreviewState =
+  | { ok: true; matched: number; shared: number; categorized: number; settled: number; paymentPrompts: number }
+  | { error: string }
+  | undefined
 export type ApplyState = { ok: true; shared: number; categorized: number; skippedManual: number } | { error: string } | undefined
 
 const RETRO_MONTHS = 12
@@ -25,7 +28,6 @@ const RETRO_CAP = 5000
 function revalidate() {
   revalidatePath('/rules')
   revalidatePath('/shared')
-  revalidatePath('/settlements')
   revalidatePath('/transactions')
   revalidatePath('/budgets')
   revalidatePath('/dashboard')
@@ -45,6 +47,7 @@ type ParsedRule = {
   share_mode: ShareMode
   share_weights: Record<string, number> | null
   category_id: string | null
+  is_settlement: boolean
 }
 
 /** Parse + validate the rule sheet. Weights are checked against active members. */
@@ -75,9 +78,14 @@ async function parseRule(
     ? (String(fd.get('direction')) as RuleDirection)
     : 'outflow'
 
-  const share_mode = (['none', 'household', 'custom'] as const).includes(String(fd.get('share_mode')) as ShareMode)
-    ? (String(fd.get('share_mode')) as ShareMode)
-    : 'household'
+  // A settlement rule is a third action: it never shares (a payment between
+  // members is not an expense) and needs no category.
+  const is_settlement = String(fd.get('is_settlement')) === 'on'
+  const share_mode = is_settlement
+    ? 'none'
+    : (['none', 'household', 'custom'] as const).includes(String(fd.get('share_mode')) as ShareMode)
+      ? (String(fd.get('share_mode')) as ShareMode)
+      : 'household'
 
   let share_weights: Record<string, number> | null = null
   if (share_mode === 'custom') {
@@ -107,9 +115,11 @@ async function parseRule(
     category_id = (data?.id as string | undefined) ?? null
   }
 
-  if (share_mode === 'none' && !category_id) return { error: 'A rule needs to either share or set a category.' }
+  if (share_mode === 'none' && !category_id && !is_settlement) {
+    return { error: 'A rule needs to share, set a category, or mark a payment between members.' }
+  }
 
-  return { name, match_text, amount_min_cents, amount_max_cents, account_id, direction, share_mode, share_weights, category_id }
+  return { name, match_text, amount_min_cents, amount_max_cents, account_id, direction, share_mode, share_weights, category_id, is_settlement }
 }
 
 export async function saveRule(_prev: SaveRuleState, fd: FormData): Promise<SaveRuleState> {
@@ -175,7 +185,7 @@ export async function previewRule(fd: FormData): Promise<PreviewState> {
       ).data?.map((m) => ({ id: m.id as string, weight: Number(m.split_weight ?? 1) })) ?? [],
     },
   )
-  return { ok: true, matched: res.matched, shared: res.shared, categorized: res.categorized }
+  return { ok: true, matched: res.matched, shared: res.shared, categorized: res.categorized, settled: res.settled, paymentPrompts: res.paymentPrompts }
 }
 
 export async function applyRuleToExisting(fd: FormData): Promise<ApplyState> {

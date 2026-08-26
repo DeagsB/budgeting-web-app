@@ -33,6 +33,8 @@ export type TransactionRule = {
   share_mode: ShareMode
   share_weights: Record<string, number> | null
   category_id: string | null
+  /** "This merchant is a payment between members" (e-Transfer). Never shares. */
+  is_settlement: boolean
 }
 
 export type RuleTxInput = {
@@ -71,21 +73,27 @@ export function sortRules(rules: TransactionRule[]): TransactionRule[] {
 export type RuleEffects = {
   shareRule: TransactionRule | null
   categoryRule: TransactionRule | null
+  /** First matching settlement rule. A payment is never shared, so it also blocks sharing. */
+  settlementRule: TransactionRule | null
   matched: TransactionRule[]
 }
 
 export function resolveRuleEffects(rules: TransactionRule[], tx: RuleTxInput): RuleEffects {
+  const sorted = sortRules(rules)
+  // A settlement rule anywhere in the order makes the row a payment, which is
+  // never an expense to share; check that first so sharing can be suppressed.
+  const settlementRule = sorted.find((r) => r.is_settlement && ruleMatches(r, tx)) ?? null
   let shareRule: TransactionRule | null = null
   let categoryRule: TransactionRule | null = null
   const matched: TransactionRule[] = []
-  for (const r of sortRules(rules)) {
+  for (const r of sorted) {
     if (!ruleMatches(r, tx)) continue
     matched.push(r)
-    if (!shareRule && r.share_mode !== 'none') shareRule = r
+    if (!shareRule && r.share_mode !== 'none' && !settlementRule) shareRule = r
     if (!categoryRule && r.category_id) categoryRule = r
-    if (shareRule && categoryRule) break
+    if ((shareRule || settlementRule) && categoryRule) break
   }
-  return { shareRule, categoryRule, matched }
+  return { shareRule, categoryRule, settlementRule, matched }
 }
 
 /**
@@ -156,6 +164,7 @@ export type RulePrefill = {
   direction: RuleDirection
   share_mode: ShareMode
   category_id: string | null
+  is_settlement: boolean
 }
 
 /** Seed the "Always share" sheet from a transaction (±10% amount band). */
@@ -176,6 +185,7 @@ export function prefillRuleFromTransaction(
     direction: tx.amount_cents < 0 ? 'inflow' : 'outflow',
     share_mode: 'household',
     category_id: tx.category_id ?? null,
+    is_settlement: false,
   }
 }
 

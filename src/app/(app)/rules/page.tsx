@@ -23,7 +23,7 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
     await Promise.all([
       supabase
         .from('transaction_rules')
-        .select('id, household_id, name, enabled, sort_order, match_text, amount_min_cents, amount_max_cents, account_id, direction, share_mode, share_weights, category_id')
+        .select('id, household_id, name, enabled, sort_order, match_text, amount_min_cents, amount_max_cents, account_id, direction, share_mode, share_weights, category_id, is_settlement')
         .eq('household_id', ctx.householdId)
         .order('sort_order')
         .order('id'),
@@ -54,6 +54,7 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
     share_mode: r.share_mode as TransactionRule['share_mode'],
     share_weights: (r.share_weights as Record<string, number> | null) ?? null,
     category_id: (r.category_id as string | null) ?? null,
+    is_settlement: Boolean(r.is_settlement),
   }))
 
   const txList = (txs ?? []).map((t) => ({

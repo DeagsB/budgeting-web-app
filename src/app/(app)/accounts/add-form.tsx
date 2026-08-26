@@ -7,14 +7,13 @@ import { Button } from '@/components/ui/button'
 
 /**
  * Maple "add account" form. Two-row grid: identity (name + type) on top,
- * ownership (shared vs member) + member selector + opening balance below.
+ * ownership (mine vs joint) + opening balance below. A "Mine" account belongs
+ * to the signed-in member; the server stamps the owner, so there is no picker.
  */
-export function AddAccountForm({ members }: { members: { id: string; name: string }[] }) {
+export function AddAccountForm({ canOwn }: { /** False until this login has claimed a member. */ canOwn: boolean }) {
   const [state, formAction, pending] = useActionState<AccountState, FormData>(createAccount, undefined)
   const formRef = useRef<HTMLFormElement>(null)
-  const [ownership, setOwnership] = useState<'member' | 'shared'>(
-    members.length > 0 ? 'member' : 'shared',
-  )
+  const [ownership, setOwnership] = useState<'member' | 'shared'>(canOwn ? 'member' : 'shared')
 
   useEffect(() => {
     if (!pending && !state?.error) formRef.current?.reset()
@@ -43,38 +42,25 @@ export function AddAccountForm({ members }: { members: { id: string; name: strin
           </select>
         </Field>
 
-        <Field label="Ownership">
+        <Field
+          label="Ownership"
+          hint={
+            ownership === 'shared'
+              ? 'Joint accounts are visible to everyone in the household.'
+              : 'Only you see this account. Share individual transactions from the list.'
+          }
+        >
           <select
             name="ownership"
             value={ownership}
             onChange={(e) => setOwnership(e.target.value as 'member' | 'shared')}
             className="maple-select"
           >
-            {ACCOUNT_OWNERSHIP.map((o) => (
+            {ACCOUNT_OWNERSHIP.filter((o) => canOwn || o.value === 'shared').map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
             ))}
-          </select>
-        </Field>
-        <Field label="Member">
-          <select
-            name="member_id"
-            disabled={ownership === 'shared'}
-            className="maple-select disabled:cursor-not-allowed disabled:bg-paper-2 disabled:text-ink-3"
-          >
-            {ownership === 'shared' ? (
-              <option value="">- Shared -</option>
-            ) : (
-              <>
-                {members.length === 0 && <option value="">(no members)</option>}
-                {members.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </>
-            )}
           </select>
         </Field>
 

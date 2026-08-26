@@ -189,6 +189,6 @@ export async function updateCloseDay(fd: FormData): Promise<{ ok: true } | { err
   const { error } = await h.supabase.from('households').update({ settlement_close_day: day }).eq('id', h.ctx.householdId)
   if (error) return { error: humanizeDbError(error) }
   revalidatePath('/setup')
-  revalidatePath('/settlements')
+  revalidatePath('/shared')
   return { ok: true }
 }

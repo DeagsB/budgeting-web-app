@@ -916,8 +916,6 @@ export function DashboardClient({
               defaultDate={currentMonthISO}
               accounts={accounts.map((a) => ({ id: a.id, name: a.name }))}
               categories={categories}
-              members={members.map((m) => ({ id: m.id, name: m.name }))}
-              defaultMemberId={myMemberId}
               onSaved={() => setAddOpen(false)}
             />
           </Sheet>

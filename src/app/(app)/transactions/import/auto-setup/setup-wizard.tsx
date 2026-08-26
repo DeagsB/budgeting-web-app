@@ -26,7 +26,6 @@ import { DataTable } from '@/components/ui/data-table'
 import { Button } from '@/components/ui/button'
 
 type Account = { id: string; name: string; last_four: string | null }
-type Member = { id: string; name: string }
 type Category = { id: string; name: string; code: string; parent_id: string | null }
 
 type Rule = {
@@ -109,7 +108,7 @@ export function SetupWizard({
   hasSecret,
   gmailSyncUrl,
   accounts,
-  members,
+  myMemberId,
   categories,
   rules,
   log,
@@ -118,7 +117,8 @@ export function SetupWizard({
   hasSecret: boolean
   gmailSyncUrl: string | null
   accounts: Account[]
-  members: Member[]
+  /** The signed-in member, the only payer a rule can default to besides "Joint". */
+  myMemberId: string | null
   categories: Category[]
   rules: Rule[]
   log: LogEntry[]
@@ -185,7 +185,7 @@ export function SetupWizard({
         <RulesSection
           rules={rules}
           accounts={accounts}
-          members={members}
+          myMemberId={myMemberId}
           categories={categories}
           editing={editingRule}
           onEdit={setEditingRule}
@@ -654,14 +654,14 @@ function doGet() {
 function RulesSection({
   rules,
   accounts,
-  members,
+  myMemberId,
   categories,
   editing,
   onEdit,
 }: {
   rules: Rule[]
   accounts: Account[]
-  members: Member[]
+  myMemberId: string | null
   categories: Category[]
   editing: Rule | 'new' | null
   onEdit: (r: Rule | 'new' | null) => void
@@ -772,7 +772,7 @@ function RulesSection({
           key={editing === 'new' ? 'new' : editing.id}
           initial={editing === 'new' ? null : editing}
           accounts={accounts}
-          members={members}
+          myMemberId={myMemberId}
           categories={categories}
           onClose={() => onEdit(null)}
         />
@@ -792,13 +792,13 @@ function RulesSection({
 function RuleForm({
   initial,
   accounts,
-  members,
+  myMemberId,
   categories,
   onClose,
 }: {
   initial: Rule | null
   accounts: Account[]
-  members: Member[]
+  myMemberId: string | null
   categories: Category[]
   onClose: () => void
 }) {
@@ -1017,17 +1017,15 @@ function RuleForm({
             ))}
           </select>
         </FormField>
-        <FormField label="Default member">
+        <FormField label="Paid by">
           <select
             name="default_member_id"
             value={draft.default_member_id ?? ''}
             onChange={(e) => field('default_member_id', e.target.value)}
             className="maple-select"
           >
-            <option value="">Shared</option>
-            {members.map((m) => (
-              <option key={m.id} value={m.id}>{m.name}</option>
-            ))}
+            <option value="">Account owner (or joint)</option>
+            {myMemberId && <option value={myMemberId}>Me</option>}
           </select>
         </FormField>
         <FormField label="Default category">

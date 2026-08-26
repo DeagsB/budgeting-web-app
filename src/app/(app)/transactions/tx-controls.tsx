@@ -11,18 +11,18 @@ import { SegmentedControl } from '@/components/ui/segmented-control'
 import { MapleLabel } from '@/components/ui/label'
 import { AddTransactionForm } from './add-form'
 import { monthStartISO } from '@/lib/format'
+import { TX_SCOPES, scopeLabel, type TxScope } from '@/lib/tx-scope'
 
 type Account = { id: string; name: string }
 type Category = { id: string; parent_id: string | null; name: string }
-type Member = { id: string; name: string }
 
-type Draft = { member: string; account: string; category: string }
+type Draft = { scope: string; account: string; category: string }
 
 /**
  * Transactions controls. Filters are URL-driven so the server component reads
  * them from `searchParams`; only the sheets need local state.
  *
- * Mobile (<md): search + a "Filter" pill (opens a FilterSheet with member /
+ * Mobile (<md): search + a "Filter" pill (opens a FilterSheet with scope /
  * account / category) + a "..." overflow for secondary actions; active filters
  * render as removable chips under the search; the add form opens from the tab
  * bar's centre "+" (or `?add=1`, which the "+" uses when arriving from another
@@ -34,23 +34,19 @@ export function TxControls({
   search,
   accountId,
   categoryId,
-  memberId,
+  scope,
   accounts,
   categories,
-  members,
-  defaultMemberId = null,
   overflowActions,
 }: {
   month: string
   search: string
   accountId?: string
   categoryId?: string
-  memberId?: string
+  /** Mine / Shared / Shared with me; undefined shows everything. */
+  scope?: TxScope
   accounts: Account[]
   categories: Category[]
-  members: Member[]
-  /** The signed-in member, preselected as payer in the add form. */
-  defaultMemberId?: string | null
   /** Secondary actions (sync, import) shown in the mobile "..." sheet. */
   overflowActions?: ReactNode
 }) {
@@ -76,7 +72,7 @@ export function TxControls({
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addParam])
-  const [draft, setDraft] = useState<Draft>({ member: '', account: '', category: '' })
+  const [draft, setDraft] = useState<Draft>({ scope: '', account: '', category: '' })
   const [searchValue, setSearchValue] = useState(search)
 
   // Keep the local input in sync if the URL search param changes elsewhere
@@ -92,60 +88,55 @@ export function TxControls({
     search?: string
     account?: string
     category?: string
-    member?: string
+    scope?: string
   }) {
     const params = new URLSearchParams()
     params.set('month', month)
     const q = next.search ?? searchValue
     const acc = next.account ?? accountId
     const cat = next.category ?? categoryId
-    const mem = next.member ?? memberId
+    const sc = next.scope ?? scope
     if (q && q.trim()) params.set('q', q.trim())
     if (acc) params.set('account', acc)
     if (cat) params.set('category', cat)
-    if (mem) params.set('member', mem)
+    if (sc) params.set('scope', sc)
     startNav(() => router.replace(`${pathname}?${params.toString()}`, { scroll: false }))
   }
 
-  function toggle(key: 'account' | 'member', value: string) {
-    const current = key === 'account' ? accountId : memberId
+  function toggle(key: 'account' | 'scope', value: string) {
+    const current = key === 'account' ? accountId : scope
     navigate({ [key]: current === value ? '' : value })
   }
 
   function clearAll() {
     setSearchValue('')
-    navigate({ search: '', account: '', category: '', member: '' })
+    navigate({ search: '', account: '', category: '', scope: '' })
   }
 
   function openFilters() {
-    setDraft({ member: memberId ?? '', account: accountId ?? '', category: categoryId ?? '' })
+    setDraft({ scope: scope ?? '', account: accountId ?? '', category: categoryId ?? '' })
     setFilterOpen(true)
   }
 
   function applyFilters() {
-    navigate({ member: draft.member, account: draft.account, category: draft.category })
+    navigate({ scope: draft.scope, account: draft.account, category: draft.category })
     setFilterOpen(false)
   }
 
-  const hasFilter = !!(searchValue.trim() || accountId || categoryId || memberId)
+  const hasFilter = !!(searchValue.trim() || accountId || categoryId || scope)
 
   // Active (non-search) filters as removable chips - mobile only; desktop shows
   // the full rail where the active chip is already highlighted.
-  const memberLabel =
-    memberId === 'shared' ? 'Shared' : members.find((m) => m.id === memberId)?.name
+  const activeScopeLabel = scopeLabel(scope)
   const accountLabel = accounts.find((a) => a.id === accountId)?.name
   const categoryLabel = categories.find((c) => c.id === categoryId)?.name
-  const activeChips: { key: 'member' | 'account' | 'category'; label: string }[] = []
-  if (memberId && memberLabel) activeChips.push({ key: 'member', label: memberLabel })
+  const activeChips: { key: 'scope' | 'account' | 'category'; label: string }[] = []
+  if (scope && activeScopeLabel) activeChips.push({ key: 'scope', label: activeScopeLabel })
   if (accountId && accountLabel) activeChips.push({ key: 'account', label: accountLabel })
   if (categoryId && categoryLabel) activeChips.push({ key: 'category', label: categoryLabel })
   const filterCount = activeChips.length
 
-  const memberOptions = [
-    { value: '', label: 'All' },
-    { value: 'shared', label: 'Shared' },
-    ...members.map((m) => ({ value: m.id, label: m.name })),
-  ]
+  const scopeOptions = [{ value: '', label: 'All' }, ...TX_SCOPES]
 
   return (
     <div className="flex flex-col gap-3">
@@ -254,17 +245,14 @@ export function TxControls({
 
       {/* Desktop: chip filter rail (scrollbar hidden). */}
       <div className="hide-scroll -mx-1 hidden items-center gap-2 overflow-x-auto overflow-y-hidden px-1 pb-1 md:flex">
-        <Chip active={memberId === 'shared'} onClick={() => toggle('member', 'shared')} className="shrink-0">
-          Shared
-        </Chip>
-        {members.map((m) => (
+        {TX_SCOPES.map((s) => (
           <Chip
-            key={m.id}
-            active={memberId === m.id}
-            onClick={() => toggle('member', m.id)}
+            key={s.value}
+            active={scope === s.value}
+            onClick={() => toggle('scope', s.value)}
             className="shrink-0"
           >
-            {m.name}
+            {s.label}
           </Chip>
         ))}
         {accounts.length > 0 && <span className="mx-0.5 h-5 w-px shrink-0 bg-hair" aria-hidden />}
@@ -314,17 +302,17 @@ export function TxControls({
         onApply={applyFilters}
         onClear={() => {
           setFilterOpen(false)
-          navigate({ account: '', category: '', member: '' })
+          navigate({ account: '', category: '', scope: '' })
         }}
       >
-        <FilterSection label="Member">
+        <FilterSection label="Show">
           <div className="hide-scroll -mx-1 overflow-x-auto overflow-y-hidden px-1 py-0.5">
             <SegmentedControl
-              ariaLabel="Filter by member"
+              ariaLabel="Filter by scope"
               className="whitespace-nowrap"
-              options={memberOptions}
-              value={draft.member}
-              onChange={(v) => setDraft((d) => ({ ...d, member: v }))}
+              options={scopeOptions}
+              value={draft.scope}
+              onChange={(v) => setDraft((d) => ({ ...d, scope: v }))}
             />
           </div>
         </FilterSection>
@@ -377,8 +365,6 @@ export function TxControls({
           defaultDate={monthStartISO()}
           accounts={accounts}
           categories={categories}
-          members={members}
-          defaultMemberId={defaultMemberId}
           onSaved={() => setAddOpen(false)}
         />
       </Sheet>

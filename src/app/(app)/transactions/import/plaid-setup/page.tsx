@@ -12,7 +12,7 @@ export default async function PlaidSetupPage() {
   if (!ctx) return null
 
   const supabase = await createClient()
-  const [{ data: items }, { data: accounts }, { data: members }, { data: log }] = await Promise.all([
+  const [{ data: items }, { data: accounts }, { data: log }] = await Promise.all([
     supabase
       .from('plaid_items')
       .select('id, institution_name, status, last_synced_at, error_detail, needs_account_review, created_at')
@@ -25,12 +25,6 @@ export default async function PlaidSetupPage() {
       .eq('household_id', ctx.householdId)
       .is('archived_at', null)
       .order('name'),
-    supabase
-      .from('members')
-      .select('id, display_name')
-      .eq('household_id', ctx.householdId)
-      .is('archived_at', null)
-      .order('sort_order'),
     supabase
       .from('plaid_sync_log')
       .select('id, ran_at, added, modified, removed, reconciled, status, error_detail')
@@ -127,7 +121,7 @@ export default async function PlaidSetupPage() {
           plaid_account_id: a.plaid_account_id ?? null,
           plaid_item_id: a.plaid_item_id ?? null,
         }))}
-        members={(members ?? []).map((m) => ({ id: m.id, name: m.display_name }))}
+        canOwn={ctx.memberId !== null}
         log={(log ?? []).map((l) => ({
           id: l.id,
           ran_at: l.ran_at,

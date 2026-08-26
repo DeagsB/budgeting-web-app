@@ -21,16 +21,11 @@ type FormState = { error: string } | { ok: true } | undefined
 export function AddTransactionForm({
   accounts,
   categories,
-  members,
-  defaultMemberId = null,
   onSaved,
 }: {
   defaultDate: string
   accounts: { id: string; name: string }[]
   categories: { id: string; parent_id: string | null; name: string }[]
-  members: { id: string; name: string }[]
-  /** Preselect the signed-in member as payer. */
-  defaultMemberId?: string | null
   onSaved?: () => void
 }) {
   const run = useRunAction()
@@ -105,27 +100,18 @@ export function AddTransactionForm({
       </div>
 
       {/* Fields grid */}
+      {/* The payer is always the signed-in member, so there is no member
+          picker: the server action stamps it. */}
       <div className="grid gap-3 sm:grid-cols-6">
-        <Field label="Date" span={2}>
+        <Field label="Date" span={3}>
           <input name="occurred_on" type="date" required defaultValue={todayISO} className="maple-input" />
         </Field>
 
-        <Field label="Account" span={2}>
+        <Field label="Account" span={3}>
           <select name="account_id" required className="maple-select">
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <Field label="Member" span={2}>
-          <select name="member_id" className="maple-select" defaultValue={defaultMemberId ?? ''}>
-            <option value="">Shared</option>
-            {members.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
               </option>
             ))}
           </select>

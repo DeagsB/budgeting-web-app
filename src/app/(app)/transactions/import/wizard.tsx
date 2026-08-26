@@ -12,9 +12,8 @@ import { Amount } from '@/components/ui/amount'
 
 type Account = { id: string; name: string }
 type Category = { id: string; parent_id: string | null; name: string; code: string }
-type Member = { id: string; name: string }
 
-type FieldKey = 'ignore' | 'date' | 'amount' | 'description' | 'category' | 'account' | 'member' | 'direction'
+type FieldKey = 'ignore' | 'date' | 'amount' | 'description' | 'category' | 'account' | 'direction'
 
 const FIELD_OPTIONS: { value: FieldKey; label: string }[] = [
   { value: 'ignore', label: 'Ignore' },
@@ -23,7 +22,6 @@ const FIELD_OPTIONS: { value: FieldKey; label: string }[] = [
   { value: 'description', label: 'Description' },
   { value: 'category', label: 'Category' },
   { value: 'account', label: 'Account' },
-  { value: 'member', label: 'Member' },
   { value: 'direction', label: 'Direction' },
 ]
 
@@ -39,7 +37,6 @@ const HEADER_HINTS: { key: FieldKey; patterns: RegExp[] }[] = [
   },
   { key: 'category', patterns: [/^category$/i, /^tag$/i] },
   { key: 'account', patterns: [/^account$/i, /^account name$/i] },
-  { key: 'member', patterns: [/^member$/i, /^person$/i, /^owner$/i] },
   { key: 'direction', patterns: [/^direction$/i, /^dr\/cr$/i, /^type$/i] },
 ]
 
@@ -95,7 +92,6 @@ type PreviewRow = {
   description: string
   categoryId: string | null
   accountId: string
-  memberId: string | null
   direction: 'out' | 'in'
   externalId?: string | null
   error?: string
@@ -104,11 +100,9 @@ type PreviewRow = {
 export function ImportWizard({
   accounts,
   categories,
-  members,
 }: {
   accounts: Account[]
   categories: Category[]
-  members: Member[]
 }) {
   const [raw, setRaw] = useState('')
   const [ofxRows, setOfxRows] = useState<OfxLite[] | null>(null)
@@ -116,7 +110,6 @@ export function ImportWizard({
   const [fileError, setFileError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [defaultAccountId, setDefaultAccountId] = useState(accounts[0]?.id ?? '')
-  const [defaultMemberId, setDefaultMemberId] = useState('')
   const [defaultDirection, setDefaultDirection] = useState<'auto' | 'out' | 'in'>('auto')
 
   const inputMode: 'csv' | 'ofx' = ofxRows ? 'ofx' : 'csv'
@@ -191,11 +184,6 @@ export function ImportWizard({
     () => new Map(accounts.map((a) => [a.name.toLowerCase(), a.id])),
     [accounts],
   )
-  const memberByName = useMemo(
-    () => new Map(members.map((m) => [m.name.toLowerCase(), m.id])),
-    [members],
-  )
-
   // OFX mode → synthesize preview rows directly from parsed transactions.
   // Skips the CSV column-mapping step entirely since OFX is structured.
   const ofxPreviewRows =
@@ -208,7 +196,6 @@ export function ImportWizard({
             description: r.description ?? '',
             categoryId: null,
             accountId: defaultAccountId,
-            memberId: defaultMemberId || null,
             direction: r.amountCents >= 0 ? 'out' : 'in',
             externalId: r.fitid,
           }
@@ -226,7 +213,6 @@ export function ImportWizard({
       description: '',
       categoryId: null,
       accountId: defaultAccountId,
-      memberId: defaultMemberId || null,
       direction: defaultDirection === 'in' ? 'in' : 'out',
     }
 
@@ -243,9 +229,6 @@ export function ImportWizard({
       } else if (key === 'account') {
         const aid = accountByName.get(value.toLowerCase())
         if (aid) vm.accountId = aid
-      } else if (key === 'member') {
-        const mid = memberByName.get(value.toLowerCase())
-        if (mid) vm.memberId = mid
       } else if (key === 'direction') {
         const v = value.toLowerCase()
         if (v.startsWith('in') || v.startsWith('cr') || v === 'deposit') vm.direction = 'in'
@@ -290,7 +273,6 @@ export function ImportWizard({
       description: r.description || null,
       account_id: r.accountId,
       category_id: r.categoryId,
-      member_id: r.memberId,
       external_id: r.externalId ?? null,
       source: inputMode === 'ofx' ? 'ofx_import' : 'csv_import',
     }))
@@ -489,20 +471,6 @@ export function ImportWizard({
               ))}
             </select>
           </Field>
-          <Field label="Default member">
-            <select
-              value={defaultMemberId}
-              onChange={(e) => setDefaultMemberId(e.target.value)}
-              className="maple-select"
-            >
-              <option value="">Shared</option>
-              {members.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-          </Field>
           <Field label="Sign convention">
             <select
               value={defaultDirection}
@@ -595,7 +563,7 @@ export function ImportWizard({
                 any horizontal scrolling. */}
             <ul className="flex flex-col gap-2 p-3 sm:hidden">
               {previewRows.map((r, idx) => {
-                const d = derivePreview(r, accounts, categories, members, annByIdx.get(idx))
+                const d = derivePreview(r, accounts, categories, annByIdx.get(idx))
                 return (
                   <li
                     key={idx}
@@ -636,7 +604,6 @@ export function ImportWizard({
                         value={d.categorySuggested ? `${d.categoryName} · suggested` : d.categoryName}
                         muted={d.categoryName === 'Uncategorized'}
                       />
-                      <MetaPair label="Member" value={d.memberName} muted={d.memberName === 'Shared'} />
                     </dl>
                   </li>
                 )
@@ -655,12 +622,11 @@ export function ImportWizard({
                     <Th>Description</Th>
                     <Th>Category</Th>
                     <Th>Account</Th>
-                    <Th>Member</Th>
                   </tr>
                 </thead>
                 <tbody>
                   {previewRows.map((r, idx) => {
-                    const d = derivePreview(r, accounts, categories, members, annByIdx.get(idx))
+                    const d = derivePreview(r, accounts, categories, annByIdx.get(idx))
                     return (
                       <tr
                         key={idx}
@@ -690,7 +656,6 @@ export function ImportWizard({
                           )}
                         </Td>
                         <Td>{d.accountName}</Td>
-                        <Td muted={d.memberName === 'Shared'}>{d.memberName}</Td>
                       </tr>
                     )
                   })}
@@ -749,7 +714,6 @@ function derivePreview(
   r: PreviewRow,
   accounts: Account[],
   categories: Category[],
-  members: Member[],
   ann?: RowAnnotation,
 ) {
   const accountName = accounts.find((a) => a.id === r.accountId)?.name ?? '-'
@@ -762,16 +726,12 @@ function derivePreview(
       categorySuggested = true
     }
   }
-  const memberName = r.memberId
-    ? (members.find((m) => m.id === r.memberId)?.name ?? '-')
-    : 'Shared'
   const amt = r.amountCents
   const isIncome = amt !== null && amt < 0
   return {
     accountName,
     categoryName,
     categorySuggested,
-    memberName,
     amt,
     isIncome,
     matched: !!ann?.matchedTxId,

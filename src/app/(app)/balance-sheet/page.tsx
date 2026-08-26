@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { addMonths, monthLabel, monthStartISO } from '@/lib/format'
 import { accountTypeLabel, LIABILITY_TYPES, type AccountType } from '@/lib/domain'
+import { ownershipLabel } from '@/lib/tx-scope'
 import { accountBalanceAt, groupTxByAccount, groupSnapsByAccount } from '@/lib/balances'
 import { PageHeader } from '@/components/ui/page-header'
 import { MonthNav } from '@/components/ui/month-nav'
@@ -36,10 +37,10 @@ export default async function BalanceSheetPage({
   if (!ctx) return null
   const supabase = await createClient()
 
-  const [{ data: accounts }, { data: snapshots }, { data: members }, { data: txData }] = await Promise.all([
+  const [{ data: accounts }, { data: snapshots }, { data: txData }] = await Promise.all([
     supabase
       .from('accounts')
-      .select('id, name, type, ownership, member_id, opening_balance_cents')
+      .select('id, name, type, ownership, opening_balance_cents')
       .eq('household_id', ctx.householdId)
       .is('archived_at', null)
       .order('name'),
@@ -49,17 +50,11 @@ export default async function BalanceSheetPage({
       .eq('household_id', ctx.householdId)
       .order('as_of_month', { ascending: false }),
     supabase
-      .from('members')
-      .select('id, display_name')
-      .eq('household_id', ctx.householdId),
-    supabase
       .from('transactions')
       .select('account_id, occurred_on, amount_cents')
       .eq('household_id', ctx.householdId)
       .limit(20000),
   ])
-
-  const memberName = new Map((members ?? []).map((m) => [m.id, m.display_name]))
 
   // Cashflow-derived balance as of a month: opening + transactions through the
   // month end, anchored by a snapshot when one exists at/before it.
@@ -110,10 +105,7 @@ export default async function BalanceSheetPage({
       name: a.name,
       type: a.type,
       typeLabel: accountTypeLabel(a.type),
-      ownerLabel:
-        a.ownership === 'shared'
-          ? 'Shared'
-          : (a.member_id && memberName.get(a.member_id)) || 'Member',
+      ownerLabel: ownershipLabel(a.ownership),
       cents: balanceFor(a.id, a.type as AccountType, opening, month),
       isLiability: LIABILITY_TYPES.has(a.type as AccountType),
     }
@@ -151,7 +143,6 @@ export default async function BalanceSheetPage({
       name: a.name,
       type: a.type,
       typeLabel: accountTypeLabel(a.type),
-      memberName: a.member_id ? memberName.get(a.member_id) ?? null : null,
       ownership: a.ownership as string,
       opening_balance_cents: opening,
       current_balance_cents: snapshotAt(a.id, month),

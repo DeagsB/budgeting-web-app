@@ -403,3 +403,59 @@ The list-based "Customize tabs" editor was removed; "Reset tabs" in the sheet fo
 **Considered + rejected:**
 - *Drag-and-drop from the sheet onto the bar*: the sheet covers the bar, so the drag would have to cross a dismissing overlay; tap-to-place is one fewer thing to hold.
 - *Keeping the FAB bottom-right as well as the centre "+"*: two entry points for one action.
+
+---
+
+## 2026-08-26 - Members must be logins; Mine / Shared / Shared with me
+
+Supersedes the unlinked-member rule in "Per-member privacy" above.
+The app no longer lets one login browse another member's money.
+A login sees exactly three kinds of transactions: its own (accounts it owns and payments it made), joint (accounts with `ownership = 'shared'`, co-owned and fully editable by everyone), and crossovers (rows another member paid where the caller holds a `transaction_shares` row, read-only).
+
+**Model (migration `20260826000007_login_only_members.sql`):**
+- `can_access_member(m)` is now `user_id = auth.uid()` only.
+  The `user_id is null` branch that made unlinked members' accounts visible to every login is gone, so a member row without a login is visible to nobody until it is claimed or an invitation is accepted.
+  `account_visible` / `tx_visible` / `tx_editable` and every `accounts` / `transactions` policy route through it and needed no rewrite.
+- Nothing is picked from a member list any more.
+  The transaction payer (`member_id`) is stamped from `getHouseholdContext().memberId` on add, CSV/OFX import, and is never touched on edit or triage; the account owner is stamped the same way when ownership is "Mine".
+  A login that has not claimed a member gets a clear error instead of an insert RLS would reject.
+- `src/lib/tx-scope.ts` mirrors the SQL in TypeScript: `isTxEditable` is `tx_editable`, and `classifyTx` sorts a row into `mine` / `shared` / `with-me` by editability plus share count (not by payer, because ingest paths leave `member_id = null` on joint accounts).
+  The Transactions filter uses those three scopes (`?scope=`) instead of a chip per member and an arbitrary `?member=<id>`.
+- Accounts are labelled "Mine" / "Joint" everywhere; owner names are never rendered on money.
+- The Shared page keeps its account-centric flagging view (RLS already limits the switcher to own + joint accounts) and adds a read-only "Shared with you" card listing the month's crossovers with the caller's share.
+- Push: a member-owned account of a member with no login notifies nobody (previously the whole household, "because that is who could see it").
+  Settlement close notifies each member with a login; there is no household fallback except the "all square" broadcast.
+
+**Pre-flight:** the migration was applied after confirming no active account was owned by an unlinked member, so no data went dark.
+If that ever changes, the query is `select a.id from accounts a join members m on m.id = a.member_id where a.ownership = 'member' and m.user_id is null and a.archived_at is null`; the fix is an invitation, not an automatic reassignment.
+
+**Considered + rejected:**
+- *Owner/admin-only access to unlinked members' accounts*: a second visibility axis to explain and audit, for a case (tracking a child's account) that "Joint" already covers.
+- *Auto-reassigning orphaned accounts to joint*: silently widens who can see a ledger.
+- *Classifying scope by payer*: Plaid and email ingest stamp `member_id = null` on joint accounts, so "paid by me" would miss half of "mine".
+
+Household-level per-member tables (`member_contribution_rooms`, `time_off_entries`) are unchanged: they are settings, not ledgers.
+
+---
+
+## 2026-08-26 - Shared and Settle up merged; payments recorded from the ledger
+
+`/settlements` is gone as a screen (the route redirects to `/shared`, keeping `?period=` so push links still land).
+`/shared` now runs top to bottom the way a person thinks about shared money: what is owed now, statements waiting to be paid, payments the bank feed found, what others shared with you, the per-account flagging list, then history and the trend.
+The "Record payment" form survives only as a collapsed by-hand fallback.
+
+**Detection (migration `20260826000008_settlement_detection.sql`, `src/lib/settlement-match.ts`, `src/lib/settlement-detect.ts`):**
+- `transaction_rules.is_settlement` marks a merchant as "a payment between members" (the one-tap starter is `INTERAC E-TRANSFER`, any direction).
+  A settlement rule never shares; the action check accepts it in place of a share or a category.
+- A matching ledger row is attributed to its payer, else its account's owner; an unattributed joint-account row is never a candidate.
+  Sign gives direction: outflow means that member paid (`from`), inflow means they received (`to`).
+- Decision order: link to a settlement on the books with the same pair, amount and a date within 7 days whose matching side column (`settlements.paid_transaction_id` / `received_transaction_id`) is still empty; else record against the one outstanding line that nets to exactly this amount (awaiting statements before the open period); else prompt.
+  Linking is what stops the payer's outflow and the recipient's inflow from counting twice, and what lets "Mark settled" be confirmed by the bank later.
+- Runs inside `applyRulesToTransactions`, so Plaid, email, CSV/OFX, manual add and retro-apply all detect; the statement is loaded once per run and only when a settlement rule matched.
+- Prompts are computed at render (last 3 months of visible rows matching a settlement rule, minus linked, minus `transactions.settlement_ignored`), so there is no candidate table to keep in sync.
+  "Not a payment" sets the flag and needs edit rights on the row; removing a ledger-recorded payment from history flags its rows too.
+
+**Considered + rejected:**
+- *Candidate table filled by a keyword heuristic*: second matching path beside rules, more state, and the household could not tune it.
+- *One-tap only, no detection*: the point was to stop asking for something the bank already said.
+- *Deleting a settlement when its ledger row is deleted*: the money still moved; the row was probably a duplicate cleanup. The FK sets the column null instead.

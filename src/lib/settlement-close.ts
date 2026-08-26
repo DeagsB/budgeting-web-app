@@ -35,7 +35,11 @@ export async function closePeriod(
   return { periodId, statement }
 }
 
-/** "You owe X $Y" to each member with a login; household-wide fallback. */
+/**
+ * "You owe X $Y" to each member with a login. Members without a login can see
+ * nothing, so they get nothing; the household broadcast is reserved for the
+ * "all square" case, which is household-level news.
+ */
 export async function notifyPeriodClosed(db: SupabaseClient, householdId: string, periodId: string, lines: NetBalance[]): Promise<void> {
   const { data: hh } = await db.from('households').select('notification_prefs').eq('id', householdId).maybeSingle()
   const prefs = (hh?.notification_prefs as { settlement_period?: boolean } | null) ?? {}
@@ -44,7 +48,7 @@ export async function notifyPeriodClosed(db: SupabaseClient, householdId: string
   const { data: members } = await db.from('members').select('id, display_name, user_id').eq('household_id', householdId)
   const name = new Map((members ?? []).map((m) => [m.id as string, m.display_name as string]))
   const userOf = new Map((members ?? []).map((m) => [m.id as string, (m.user_id as string | null) ?? null]))
-  const url = `/settlements?period=${periodId}`
+  const url = `/shared?period=${periodId}`
 
   if (lines.length === 0) {
     await sendPushToHousehold(householdId, { title: 'Shared expenses closed', body: 'All square this period. Nothing to settle.', url, tag: `maple-settle-${periodId}` })
@@ -61,19 +65,9 @@ export async function notifyPeriodClosed(db: SupabaseClient, householdId: string
     )
   }
 
-  let sentToSomeone = false
   for (const [memberId, msgs] of perMember) {
     const uid = userOf.get(memberId)
     if (!uid) continue
-    sentToSomeone = true
     await sendPushToUsers([uid], { title: 'Time to settle up', body: msgs.join(' · '), url, tag: `maple-settle-${periodId}` })
-  }
-  if (!sentToSomeone) {
-    await sendPushToHousehold(householdId, {
-      title: 'Time to settle up',
-      body: lines.map((l) => `${name.get(l.from_member_id) ?? 'Member'} owes ${name.get(l.to_member_id) ?? 'Member'} ${formatMoney(l.net_cents)}`).join(' · '),
-      url,
-      tag: `maple-settle-${periodId}`,
-    })
   }
 }

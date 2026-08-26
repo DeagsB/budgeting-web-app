@@ -21,8 +21,8 @@ export function accountTypeLabel(type: string): string {
 }
 
 export const ACCOUNT_OWNERSHIP = [
-  { value: 'member', label: 'Member' },
-  { value: 'shared', label: 'Shared' },
+  { value: 'member', label: 'Mine' },
+  { value: 'shared', label: 'Joint' },
 ] as const
 
 export type AccountOwnership = (typeof ACCOUNT_OWNERSHIP)[number]['value']

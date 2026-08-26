@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card'
 import { MapleLabel } from '@/components/ui/label'
 import { Amount } from '@/components/ui/amount'
 import { formatDate } from '@/lib/format'
-import { DeleteSettlementButton } from './delete-button'
+import { DeleteSettlementButton, UnmatchSettlementButton } from './delete-button'
 import type { LineVM } from './period-card'
 
 export type PeriodVM = {
@@ -16,7 +16,16 @@ export type PeriodVM = {
   closedByName: string | null
   lines: LineVM[]
   totalNetCents: number
-  settlements: { id: string; fromName: string; toName: string; amount_cents: number; settled_on: string; note: string | null }[]
+  settlements: {
+    id: string
+    fromName: string
+    toName: string
+    amount_cents: number
+    settled_on: string
+    note: string | null
+    /** Evidenced by a bank row on at least one side. */
+    fromLedger: boolean
+  }[]
 }
 
 export function PeriodHistory({ periods, highlightId }: { periods: PeriodVM[]; highlightId: string | null }) {
@@ -82,12 +91,12 @@ export function PeriodHistory({ periods, highlightId }: { periods: PeriodVM[]; h
                             </div>
                             <div className="text-[11.5px] text-ink-3">
                               {formatDate(s.settled_on)}
-                              {s.note ? ` · ${s.note}` : ''}
+                              {s.fromLedger ? ' · from the ledger' : s.note ? ` · ${s.note}` : ''}
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
                             <Amount cents={s.amount_cents} tone="leaf" className="text-[14px]" />
-                            <DeleteSettlementButton id={s.id} />
+                            {s.fromLedger ? <UnmatchSettlementButton id={s.id} /> : <DeleteSettlementButton id={s.id} />}
                           </div>
                         </li>
                       ))}

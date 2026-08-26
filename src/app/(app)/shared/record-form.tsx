@@ -14,11 +14,14 @@ type Suggestion = {
 
 export function RecordSettlementForm({
   members,
+  myMemberId,
   defaultDate,
   suggestion,
   periodId = null,
 }: {
   members: Member[]
+  /** The signed-in member; preselected as the payer when there is no suggestion. */
+  myMemberId: string | null
   defaultDate: string
   suggestion: Suggestion
   /** Open period the payment attaches to. */
@@ -29,7 +32,7 @@ export function RecordSettlementForm({
     undefined,
   )
 
-  const defaultFrom = suggestion?.from_member_id ?? members[0]?.id ?? ''
+  const defaultFrom = suggestion?.from_member_id ?? myMemberId ?? members[0]?.id ?? ''
   const defaultTo =
     suggestion?.to_member_id ?? members.find((m) => m.id !== defaultFrom)?.id ?? ''
   const defaultAmount =

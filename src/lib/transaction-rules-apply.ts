@@ -10,6 +10,13 @@ import {
   type RuleTxInput,
   type TransactionRule,
 } from '@/lib/transaction-rules'
+import {
+  candidateMember,
+  decide,
+  loadSettlementMatchContext,
+  persistSettlementMatch,
+  type SettlementMatchContext,
+} from '@/lib/settlement-detect'
 
 /**
  * Persist rule effects for a set of transactions. Works with either the
@@ -25,6 +32,10 @@ export type ApplyRulesResult = {
   shared: number
   categorized: number
   skippedManual: number
+  /** Settlements recorded or linked from the ledger. */
+  settled: number
+  /** Payment candidates that need a person to confirm the counterparty. */
+  paymentPrompts: number
 }
 
 export type RuleContext = { rules: TransactionRule[]; members: WeightedMember[] }
@@ -35,7 +46,7 @@ export async function loadRuleContext(db: SupabaseClient, householdId: string): 
   const [{ data: rules }, { data: members }] = await Promise.all([
     db
       .from('transaction_rules')
-      .select('id, household_id, name, enabled, sort_order, match_text, amount_min_cents, amount_max_cents, account_id, direction, share_mode, share_weights, category_id')
+      .select('id, household_id, name, enabled, sort_order, match_text, amount_min_cents, amount_max_cents, account_id, direction, share_mode, share_weights, category_id, is_settlement')
       .eq('household_id', householdId)
       .eq('enabled', true)
       .order('sort_order'),
@@ -56,6 +67,7 @@ export async function loadRuleContext(db: SupabaseClient, householdId: string): 
       share_mode: r.share_mode as TransactionRule['share_mode'],
       share_weights: (r.share_weights as Record<string, number> | null) ?? null,
       category_id: (r.category_id as string | null) ?? null,
+      is_settlement: Boolean(r.is_settlement),
     })),
     members: (members ?? []).map((m) => ({ id: m.id as string, weight: Number(m.split_weight ?? 1) })),
   }
@@ -68,7 +80,7 @@ export async function applyRulesToTransactions(
   opts: ApplyRulesOptions = {},
   ctx?: RuleContext,
 ): Promise<ApplyRulesResult> {
-  const result: ApplyRulesResult = { considered: 0, matched: 0, shared: 0, categorized: 0, skippedManual: 0 }
+  const result: ApplyRulesResult = { considered: 0, matched: 0, shared: 0, categorized: 0, skippedManual: 0, settled: 0, paymentPrompts: 0 }
   const ids = Array.from(new Set(txIds.filter(Boolean)))
   if (ids.length === 0) return result
 
@@ -76,13 +88,30 @@ export async function applyRulesToTransactions(
   const rules = opts.onlyRuleIds ? context.rules.filter((r) => opts.onlyRuleIds!.includes(r.id)) : context.rules
   if (rules.length === 0) return result
 
+  // Settlement matching needs the whole statement; load it once, only if a
+  // settlement rule actually matches something in this run.
+  const hasSettlementRule = rules.some((r) => r.is_settlement)
+  let settlementCtx: SettlementMatchContext | null = null
+
   for (let i = 0; i < ids.length; i += CHUNK) {
     const chunk = ids.slice(i, i + CHUNK)
     const [{ data: txs }, { data: shares }, { data: splits }] = await Promise.all([
-      db.from('transactions').select('id, description, amount_cents, account_id, member_id').eq('household_id', householdId).in('id', chunk),
+      db
+        .from('transactions')
+        .select('id, description, amount_cents, account_id, member_id, occurred_on, settlement_ignored')
+        .eq('household_id', householdId)
+        .in('id', chunk),
       db.from('transaction_shares').select('transaction_id, member_id, amount_cents, rule_id').in('transaction_id', chunk),
       db.from('transaction_splits').select('id, transaction_id, category_id, category_rule_id').in('transaction_id', chunk),
     ])
+    const accountOwner = new Map<string, string | null>()
+    if (hasSettlementRule) {
+      const accountIds = Array.from(new Set((txs ?? []).map((t) => t.account_id as string)))
+      if (accountIds.length > 0) {
+        const { data: accounts } = await db.from('accounts').select('id, member_id').in('id', accountIds)
+        for (const a of accounts ?? []) accountOwner.set(a.id as string, (a.member_id as string | null) ?? null)
+      }
+    }
 
     const sharesByTx = new Map<string, ExistingShare[]>()
     for (const s of shares ?? []) {
@@ -107,8 +136,30 @@ export async function applyRulesToTransactions(
         member_id: (row.member_id as string | null) ?? null,
       }
       const fx = resolveRuleEffects(rules, tx)
-      if (!fx.shareRule && !fx.categoryRule) continue
+      if (!fx.shareRule && !fx.categoryRule && !fx.settlementRule) continue
       result.matched += 1
+
+      if (fx.settlementRule) {
+        // A payment between members: link it to a settlement already on the
+        // books, record it against the line it pays off, or leave it for a
+        // person to confirm. Rows someone marked "not a payment" and rows
+        // already evidencing a settlement are never touched again.
+        const member = candidateMember(tx, accountOwner)
+        if (member && !row.settlement_ignored) {
+          settlementCtx ??= await loadSettlementMatchContext(db, householdId)
+          if (!settlementCtx.linkedTxIds.has(tx.id)) {
+            const candidate = { transaction_id: tx.id, member_id: member, amount_cents: tx.amount_cents, occurred_on: row.occurred_on as string }
+            const m = decide(settlementCtx, candidate)
+            if (m.kind === 'prompt') result.paymentPrompts += 1
+            else {
+              result.settled += 1
+              if (!opts.dryRun) {
+                await persistSettlementMatch(db, householdId, candidate, m, settlementCtx, `Matched from ${tx.description ?? 'the ledger'}`.slice(0, 500))
+              }
+            }
+          }
+        }
+      }
 
       if (fx.shareRule) {
         const weights = resolveShareWeights(fx.shareRule, context.members)

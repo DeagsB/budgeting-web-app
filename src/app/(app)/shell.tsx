@@ -40,7 +40,6 @@ const DESTS = [
   { href: '/accounts',       label: 'Accounts',      tabLabel: 'Accounts',     icon: AccountsIcon,    group: 'main'    },
   // Split & settle - shared-money tasks.
   { href: '/shared',         label: 'Shared expenses', tabLabel: 'Shared',     icon: SharedIcon,      group: 'split'   },
-  { href: '/settlements',    label: 'Settle up',     tabLabel: 'Settle',       icon: SettlementsIcon, group: 'split'   },
   { href: '/rules',          label: 'Rules',         tabLabel: 'Rules',        icon: RulesIcon,       group: 'split'   },
   // Reports - read-only financial statements.
   { href: '/pnl',            label: 'Profit & Loss', tabLabel: 'P&L',          icon: ChartIcon,       group: 'reports' },
@@ -85,7 +84,6 @@ const ROUTE_TITLES: Record<string, { title: string; parent?: string }> = {
   '/budgets':                            { title: 'Budgets' },
   '/accounts':                           { title: 'Accounts' },
   '/shared':                             { title: 'Shared expenses' },
-  '/settlements':                        { title: 'Settle up' },
   '/rules':                              { title: 'Rules' },
   '/pnl':                                { title: 'Profit & Loss' },
   '/balance-sheet':                      { title: 'Balance sheet' },
@@ -863,14 +861,6 @@ function RulesIcon({ active }: { active: boolean }) {
   )
 }
 
-function SettlementsIcon({ active }: { active: boolean }) {
-  return (
-    <svg {...iconProps(active)} aria-hidden>
-      <path d="M4 8h16M4 8l4-4M4 8l4 4" />
-      <path d="M20 16H4M20 16l-4-4M20 16l-4 4" />
-    </svg>
-  )
-}
 function ChartIcon({ active }: { active: boolean }) {
   return (
     <svg {...iconProps(active)} aria-hidden>

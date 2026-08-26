@@ -30,17 +30,12 @@ export default async function AccountsPage({
   // the SAME current balances (opening/snapshot anchor + transactions) that
   // the dashboard, balance sheet and net-worth views show - not the opening
   // balances, which drift from reality the moment a transaction lands.
-  const [{ data: accounts }, { data: members }, { data: snapshots }, { data: txData }] = await Promise.all([
+  const [{ data: accounts }, { data: snapshots }, { data: txData }] = await Promise.all([
     supabase
       .from('accounts')
-      .select('id, name, type, ownership, member_id, opening_balance_cents, last_four, archived_at')
+      .select('id, name, type, ownership, opening_balance_cents, last_four, archived_at')
       .eq('household_id', ctx.householdId)
       .order('name'),
-    supabase
-      .from('members')
-      .select('id, display_name')
-      .eq('household_id', ctx.householdId)
-      .order('sort_order'),
     supabase
       .from('account_balance_snapshots')
       .select('account_id, balance_cents, as_of_month')
@@ -53,7 +48,6 @@ export default async function AccountsPage({
       .limit(20000),
   ])
 
-  const memberName = new Map((members ?? []).map((m) => [m.id, m.display_name]))
   const visible = (accounts ?? []).filter((a) => (showArchived ? a.archived_at : !a.archived_at))
   const archivedCount = (accounts ?? []).filter((a) => a.archived_at).length
 
@@ -89,8 +83,6 @@ export default async function AccountsPage({
     else assetsCents += cents
   }
   const netCents = assetsCents - owingCents
-
-  const memberList = (members ?? []).map((m) => ({ id: m.id, name: m.display_name }))
 
   return (
     <div className="flex flex-col gap-6 pb-10">
@@ -142,7 +134,7 @@ export default async function AccountsPage({
       {!showArchived && (
         <Card>
           <MapleLabel>Add account</MapleLabel>
-          <AddAccountForm members={memberList} />
+          <AddAccountForm canOwn={ctx.memberId !== null} />
         </Card>
       )}
 
@@ -177,13 +169,10 @@ export default async function AccountsPage({
                   type: a.type,
                   typeLabel: accountTypeLabel(a.type),
                   ownership: a.ownership,
-                  member_id: a.member_id,
-                  memberName: a.member_id ? (memberName.get(a.member_id) ?? null) : null,
                   opening_balance_cents: Number(a.opening_balance_cents),
                   last_four: a.last_four ?? null,
                   archived: !!a.archived_at,
                 }}
-                members={memberList}
               />
             ))}
           </ul>
