@@ -15,7 +15,7 @@ export default async function PlaidSetupPage() {
   const [{ data: items }, { data: accounts }, { data: members }, { data: log }] = await Promise.all([
     supabase
       .from('plaid_items')
-      .select('id, institution_name, status, last_synced_at, error_detail, created_at')
+      .select('id, institution_name, status, last_synced_at, error_detail, needs_account_review, created_at')
       .eq('household_id', ctx.householdId)
       .neq('status', 'removed')
       .order('created_at', { ascending: true }),
@@ -118,6 +118,7 @@ export default async function PlaidSetupPage() {
           status: it.status,
           lastSyncedAt: it.last_synced_at,
           errorDetail: it.error_detail,
+          needsAccountReview: it.needs_account_review === true,
         }))}
         accounts={(accounts ?? []).map((a) => ({
           id: a.id,

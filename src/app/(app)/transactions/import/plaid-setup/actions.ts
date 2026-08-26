@@ -12,7 +12,8 @@ import {
   encryptToken,
   decryptToken,
 } from '@/lib/plaid'
-import { syncPlaidItem } from '@/lib/plaid-sync'
+import { syncPlaidItem, type SyncTrigger } from '@/lib/plaid-sync'
+import { getPlaidEnv } from '@/lib/env'
 import type { AccountType } from '@/lib/domain'
 
 const MAX_ITEMS = 10 // Plaid free Trial tier cap.
@@ -48,7 +49,12 @@ export type AccountMapping = {
 
 export type MapState = { ok: true } | { error: string } | undefined
 export type PlaidSyncNowState =
-  | { ok: true; added: number; reconciled: number; loginRequired: boolean }
+  | { ok: true; added: number; reconciled: number; loginRequired: boolean; skipped: boolean }
+  | { error: string }
+  | undefined
+
+export type RefreshAccountsState =
+  | { ok: true; accounts: PlaidAccountChoice[] }
   | { error: string }
   | undefined
 
@@ -65,7 +71,10 @@ function plaidSubtypeToAccountType(type: string, subtype: string | null): Accoun
 
 async function webhookUrl(): Promise<string | undefined> {
   if (process.env.PLAID_WEBHOOK_URL) return process.env.PLAID_WEBHOOK_URL
-  // Derive from the request host (parallels the email test-webhook helper).
+  // Production must register an explicit URL (validated at boot); deriving it
+  // from request headers would let a spoofed Host register an attacker's URL.
+  if (getPlaidEnv() === 'production') return undefined
+  // Sandbox/dev convenience: derive from the request host (tunnel-friendly).
   const h = await headers()
   const proto = h.get('x-forwarded-proto') ?? 'https'
   const host = h.get('x-forwarded-host') ?? h.get('host')
@@ -175,8 +184,9 @@ export async function exchangePublicToken(
     const accessToken = exchange.data.access_token
     const plaidItemId = exchange.data.item_id
 
-    const supabase = await createClient()
-    const { data: itemRow, error: itemErr } = await supabase
+    // plaid_items is read-only for member sessions; the service role writes it
+    // after the household check above (getHouseholdContext) has passed.
+    const { data: itemRow, error: itemErr } = await service
       .from('plaid_items')
       .insert({
         household_id: ctx.householdId,
@@ -196,7 +206,7 @@ export async function exchangePublicToken(
     })
     if (secretErr) {
       // Roll back the orphan item so the user can retry cleanly.
-      await supabase.from('plaid_items').delete().eq('id', itemRow.id)
+      await service.from('plaid_items').delete().eq('id', itemRow.id)
       return { error: secretErr.message }
     }
 
@@ -310,9 +320,10 @@ export async function disconnectItem(itemRowId: string): Promise<{ ok: true } | 
     .update({ plaid_account_id: null, plaid_item_id: null })
     .eq('plaid_item_id', itemRowId)
     .eq('household_id', ctx.householdId)
-  await supabase
+  if (!service) return { error: 'Server is missing SUPABASE_SERVICE_ROLE_KEY.' }
+  await service
     .from('plaid_items')
-    .update({ status: 'removed', error_detail: null })
+    .update({ status: 'removed', error_detail: null, needs_account_review: false })
     .eq('id', itemRowId)
     .eq('household_id', ctx.householdId)
 
@@ -320,9 +331,14 @@ export async function disconnectItem(itemRowId: string): Promise<{ ok: true } | 
   return { ok: true }
 }
 
-// ─── Manual "Sync now" ──────────────────────────────────────────────────────
+// ─── New accounts at an already-linked bank ─────────────────────────────────
 
-export async function triggerPlaidSync(itemRowId?: string): Promise<PlaidSyncNowState> {
+/**
+ * Plaid's NEW_ACCOUNTS_AVAILABLE flags an item; this fetches the item's
+ * accounts and returns the ones not yet mapped so the wizard can reuse the
+ * mapping step. Clears the flag once the user has seen them.
+ */
+export async function refreshItemAccounts(itemRowId: string): Promise<RefreshAccountsState> {
   const ctx = await getHouseholdContext()
   if (!ctx) return { error: 'Not authorized.' }
   const plaid = createPlaidClient()
@@ -330,25 +346,93 @@ export async function triggerPlaidSync(itemRowId?: string): Promise<PlaidSyncNow
   const service = createServiceClient()
   if (!service) return { error: 'Server is missing SUPABASE_SERVICE_ROLE_KEY.' }
 
+  const supabase = await createClient()
+  const [{ data: item }, { data: mapped }] = await Promise.all([
+    supabase.from('plaid_items').select('id').eq('id', itemRowId).eq('household_id', ctx.householdId).maybeSingle(),
+    supabase.from('accounts').select('plaid_account_id').eq('plaid_item_id', itemRowId).eq('household_id', ctx.householdId),
+  ])
+  if (!item) return { error: 'Bank not found.' }
+
+  const { data: secret } = await service
+    .from('plaid_item_secrets')
+    .select('access_token_encrypted')
+    .eq('item_id', itemRowId)
+    .maybeSingle()
+  if (!secret?.access_token_encrypted) return { error: 'Missing access token. Reconnect the bank.' }
+
+  try {
+    const already = new Set((mapped ?? []).map((a) => a.plaid_account_id as string | null).filter(Boolean))
+    const resp = await plaid.accountsGet({ access_token: decryptToken(secret.access_token_encrypted as string) })
+    const accounts: PlaidAccountChoice[] = resp.data.accounts
+      .filter((a) => !already.has(a.account_id))
+      .map((a) => ({
+        plaid_account_id: a.account_id,
+        name: a.name,
+        mask: a.mask ?? null,
+        type: String(a.type),
+        subtype: a.subtype ? String(a.subtype) : null,
+        suggestedType: plaidSubtypeToAccountType(String(a.type), a.subtype ? String(a.subtype) : null),
+      }))
+    await service.from('plaid_items').update({ needs_account_review: false }).eq('id', itemRowId)
+    revalidatePath('/transactions/import/plaid-setup')
+    return { ok: true, accounts }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Could not load accounts.' }
+  }
+}
+
+// ─── Manual "Sync now" ──────────────────────────────────────────────────────
+
+/**
+ * Sync one item or every syncable item in the household. `minIntervalMs`
+ * (used by pull-to-refresh) skips items synced more recently than that so the
+ * gesture cannot hammer Plaid; the pull path also treats "nothing linked" as a
+ * quiet no-op rather than an error.
+ */
+export async function triggerPlaidSync(
+  itemRowId?: string,
+  opts: { trigger?: Exclude<SyncTrigger, 'webhook' | 'cron'>; minIntervalMs?: number } = {},
+): Promise<PlaidSyncNowState> {
+  const trigger = opts.trigger ?? 'manual'
+  const quiet = trigger === 'pull'
+  const noop: PlaidSyncNowState = { ok: true, added: 0, reconciled: 0, loginRequired: false, skipped: true }
+
+  const ctx = await getHouseholdContext()
+  if (!ctx) return quiet ? noop : { error: 'Not authorized.' }
+  const plaid = createPlaidClient()
+  if (!plaid) return quiet ? noop : { error: 'Plaid isn’t configured on this server.' }
+  const service = createServiceClient()
+  if (!service) return { error: 'Server is missing SUPABASE_SERVICE_ROLE_KEY.' }
+
   let query = service
     .from('plaid_items')
-    .select('id, household_id, item_id, cursor')
+    .select('id, household_id, item_id, cursor, status, last_synced_at')
     .eq('household_id', ctx.householdId)
-    .neq('status', 'removed')
+    .in('status', ['active', 'error'])
   if (itemRowId) query = query.eq('id', itemRowId)
   const { data: items } = await query
-  if (!items || items.length === 0) return { error: 'No connected banks to sync.' }
+  if (!items || items.length === 0) return quiet ? noop : { error: 'No connected banks to sync.' }
 
+  const cutoff = opts.minIntervalMs ? Date.now() - opts.minIntervalMs : null
   let added = 0
   let reconciled = 0
   let loginRequired = false
+  let ran = 0
   for (const it of items) {
-    const res = await syncPlaidItem(service, plaid, {
-      id: it.id as string,
-      household_id: it.household_id as string,
-      item_id: it.item_id as string,
-      cursor: (it.cursor as string | null) ?? null,
-    })
+    const last = it.last_synced_at ? Date.parse(it.last_synced_at as string) : 0
+    if (cutoff !== null && last > cutoff) continue
+    ran += 1
+    const res = await syncPlaidItem(
+      service,
+      plaid,
+      {
+        id: it.id as string,
+        household_id: it.household_id as string,
+        item_id: it.item_id as string,
+        cursor: (it.cursor as string | null) ?? null,
+      },
+      { trigger },
+    )
     added += res.added
     reconciled += res.reconciled
     if (res.status === 'login_required') loginRequired = true
@@ -357,5 +441,5 @@ export async function triggerPlaidSync(itemRowId?: string): Promise<PlaidSyncNow
   revalidatePath('/transactions/import/plaid-setup')
   revalidatePath('/transactions')
   revalidatePath('/dashboard')
-  return { ok: true, added, reconciled, loginRequired }
+  return { ok: true, added, reconciled, loginRequired, skipped: ran === 0 }
 }

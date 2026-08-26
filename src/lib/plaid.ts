@@ -6,6 +6,7 @@ import {
   Products,
 } from 'plaid'
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
+import { getPlaidEnv } from '@/lib/env'
 
 /**
  * Server-only Plaid helpers. Mirrors src/lib/supabase/service.ts: returns null
@@ -22,8 +23,9 @@ export function createPlaidClient(): PlaidApi | null {
   const secret = process.env.PLAID_SECRET
   if (!clientId || !secret) return null
 
-  const envName = (process.env.PLAID_ENV ?? 'sandbox').toLowerCase()
-  const basePath = PlaidEnvironments[envName] ?? PlaidEnvironments.sandbox
+  // Resolved (and validated) centrally so an unset/misspelled PLAID_ENV can
+  // never silently point production at the sandbox API.
+  const basePath = PlaidEnvironments[getPlaidEnv()]
 
   return new PlaidApi(
     new Configuration({

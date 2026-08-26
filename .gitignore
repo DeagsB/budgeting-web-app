@@ -64,3 +64,5 @@ next-env.d.ts
 /pwa-*.png
 /smart-*.png
 
+/plaid-setup-*.png
+/plaid-*.png

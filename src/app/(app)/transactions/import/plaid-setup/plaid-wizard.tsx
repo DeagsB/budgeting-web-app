@@ -12,6 +12,7 @@ import {
   exchangePublicToken,
   saveAccountMapping,
   disconnectItem,
+  refreshItemAccounts,
   triggerPlaidSync,
   type PlaidAccountChoice,
   type AccountMapping,
@@ -23,6 +24,7 @@ type ItemView = {
   status: string
   lastSyncedAt: string | null
   errorDetail: string | null
+  needsAccountReview: boolean
 }
 type AccountView = {
   id: string
@@ -229,6 +231,24 @@ export function PlaidWizard({
     })
   }
 
+  function reviewAccounts(itemId: string) {
+    setError(null)
+    setNotice(null)
+    start(async () => {
+      const res = await refreshItemAccounts(itemId)
+      if (res && 'ok' in res) {
+        if (res.accounts.length === 0) {
+          setNotice('No new accounts to add.')
+          router.refresh()
+          return
+        }
+        setMapping({ itemRowId: itemId, drafts: res.accounts.map((c) => initDraft(c, accounts)) })
+      } else {
+        setError((res && 'error' in res ? res.error : null) ?? 'Could not load accounts.')
+      }
+    })
+  }
+
   function syncNow(itemId?: string) {
     setError(null)
     setNotice(null)
@@ -238,7 +258,9 @@ export function PlaidWizard({
         setNotice(
           res.loginRequired
             ? 'A bank needs re-authentication.'
-            : `Synced — ${res.added} new, ${res.reconciled} enriched.`,
+            : res.skipped
+              ? 'Nothing to sync right now.'
+              : `Synced — ${res.added} new, ${res.reconciled} enriched.`,
         )
         router.refresh()
       } else {
@@ -480,7 +502,7 @@ export function PlaidWizard({
                     >
                       Sync now
                     </button>
-                    {it.status === 'login_required' && (
+                    {(it.status === 'login_required' || it.status === 'pending_disconnect') && (
                       <button
                         type="button"
                         onClick={() => reauth(it.id)}
@@ -488,6 +510,16 @@ export function PlaidWizard({
                         className="inline-flex min-h-[44px] items-center rounded-full border border-honey bg-paper-2 px-3 text-[12.5px] font-semibold text-down hover:underline disabled:opacity-50"
                       >
                         Re-authenticate
+                      </button>
+                    )}
+                    {it.needsAccountReview && it.status === 'active' && (
+                      <button
+                        type="button"
+                        onClick={() => reviewAccounts(it.id)}
+                        disabled={pending}
+                        className="inline-flex min-h-[44px] items-center rounded-full border border-honey bg-paper-2 px-3 text-[12.5px] font-semibold text-down hover:underline disabled:opacity-50"
+                      >
+                        Review new accounts
                       </button>
                     )}
                     <ConfirmButton
@@ -506,6 +538,16 @@ export function PlaidWizard({
                   </div>
                   {it.status === 'error' && it.errorDetail && (
                     <p className="text-[11.5px] text-maple">{it.errorDetail}</p>
+                  )}
+                  {it.status === 'revoked' && (
+                    <p className="text-[11.5px] text-ink-2">
+                      Access was revoked at the bank. Disconnect this entry, then add the bank again to reconnect.
+                    </p>
+                  )}
+                  {it.status === 'pending_disconnect' && (
+                    <p className="text-[11.5px] text-ink-2">
+                      The bank is about to drop this connection. Re-authenticate to keep syncing.
+                    </p>
                   )}
                 </li>
               )
@@ -545,6 +587,10 @@ function StatusPill({ status }: { status: string }) {
     active: { label: 'Active', cls: 'bg-leaf-soft text-leaf-deep' },
     ok: { label: 'OK', cls: 'bg-leaf-soft text-leaf-deep' },
     login_required: { label: 'Re-auth needed', cls: 'bg-paper-2 text-down' },
+    pending_disconnect: { label: 'Disconnecting soon', cls: 'bg-paper-2 text-down' },
+    revoked: { label: 'Access revoked', cls: 'bg-maple-soft text-maple' },
+    transient: { label: 'Bank busy', cls: 'bg-paper-2 text-ink-3' },
+    skipped_locked: { label: 'Already running', cls: 'bg-paper-2 text-ink-3' },
     error: { label: 'Error', cls: 'bg-maple-soft text-maple' },
     webhook_rejected: { label: 'Rejected', cls: 'bg-maple-soft text-maple' },
   }
