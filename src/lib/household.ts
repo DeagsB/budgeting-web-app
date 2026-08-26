@@ -1,29 +1,38 @@
+import { cache } from 'react'
 import { createClient } from '@/lib/supabase/server'
+
+export type HouseholdRole = 'owner' | 'admin' | 'member'
 
 export type HouseholdContext = {
   userId: string
   householdId: string
+  role: HouseholdRole
+  /** The member row linked to this login, or null if not claimed yet. */
+  memberId: string | null
 }
 
 /**
  * Returns the current user's household context, or null if they're unauthed
  * or haven't completed onboarding. Use this at the top of server components
- * and server actions that need household scoping.
+ * and server actions that need household scoping. Cached per request so the
+ * layout and page share one lookup.
  */
-export async function getHouseholdContext(): Promise<HouseholdContext | null> {
+export const getHouseholdContext = cache(async (): Promise<HouseholdContext | null> => {
   const supabase = await createClient()
   const { data: userData } = await supabase.auth.getUser()
   const user = userData?.user
-
   if (!user) return null
 
-  const { data: householdData } = await supabase
-    .from('household_users')
-    .select('household_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .maybeSingle()
+  const [{ data: hu }, { data: member }] = await Promise.all([
+    supabase.from('household_users').select('household_id, role').eq('user_id', user.id).limit(1).maybeSingle(),
+    supabase.from('members').select('id').eq('user_id', user.id).limit(1).maybeSingle(),
+  ])
 
-  if (!householdData?.household_id) return null
-  return { userId: user.id, householdId: householdData.household_id }
+  if (!hu?.household_id) return null
+  const role = (hu.role as HouseholdRole) ?? 'member'
+  return { userId: user.id, householdId: hu.household_id as string, role, memberId: (member?.id as string | null) ?? null }
+})
+
+export function canManageHousehold(ctx: Pick<HouseholdContext, 'role'>): boolean {
+  return ctx.role === 'owner' || ctx.role === 'admin'
 }

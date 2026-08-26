@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { acceptErrorMessage } from '@/lib/invitations'
 
 export type OnboardingState = { error: string } | undefined
 
@@ -35,4 +36,15 @@ export async function createHousehold(
 
   revalidatePath('/', 'layout')
   redirect('/dashboard')
+}
+
+/** Accept an invitation addressed to the signed-in email (no token needed). */
+export async function acceptInvitationById(fd: FormData): Promise<{ ok: true } | { error: string }> {
+  const id = String(fd.get('id') ?? '')
+  if (!id) return { error: 'Missing invitation.' }
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('accept_invitation_by_id', { invitation_id: id })
+  if (error) return { error: acceptErrorMessage(error.message) }
+  revalidatePath('/', 'layout')
+  return { ok: true }
 }

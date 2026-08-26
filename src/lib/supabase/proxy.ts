@@ -50,6 +50,9 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith('/sign-in') ||
     pathname.startsWith('/sign-up') ||
     pathname.startsWith('/auth') ||
+    // Invitation landing page previews the invite signed-out and offers
+    // sign-in / sign-up; acceptance itself requires a session.
+    pathname.startsWith('/invite') ||
     // Public ingestion webhooks authenticate via per-household secret in the
     // request body, not via cookies — don't bounce unauth callers to /sign-in.
     pathname.startsWith('/api/ingest') ||

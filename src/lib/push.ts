@@ -1,6 +1,10 @@
 // Web Push fan-out. All functions are best-effort and never throw — a push
 // failure must never break the webhook that triggered it. Sends use the
 // service-role client (bypasses RLS) and prune dead subscriptions.
+//
+// Recipient scoping mirrors row security: a transaction on a member-owned
+// account only reaches that member's login; shared-account transactions and
+// household-level events (budgets, alerts, settlements) reach everyone.
 
 import webpush from 'web-push'
 import { createServiceClient } from '@/lib/supabase/service'
@@ -14,6 +18,7 @@ export type NotificationPrefs = {
   large_threshold_cents?: number
   budget_overspend?: boolean
   unmatched_alert?: boolean
+  settlement_period?: boolean
 }
 
 let configured: boolean | null = null
@@ -31,26 +36,17 @@ function ensureConfigured(): boolean {
   return true
 }
 
-/** Send a payload to every subscription in a household; prune 404/410s. */
-export async function sendPushToHousehold(householdId: string, payload: PushPayload): Promise<void> {
-  if (!ensureConfigured()) return
+type SubRow = { id: string; endpoint: string; p256dh: string; auth: string }
+
+async function deliver(subs: SubRow[], payload: PushPayload): Promise<void> {
+  if (subs.length === 0) return
   const service = createServiceClient()
   if (!service) return
-
-  const { data: subs } = await service
-    .from('push_subscriptions')
-    .select('id, endpoint, p256dh, auth')
-    .eq('household_id', householdId)
-  if (!subs || subs.length === 0) return
-
   const body = JSON.stringify(payload)
   await Promise.all(
     subs.map(async (s) => {
       try {
-        await webpush.sendNotification(
-          { endpoint: s.endpoint as string, keys: { p256dh: s.p256dh as string, auth: s.auth as string } },
-          body,
-        )
+        await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, body)
       } catch (e: unknown) {
         const code = (e as { statusCode?: number })?.statusCode
         if (code === 404 || code === 410) {
@@ -59,6 +55,38 @@ export async function sendPushToHousehold(householdId: string, payload: PushPayl
       }
     }),
   )
+}
+
+/** Send a payload to every subscription in a household. */
+export async function sendPushToHousehold(householdId: string, payload: PushPayload): Promise<void> {
+  if (!ensureConfigured()) return
+  const service = createServiceClient()
+  if (!service) return
+  const { data: subs } = await service
+    .from('push_subscriptions')
+    .select('id, endpoint, p256dh, auth')
+    .eq('household_id', householdId)
+  await deliver((subs ?? []) as SubRow[], payload)
+}
+
+/** Send a payload to specific logins only. */
+export async function sendPushToUsers(userIds: string[], payload: PushPayload): Promise<void> {
+  if (userIds.length === 0 || !ensureConfigured()) return
+  const service = createServiceClient()
+  if (!service) return
+  const { data: subs } = await service
+    .from('push_subscriptions')
+    .select('id, endpoint, p256dh, auth')
+    .in('user_id', userIds)
+  await deliver((subs ?? []) as SubRow[], payload)
+}
+
+/** Resolve a member's login, or null if the member has none. */
+export async function userIdForMember(memberId: string): Promise<string | null> {
+  const service = createServiceClient()
+  if (!service) return null
+  const { data } = await service.from('members').select('user_id').eq('id', memberId).maybeSingle()
+  return (data?.user_id as string | null) ?? null
 }
 
 async function getPrefs(householdId: string): Promise<NotificationPrefs> {
@@ -75,11 +103,18 @@ async function getPrefs(householdId: string): Promise<NotificationPrefs> {
 /**
  * Notify about a freshly-inserted transaction. Fires when `new_transaction` is
  * on, or when `large_transaction` is on and the amount clears the threshold.
- * amountCents is signed (positive = outflow).
+ * amountCents is signed (positive = outflow). Reaches only the owner of a
+ * member-owned account; shared accounts reach the whole household.
  */
 export async function notifyTransactionInserted(
   householdId: string,
-  tx: { amountCents: number; accountName: string | null; description: string | null },
+  tx: {
+    amountCents: number
+    accountName: string | null
+    description: string | null
+    /** Member who owns the account (null for shared accounts). */
+    ownerMemberId?: string | null
+  },
 ): Promise<void> {
   const prefs = await getPrefs(householdId)
   const abs = Math.abs(tx.amountCents)
@@ -91,12 +126,20 @@ export async function notifyTransactionInserted(
   const isOutflow = tx.amountCents >= 0
   const signed = `${isOutflow ? '−' : '+'}${formatMoney(abs)}`
   const where = tx.accountName ? ` · ${tx.accountName}` : ''
-  await sendPushToHousehold(householdId, {
+  const payload: PushPayload = {
     title: tx.description?.trim() || (isOutflow ? 'New transaction' : 'Money in'),
     body: `${signed}${where}`,
     url: '/transactions',
     tag: 'maple-transaction',
-  })
+  }
+
+  if (tx.ownerMemberId) {
+    const userId = await userIdForMember(tx.ownerMemberId)
+    // A member with no login has nobody to tell privately; fall back to the
+    // household, which is exactly who can see that account under RLS.
+    if (userId) return sendPushToUsers([userId], payload)
+  }
+  await sendPushToHousehold(householdId, payload)
 }
 
 /** Notify that a bank-alert email matched no rule, so the user adds one. */

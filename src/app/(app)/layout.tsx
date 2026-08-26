@@ -14,14 +14,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const ctx = await getHouseholdContext()
   if (!ctx) redirect('/onboarding')
 
-  const { data: household } = await supabase
-    .from('households')
-    .select('name')
-    .eq('id', ctx.householdId)
-    .single()
+  const [{ data: household }, { data: me }] = await Promise.all([
+    supabase.from('households').select('name').eq('id', ctx.householdId).single(),
+    ctx.memberId
+      ? supabase.from('members').select('display_name').eq('id', ctx.memberId).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ])
 
   return (
-    <AppShell householdName={household?.name ?? 'Household'} userEmail={user.email ?? ''}>
+    <AppShell
+      householdName={household?.name ?? 'Household'}
+      userEmail={user.email ?? ''}
+      memberName={(me?.display_name as string | null) ?? null}
+    >
       {children}
     </AppShell>
   )

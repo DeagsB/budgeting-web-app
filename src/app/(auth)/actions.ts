@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { safeNextPath } from '@/lib/invitations'
 
 export type AuthState = { error: string } | undefined
 
@@ -23,26 +24,34 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
   if (error) return { error: error.message }
 
   revalidatePath('/', 'layout')
-  redirect(String(formData.get('next') || '/dashboard'))
+  redirect(safeNextPath(String(formData.get('next') || '')))
 }
 
 export async function signUp(_prev: AuthState, formData: FormData): Promise<AuthState> {
   const v = validate(formData)
   if (typeof v === 'string') return { error: v }
 
+  // An invitation link carries ?next=/invite/<token>; keep it through the
+  // confirmation email so the invitee lands back on the accept page.
+  const next = safeNextPath(String(formData.get('next') || ''))
+  const site = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+  const confirmUrl =
+    next === '/dashboard' ? `${site}/auth/confirm` : `${site}/auth/confirm?next=${encodeURIComponent(next)}`
+
   const supabase = await createClient()
   const { data, error } = await supabase.auth.signUp({
     email: v.email,
     password: v.password,
     options: {
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'}/auth/confirm`,
+      emailRedirectTo: confirmUrl,
+      data: { has_password: true },
     },
   })
   if (error) return { error: error.message }
 
   revalidatePath('/', 'layout')
   // Email-confirmation off → session is live immediately; skip the "check email" page.
-  if (data.session) redirect('/onboarding')
+  if (data.session) redirect(next === '/dashboard' ? '/onboarding' : next)
   redirect('/sign-up/check-email')
 }
 

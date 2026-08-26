@@ -29,6 +29,7 @@ export function TxControls({
   accounts,
   categories,
   members,
+  defaultMemberId = null,
 }: {
   month: string
   search: string
@@ -38,6 +39,8 @@ export function TxControls({
   accounts: Account[]
   categories: Category[]
   members: Member[]
+  /** The signed-in member, preselected as payer in the add form. */
+  defaultMemberId?: string | null
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -198,6 +201,7 @@ export function TxControls({
           accounts={accounts}
           categories={categories}
           members={members}
+          defaultMemberId={defaultMemberId}
           onSaved={() => setAddOpen(false)}
         />
       </Sheet>

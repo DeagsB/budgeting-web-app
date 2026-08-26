@@ -16,12 +16,15 @@ export function AddTransactionForm({
   accounts,
   categories,
   members,
+  defaultMemberId = null,
   onSaved,
 }: {
   defaultDate: string
   accounts: { id: string; name: string }[]
   categories: { id: string; parent_id: string | null; name: string }[]
   members: { id: string; name: string }[]
+  /** Preselect the signed-in member as payer. */
+  defaultMemberId?: string | null
   onSaved?: () => void
 }) {
   const [state, formAction, pending] = useActionState<TransactionState, FormData>(
@@ -96,7 +99,7 @@ export function AddTransactionForm({
         </Field>
 
         <Field label="Member" span={2}>
-          <select name="member_id" className="maple-select">
+          <select name="member_id" className="maple-select" defaultValue={defaultMemberId ?? ''}>
             <option value="">Shared</option>
             {members.map((m) => (
               <option key={m.id} value={m.id}>

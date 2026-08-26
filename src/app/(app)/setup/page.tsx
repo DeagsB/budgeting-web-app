@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { getHouseholdContext } from '@/lib/household'
+import { getHouseholdContext, canManageHousehold } from '@/lib/household'
 import { PageHeader } from '@/components/ui/page-header'
 import { Card } from '@/components/ui/card'
 import { MapleLabel } from '@/components/ui/label'
@@ -18,11 +18,11 @@ export default async function SetupPage() {
   if (!ctx) return null
   const supabase = await createClient()
 
-  const [{ data: household }, { data: members }, { data: categories }] = await Promise.all([
+  const [{ data: household }, { data: members }, { data: categories }, { data: invites }] = await Promise.all([
     supabase.from('households').select('id, name, notification_prefs').eq('id', ctx.householdId).single(),
     supabase
       .from('members')
-      .select('id, display_name, sort_order, archived_at')
+      .select('id, display_name, sort_order, archived_at, user_id')
       .eq('household_id', ctx.householdId)
       .order('sort_order'),
     supabase
@@ -30,7 +30,17 @@ export default async function SetupPage() {
       .select('id, parent_id, name, rollover_enabled, sort_order, archived_at')
       .eq('household_id', ctx.householdId)
       .order('sort_order'),
+    supabase
+      .from('household_invitations')
+      .select('id, member_id, email, expires_at')
+      .eq('household_id', ctx.householdId)
+      .is('accepted_at', null)
+      .is('revoked_at', null)
+      .gt('expires_at', new Date().toISOString()),
   ])
+  const inviteByMember = new Map(
+    (invites ?? []).map((i) => [i.member_id as string, { id: i.id as string, email: i.email as string, expiresAt: i.expires_at as string }]),
+  )
 
   return (
     <div className="flex flex-col gap-6 pb-10">
@@ -47,12 +57,20 @@ export default async function SetupPage() {
 
       <Card padding="lg">
         <MapleLabel>Members</MapleLabel>
+        <p className="mt-1 text-[13px] text-ink-2">
+          Each member can have their own login. They see their own accounts plus anything marked shared.
+        </p>
         <MembersList
           members={(members ?? []).map((m) => ({
             id: m.id,
             name: m.display_name,
             archived: !!m.archived_at,
+            linked: !!m.user_id,
+            isMe: m.user_id === ctx.userId,
+            pendingInvite: inviteByMember.get(m.id) ?? null,
           }))}
+          canManage={canManageHousehold(ctx)}
+          myMemberId={ctx.memberId}
         />
       </Card>
 

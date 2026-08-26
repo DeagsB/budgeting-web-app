@@ -159,7 +159,7 @@ export default async function SettlementsPage({
           title="Add a second member to settle up"
           body="Settlements track who owes whom between household members, so you need at least two before there's anything to square up."
           action={
-            <Link href="/members">
+            <Link href="/setup">
               <Button variant="primary" size="md">
                 Manage members
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>

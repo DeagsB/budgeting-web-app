@@ -108,6 +108,7 @@ type InsertedRow = {
   amount_cents: number
   category_id: string | null
   accountName: string | null
+  ownerMemberId: string | null
   occurred_on: string
   description: string | null
   pending: boolean
@@ -404,6 +405,7 @@ export async function syncPlaidItem(
         amount_cents: r.amount_cents,
         category_id: suggestCategory(r.description, catIndex),
         accountName: r.accountName,
+        ownerMemberId: r.member_id,
         occurred_on: r.occurred_on,
         description: r.description,
         pending: r.pending,
@@ -483,6 +485,7 @@ export async function syncPlaidItem(
       amountCents: row.amount_cents,
       accountName: row.accountName,
       description: row.description,
+      ownerMemberId: row.ownerMemberId,
     })
     await notifyBudgetOverspendIfCrossed(item.household_id, {
       amountCents: row.amount_cents,

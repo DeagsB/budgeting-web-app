@@ -145,10 +145,12 @@ function loadTabs(): string[] {
 export function AppShell({
   householdName,
   userEmail,
+  memberName = null,
   children,
 }: {
   householdName: string
   userEmail: string
+  memberName?: string | null
   children: React.ReactNode
 }) {
   const pathname = usePathname()
@@ -286,6 +288,9 @@ export function AppShell({
         </nav>
 
         <div className="mt-4 border-t border-[var(--color-hair)] pt-4">
+          {memberName && (
+            <div className="truncate font-serif text-[15px] text-[var(--color-ink)]">{memberName}</div>
+          )}
           <div className="truncate text-[12px] text-[var(--color-ink-2)]">{userEmail}</div>
           <form action={signOut} className="mt-2">
             <button
@@ -401,7 +406,10 @@ export function AppShell({
               <div className="flex items-baseline justify-between">
                 <div>
                   <div className="font-serif text-[20px] tracking-[-0.02em]">More</div>
-                  <div className="truncate text-[11.5px] text-[var(--color-ink-2)]">{userEmail}</div>
+                  <div className="truncate text-[11.5px] text-[var(--color-ink-2)]">
+                    {memberName ? `${memberName} · ` : ''}
+                    {userEmail}
+                  </div>
                 </div>
                 <button
                   type="button"

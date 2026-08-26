@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { OnboardingForm } from './form'
+import { PendingInvites, type PendingInvite } from './pending-invites'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +14,13 @@ export default async function OnboardingPage() {
 
   const ctx = await getHouseholdContext()
   if (ctx) redirect('/dashboard')
+
+  const { data: inviteRows } = await supabase.rpc('my_pending_invitations')
+  const invites = ((inviteRows as PendingInvite[] | null) ?? []).map((i) => ({
+    id: i.id,
+    household_name: i.household_name,
+    member_name: i.member_name,
+  }))
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-[var(--color-cream)] text-[var(--color-ink)]">
@@ -63,6 +71,7 @@ export default async function OnboardingPage() {
         {/* Form card */}
         <section className="mt-8 md:mt-0 md:flex-1">
           <div className="rounded-[24px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-6 shadow-[var(--shadow-float)] md:p-8">
+            <PendingInvites invites={invites} />
             <OnboardingForm />
           </div>
           <p className="mt-4 px-1 text-[12px] leading-relaxed text-[var(--color-ink-3)]">

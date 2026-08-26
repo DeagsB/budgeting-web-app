@@ -338,6 +338,7 @@ export default async function DashboardPage() {
     <DashboardClient
       householdName={household.name}
       members={members.map((m) => ({ id: m.id, name: m.display_name, initial: m.display_name[0] ?? '?' }))}
+      myMemberId={ctx.memberId}
       currentMonthISO={currentMonth}
       netWorth={netWorth}
       netWorthDelta={netWorthDelta}

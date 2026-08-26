@@ -100,6 +100,7 @@ type RangeId = (typeof RANGES)[number]['id']
 export function DashboardClient({
   householdName: _householdName,
   members,
+  myMemberId = null,
   currentMonthISO,
   netWorth,
   netWorthDelta,
@@ -119,6 +120,8 @@ export function DashboardClient({
 }: {
   householdName: string
   members: MemberVM[]
+  /** The signed-in member; the greeting addresses them, not the first row. */
+  myMemberId?: string | null
   currentMonthISO: string
   netWorth: number
   netWorthDelta: number
@@ -190,7 +193,8 @@ export function DashboardClient({
   const displayedLabel = scrubPoint ? monthLabel(scrubPoint.month) : 'vs last month'
   const deltaUp = netWorthDelta >= 0
 
-  const firstName = members[0]?.name?.split(' ')[0] ?? 'there'
+  const me = members.find((m) => m.id === myMemberId) ?? members[0]
+  const firstName = me?.name?.split(' ')[0] ?? 'there'
 
   // Every dashboard section is built into the widgets map below. The return
   // statement just iterates `layout` — that's what makes reorder work.

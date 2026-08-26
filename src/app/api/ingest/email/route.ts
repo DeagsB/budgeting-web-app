@@ -197,6 +197,7 @@ export async function POST(request: NextRequest) {
     amountCents: tx.amount_cents,
     accountName,
     description: tx.description,
+    ownerMemberId: tx.member_id ?? null,
   })
   await notifyBudgetOverspendIfCrossed(householdId, {
     amountCents: tx.amount_cents,

@@ -275,6 +275,7 @@ export default async function TransactionsPage({
           accounts={accountOptions}
           categories={categoryOptions}
           members={memberOptions}
+          defaultMemberId={ctx.memberId}
         />
       )}
 

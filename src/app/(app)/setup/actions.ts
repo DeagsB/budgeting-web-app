@@ -57,11 +57,13 @@ export async function archiveMember(fd: FormData) {
   if (!h) return
   const id = String(fd.get('id') ?? '')
   if (!id) return
+  // A linked member is someone's identity; remove their login first.
   await h.supabase
     .from('members')
     .update({ archived_at: new Date().toISOString() })
     .eq('id', id)
     .eq('household_id', h.ctx.householdId)
+    .is('user_id', null)
   revalidatePath('/setup')
 }
 
