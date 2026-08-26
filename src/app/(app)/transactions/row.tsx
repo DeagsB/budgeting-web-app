@@ -8,6 +8,8 @@ import { SplitEditor } from './split-editor'
 import { ConfirmButton } from '@/components/ui/confirm-button'
 import { Amount } from '@/components/ui/amount'
 import { Button } from '@/components/ui/button'
+import { RuleSheet, type RuleSheetMember } from '@/app/(app)/rules/rule-sheet'
+import { prefillRuleFromTransaction } from '@/lib/transaction-rules'
 
 type TransactionVM = {
   id: string
@@ -21,6 +23,7 @@ type TransactionVM = {
   categorySummary: string
   isSplit: boolean
   isShared: boolean
+  isRuleShared?: boolean
   splits: { category_id: string | null; amount_cents: number }[]
   member_id: string | null
   memberName: string | null
@@ -31,6 +34,7 @@ export function TransactionRow({
   accounts,
   categories,
   members,
+  memberWeights,
   isUncategorized = false,
   topCategoryIds = [],
 }: {
@@ -38,12 +42,15 @@ export function TransactionRow({
   accounts: { id: string; name: string }[]
   categories: { id: string; parent_id: string | null; name: string }[]
   members: { id: string; name: string }[]
+  /** Members with household split weights, for the "Always share" rule sheet. */
+  memberWeights?: RuleSheetMember[]
   isUncategorized?: boolean
   topCategoryIds?: string[]
 }) {
   const [editing, setEditing] = useState(false)
   const [showSplits, setShowSplits] = useState(false)
   const [categorizing, setCategorizing] = useState(false)
+  const [ruleOpen, setRuleOpen] = useState(false)
 
   // ───────── EDIT MODE ─────────
   if (editing) {
@@ -185,7 +192,7 @@ export function TransactionRow({
               )}
               {t.isShared && (
                 <span className="ml-1.5 inline-flex items-center rounded-full bg-leaf-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-leaf">
-                  Shared
+                  {t.isRuleShared ? 'Auto-shared' : 'Shared'}
                 </span>
               )}
             </div>
@@ -242,6 +249,13 @@ export function TransactionRow({
             >
               Edit
             </button>
+            <button
+              type="button"
+              onClick={() => setRuleOpen(true)}
+              className="inline-flex min-h-[44px] items-center rounded-md px-2 font-semibold text-leaf-deep transition-colors hover:bg-leaf-soft"
+            >
+              Always share
+            </button>
             <ConfirmButton
               action={deleteTransaction}
               formData={{ id: t.id }}
@@ -278,6 +292,26 @@ export function TransactionRow({
           />
         </div>
       )}
+
+      <RuleSheet
+        open={ruleOpen}
+        onClose={() => setRuleOpen(false)}
+        initial={
+          ruleOpen
+            ? prefillRuleFromTransaction({
+                id: t.id,
+                description: t.description,
+                amount_cents: t.amount_cents,
+                account_id: t.account_id,
+                member_id: t.member_id,
+                category_id: t.primary_category_id,
+              })
+            : null
+        }
+        accounts={accounts}
+        categories={categories}
+        members={memberWeights ?? members.map((m) => ({ ...m, weight: 1 }))}
+      />
     </li>
   )
 }

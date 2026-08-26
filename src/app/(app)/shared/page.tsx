@@ -24,7 +24,7 @@ type Txn = {
   description: string | null
   member_id: string | null
 }
-type Share = { id: string; transaction_id: string; member_id: string; amount_cents: number }
+type Share = { id: string; transaction_id: string; member_id: string; amount_cents: number; rule_id: string | null }
 
 export default async function SharedPage({
   searchParams,
@@ -41,7 +41,7 @@ export default async function SharedPage({
 
   const supabase = await createClient()
 
-  const [{ data: accounts }, { data: members }] = await Promise.all([
+  const [{ data: accounts }, { data: members }, { data: categories }, { data: rules }] = await Promise.all([
     supabase
       .from('accounts')
       .select('id, name, type, member_id, ownership')
@@ -50,13 +50,24 @@ export default async function SharedPage({
       .order('name'),
     supabase
       .from('members')
-      .select('id, display_name')
+      .select('id, display_name, split_weight')
       .eq('household_id', ctx.householdId)
+      .is('archived_at', null)
       .order('sort_order'),
+    supabase
+      .from('categories')
+      .select('id, parent_id, name')
+      .eq('household_id', ctx.householdId)
+      .is('archived_at', null)
+      .order('sort_order'),
+    supabase.from('transaction_rules').select('id, name').eq('household_id', ctx.householdId),
   ])
 
   const accountRows = (accounts ?? []) as Account[]
-  const memberRows = (members ?? []) as Member[]
+  const memberRows = (members ?? []) as (Member & { split_weight: number | null })[]
+  const categoryRows = (categories ?? []).map((c) => ({ id: c.id as string, parent_id: (c.parent_id as string | null) ?? null, name: c.name as string }))
+  const ruleName = new Map((rules ?? []).map((r) => [r.id as string, r.name as string]))
+  const memberWeights = memberRows.map((m) => ({ id: m.id, name: m.display_name, weight: Number(m.split_weight ?? 1) }))
 
   const selectedAccountId =
     params.account ??
@@ -115,7 +126,7 @@ export default async function SharedPage({
       .order('created_at', { ascending: false }),
     supabase
       .from('transaction_shares')
-      .select('id, transaction_id, member_id, amount_cents, transaction:transactions!inner(account_id, occurred_on)')
+      .select('id, transaction_id, member_id, amount_cents, rule_id, transaction:transactions!inner(account_id, occurred_on)')
       .eq('household_id', ctx.householdId)
       .eq('transaction.account_id', selectedAccountId)
       .gte('transaction.occurred_on', month)
@@ -128,6 +139,7 @@ export default async function SharedPage({
     transaction_id: s.transaction_id,
     member_id: s.member_id,
     amount_cents: Number(s.amount_cents),
+    rule_id: (s.rule_id as string | null) ?? null,
   }))
 
   const sharesByTx = new Map<string, Share[]>()
@@ -273,6 +285,14 @@ export default async function SharedPage({
                     payerName,
                   }}
                   members={memberRows.map((m) => ({ id: m.id, name: m.display_name }))}
+                  memberWeights={memberWeights}
+                  accounts={accountRows.map((a) => ({ id: a.id, name: a.name }))}
+                  categories={categoryRows}
+                  accountId={selectedAccountId}
+                  ruleName={(() => {
+                    const rid = txShares.find((s) => s.rule_id)?.rule_id
+                    return rid ? (ruleName.get(rid) ?? 'a rule') : null
+                  })()}
                   shares={txShares.map((s) => ({
                     member_id: s.member_id,
                     amount_cents: s.amount_cents,

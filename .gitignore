@@ -68,3 +68,5 @@ next-env.d.ts
 /plaid-*.png
 /setup-*.png
 /invite-*.png
+/rules-*.png
+/shared-*.png

@@ -1,10 +1,13 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { formatMoney } from '@/lib/format'
 import { Amount } from '@/components/ui/amount'
 import { Button } from '@/components/ui/button'
 import { toggleShared, saveShareOverride, clearShares } from './actions'
+import { RuleSheet, type RuleSheetMember } from '@/app/(app)/rules/rule-sheet'
+import { prefillRuleFromTransaction } from '@/lib/transaction-rules'
 
 type Txn = {
   id: string
@@ -20,14 +23,27 @@ type Member = { id: string; name: string }
 export function SharedRow({
   transaction: t,
   members,
+  memberWeights,
+  accounts,
+  categories,
+  accountId,
+  ruleName,
   shares,
 }: {
   transaction: Txn
   members: Member[]
+  memberWeights: RuleSheetMember[]
+  accounts: { id: string; name: string }[]
+  categories: { id: string; parent_id: string | null; name: string }[]
+  accountId: string
+  /** Name of the rule that produced these shares, if any. */
+  ruleName: string | null
   shares: { member_id: string; amount_cents: number }[]
 }) {
   const [pending, startTransition] = useTransition()
   const [editing, setEditing] = useState(false)
+  const [ruleOpen, setRuleOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const isShared = shares.length > 0
 
   // Positive amount = expense (outflow). Sign in the list follows the Maple
@@ -48,7 +64,8 @@ export function SharedRow({
         <form
           action={(fd) =>
             startTransition(async () => {
-              await toggleShared(fd)
+              const res = await toggleShared(fd)
+              setError(res && 'error' in res ? res.error : null)
             })
           }
           className="-my-2 -ml-2 shrink-0"
@@ -98,11 +115,23 @@ export function SharedRow({
                 <span className="inline-flex items-center rounded-full bg-leaf-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-leaf">
                   Split {splitCount}-way
                 </span>
+                {ruleName && (
+                  <span className="inline-flex items-center rounded-full bg-paper-2 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-ink-2">
+                    Rule · {ruleName}
+                  </span>
+                )}
               </>
             )}
+            {shareSum > totalAbs && (
+              <span className="inline-flex items-center rounded-full bg-maple-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-maple">
+                Shares exceed total
+              </span>
+            )}
           </div>
-          {isShared && (
-            <div className="mt-1 flex items-center gap-1 text-[12px]">
+          {error && <p className="mt-1 text-[12px] font-medium text-maple">{error}</p>}
+          <div className="mt-1 flex flex-wrap items-center gap-1 text-[12px]">
+            {isShared && (
+              <>
               <button
                 type="button"
                 onClick={() => setEditing((v) => !v)}
@@ -116,7 +145,8 @@ export function SharedRow({
               <form
                 action={(fd) =>
                   startTransition(async () => {
-                    await clearShares(fd)
+                    const res = await clearShares(fd)
+                    setError(res && 'error' in res ? res.error : null)
                   })
                 }
               >
@@ -130,10 +160,43 @@ export function SharedRow({
                   Clear
                 </button>
               </form>
-            </div>
-          )}
+              <span aria-hidden className="text-ink-3">
+                ·
+              </span>
+              </>
+            )}
+            {ruleName ? (
+              <Link
+                href="/rules"
+                className="inline-flex min-h-[44px] items-center font-semibold text-leaf-deep underline-offset-2 hover:underline"
+              >
+                Manage rules
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setRuleOpen(true)}
+                className="inline-flex min-h-[44px] items-center font-semibold text-leaf-deep underline-offset-2 hover:underline"
+              >
+                Always share
+              </button>
+            )}
+          </div>
         </div>
       </div>
+
+      <RuleSheet
+        open={ruleOpen}
+        onClose={() => setRuleOpen(false)}
+        initial={
+          ruleOpen
+            ? prefillRuleFromTransaction({ id: t.id, description: t.description, amount_cents: t.amount_cents, account_id: accountId, member_id: t.payer_id })
+            : null
+        }
+        accounts={accounts}
+        categories={categories}
+        members={memberWeights}
+      />
 
       {isShared && editing && (
         <div className="border-t border-hair bg-cream-2 px-5 py-5">
@@ -199,6 +262,7 @@ function SplitEditor({
     return seed
   })
   const [pending, startTransition] = useTransition()
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const sum = Object.values(amounts).reduce((s, v) => s + v, 0)
   const leftover = totalAbs - sum
@@ -218,8 +282,9 @@ function SplitEditor({
     <form
       action={(fd) =>
         startTransition(async () => {
-          await saveShareOverride(fd)
-          onClose()
+          const res = await saveShareOverride(fd)
+          if (res && 'error' in res) setSaveError(res.error)
+          else onClose()
         })
       }
       className="flex flex-col gap-4"
@@ -308,6 +373,8 @@ function SplitEditor({
           {formatMoney(totalAbs)}).
         </p>
       )}
+
+      {saveError && <p className="text-[12.5px] font-medium text-maple">{saveError}</p>}
 
       <div className="flex items-center gap-3 pt-1">
         <Button type="submit" variant="primary" disabled={pending || overshoot}>

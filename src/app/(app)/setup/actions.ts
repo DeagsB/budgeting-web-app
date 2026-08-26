@@ -139,3 +139,32 @@ export async function unarchiveCategory(fd: FormData) {
     .eq('household_id', h.ctx.householdId)
   revalidateCategoryConsumers()
 }
+
+// ───────── household split ratio ─────────
+
+export async function saveSplitWeights(fd: FormData): Promise<{ ok: true } | { error: string }> {
+  const h = await hh()
+  if (!h) return { error: 'Not authorized.' }
+  const { data: members } = await h.supabase
+    .from('members')
+    .select('id')
+    .eq('household_id', h.ctx.householdId)
+    .is('archived_at', null)
+  const updates: { id: string; weight: number }[] = []
+  for (const m of members ?? []) {
+    const raw = fd.get(`weight:${m.id}`)
+    if (raw === null) continue
+    const w = Math.floor(Number(String(raw)))
+    if (!Number.isFinite(w) || w < 0) return { error: 'Weights must be whole numbers, zero or more.' }
+    updates.push({ id: m.id as string, weight: w })
+  }
+  if (updates.length > 0 && updates.every((u) => u.weight === 0)) return { error: 'At least one member needs a weight above zero.' }
+  for (const u of updates) {
+    const { error } = await h.supabase.from('members').update({ split_weight: u.weight }).eq('id', u.id).eq('household_id', h.ctx.householdId)
+    if (error) return { error: error.message }
+  }
+  revalidatePath('/setup')
+  revalidatePath('/shared')
+  revalidatePath('/rules')
+  return { ok: true }
+}

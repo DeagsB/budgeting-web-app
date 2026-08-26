@@ -10,6 +10,7 @@ import {
 } from '@/lib/statement-reconcile'
 import { cleanTitle } from '@/lib/title'
 import { notifyTransactionInserted, notifyBudgetOverspendIfCrossed } from '@/lib/push'
+import { applyRulesToTransactions, loadRuleContext } from '@/lib/transaction-rules-apply'
 import {
   classifyPlaidError,
   isUniqueViolation,
@@ -294,6 +295,7 @@ export async function syncPlaidItem(
   let reconciledCount = 0
   let insertFailed = 0
   const inserted: InsertedRow[] = []
+  const reconciledIds: string[] = []
 
   if (addedRows.length > 0) {
     const dates = addedRows.map((r) => r.occurred_on).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort()
@@ -374,6 +376,7 @@ export async function syncPlaidItem(
           continue
         }
         reconciledCount += 1
+        reconciledIds.push(m.matchedTxId)
         continue
       }
 
@@ -429,9 +432,18 @@ export async function syncPlaidItem(
     }
   }
 
+  // 5b. Household rules on everything new or newly-titled.
+  const ruleCtx = await loadRuleContext(db, item.household_id)
+  const ruleTargets = [...inserted.map((row) => row.id), ...reconciledIds]
+  if (ruleTargets.length > 0 && ruleCtx.rules.length > 0) {
+    await applyRulesToTransactions(db, item.household_id, ruleTargets, {}, ruleCtx)
+  }
+
   // 6. UPDATES (Plaid `modified`): money/date/title follow the bank; splits
-  //    and shares are only touched when it is unambiguous.
+  //    and shares are only touched when it is unambiguous. Rule-managed
+  //    shares are re-derived against the new amount; manual ones are flagged.
   const modifiedRows = plan.updates.map(toStaged).filter((r): r is StagedRow => r !== null)
+  const modifiedIds: string[] = []
   for (const r of modifiedRows) {
     const { data: row } = await db
       .from('transactions')
@@ -451,6 +463,10 @@ export async function syncPlaidItem(
       })
       .eq('id', row.id as string)
     if (amountChanged) await applyAmountChange(db, item.household_id, row.id as string, r.amount_cents)
+    modifiedIds.push(row.id as string)
+  }
+  if (modifiedIds.length > 0 && ruleCtx.rules.length > 0) {
+    await applyRulesToTransactions(db, item.household_id, modifiedIds, {}, ruleCtx)
   }
 
   // 7. DELETES: whatever Plaid removed that was not a migrated pending id.
@@ -515,7 +531,8 @@ export async function syncPlaidItem(
 async function applyAmountChange(db: Db, householdId: string, txId: string, newAmount: number): Promise<void> {
   const [{ data: splits }, { count: shareCount }] = await Promise.all([
     db.from('transaction_splits').select('id, amount_cents').eq('transaction_id', txId).eq('household_id', householdId),
-    db.from('transaction_shares').select('id', { count: 'exact', head: true }).eq('transaction_id', txId),
+    // Only hand-entered shares need a human; rule shares are recomputed.
+    db.from('transaction_shares').select('id', { count: 'exact', head: true }).eq('transaction_id', txId).is('rule_id', null),
   ])
   const splitPlan = planSplitUpdate(
     (splits ?? []).map((s) => ({ id: s.id as string, amount_cents: Number(s.amount_cents) })),

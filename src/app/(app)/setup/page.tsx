@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card'
 import { MapleLabel } from '@/components/ui/label'
 import { HouseholdForm } from './household-form'
 import { MembersList } from './members-list'
+import { SplitWeightsForm } from './split-weights-form'
 import { CategoriesList } from './categories-list'
 import { NotificationSettings } from './notifications'
 import { DEFAULT_PREFS, type NotificationPrefs } from './notification-prefs'
@@ -22,7 +23,7 @@ export default async function SetupPage() {
     supabase.from('households').select('id, name, notification_prefs').eq('id', ctx.householdId).single(),
     supabase
       .from('members')
-      .select('id, display_name, sort_order, archived_at, user_id')
+      .select('id, display_name, sort_order, archived_at, user_id, split_weight')
       .eq('household_id', ctx.householdId)
       .order('sort_order'),
     supabase
@@ -71,6 +72,15 @@ export default async function SetupPage() {
           }))}
           canManage={canManageHousehold(ctx)}
           myMemberId={ctx.memberId}
+        />
+      </Card>
+
+      <Card padding="lg">
+        <MapleLabel>Default split</MapleLabel>
+        <SplitWeightsForm
+          members={(members ?? [])
+            .filter((m) => !m.archived_at)
+            .map((m) => ({ id: m.id, name: m.display_name, weight: Number(m.split_weight ?? 1) }))}
         />
       </Card>
 

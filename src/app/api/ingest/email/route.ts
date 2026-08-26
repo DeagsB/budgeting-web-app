@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
+import { applyRulesToTransactions } from '@/lib/transaction-rules-apply'
 import { parseEmail, type IngestEmail, type IngestRule } from '@/lib/email-ingest'
 import {
   notifyTransactionInserted,
@@ -179,6 +180,10 @@ export async function POST(request: NextRequest) {
     amount_cents: tx.amount_cents,
     sort_order: 0,
   })
+
+  // Household rules (auto-share / auto-categorise) - same engine as every
+  // other ingest path.
+  await applyRulesToTransactions(service, householdId, [inserted!.id as string])
 
   await service.from('email_ingestion_log').insert({
     household_id: householdId,

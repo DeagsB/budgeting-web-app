@@ -1,18 +1,20 @@
 'use client'
 
-import { useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { shareAllUnflagged, unshareAll } from './actions'
 import { ConfirmButton } from '@/components/ui/confirm-button'
 
 export function BulkActions({ accountId, month }: { accountId: string; month: string }) {
   const [pending, startTransition] = useTransition()
+  const [note, setNote] = useState<string | null>(null)
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       <form
         action={(fd) =>
           startTransition(async () => {
-            await shareAllUnflagged(fd)
+            const res = await shareAllUnflagged(fd)
+            setNote(res && 'error' in res ? res.error : null)
           })
         }
       >
@@ -30,7 +32,10 @@ export function BulkActions({ accountId, month }: { accountId: string; month: st
         </button>
       </form>
       <ConfirmButton
-        action={unshareAll}
+        action={async (fd) => {
+          const res = await unshareAll(fd)
+          setNote(res && 'error' in res ? res.error : null)
+        }}
         formData={{ account_id: accountId, month }}
         prompt="Unshare every transaction on this account this month?"
         description="Each transaction reverts to single-member ownership. The original transactions are not deleted."
@@ -40,6 +45,7 @@ export function BulkActions({ accountId, month }: { accountId: string; month: st
       >
         Unshare all
       </ConfirmButton>
+      {note && <p className="w-full text-[12px] font-medium text-maple">{note}</p>}
     </div>
   )
 }

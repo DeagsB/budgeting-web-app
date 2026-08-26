@@ -4,24 +4,42 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { parseMoneyToCents } from '@/lib/format'
+import { splitByWeights, type WeightedMember } from '@/lib/share-split'
+
+export type ShareActionState = { error: string } | undefined
 
 function revalidate() {
   revalidatePath('/shared')
   revalidatePath('/settlements')
   revalidatePath('/transactions')
+  revalidatePath('/rules')
+}
+
+type Db = Awaited<ReturnType<typeof createClient>>
+
+/** Active members with their household split weight, in display order. */
+export async function loadActiveWeightedMembers(db: Db, householdId: string): Promise<WeightedMember[]> {
+  const { data } = await db
+    .from('members')
+    .select('id, split_weight')
+    .eq('household_id', householdId)
+    .is('archived_at', null)
+    .order('sort_order')
+  return (data ?? []).map((m) => ({ id: m.id as string, weight: Number(m.split_weight ?? 1) }))
 }
 
 /**
- * Toggle "shared" on a transaction. If no shares exist, create equal-split
- * shares for every other household member (excluding the payer). If any
- * shares exist, delete them all (unshare).
+ * Toggle "shared" on a transaction. If no shares exist, create shares by the
+ * household ratio for every other active member. If any shares exist, delete
+ * them all (unshare). Manual shares carry rule_id = null, which also converts
+ * a rule-shared transaction into a manual one so rules stop touching it.
  */
-export async function toggleShared(fd: FormData): Promise<void> {
+export async function toggleShared(fd: FormData): Promise<ShareActionState> {
   const transaction_id = String(fd.get('transaction_id') ?? '')
-  if (!transaction_id) return
+  if (!transaction_id) return { error: 'Missing transaction.' }
 
   const ctx = await getHouseholdContext()
-  if (!ctx) return
+  if (!ctx) return { error: 'Not authorized.' }
 
   const supabase = await createClient()
 
@@ -31,7 +49,7 @@ export async function toggleShared(fd: FormData): Promise<void> {
     .eq('id', transaction_id)
     .eq('household_id', ctx.householdId)
     .single()
-  if (!tx) return
+  if (!tx) return { error: 'Transaction not found.' }
 
   const { data: existing } = await supabase
     .from('transaction_shares')
@@ -39,41 +57,33 @@ export async function toggleShared(fd: FormData): Promise<void> {
     .eq('transaction_id', transaction_id)
 
   if ((existing ?? []).length > 0) {
-    await supabase.from('transaction_shares').delete().eq('transaction_id', transaction_id)
+    const { error } = await supabase.from('transaction_shares').delete().eq('transaction_id', transaction_id)
+    if (error) return { error: error.message }
     revalidate()
-    return
+    return undefined
   }
 
-  const { data: members } = await supabase
-    .from('members')
-    .select('id')
-    .eq('household_id', ctx.householdId)
-    .order('sort_order')
-
-  const memberIds = (members ?? []).map((m) => m.id)
-  const payerId = tx.member_id
-  const owees = memberIds.filter((id) => id !== payerId)
-  if (owees.length === 0) return
-
+  const members = await loadActiveWeightedMembers(supabase, ctx.householdId)
   const totalAbs = Math.abs(Number(tx.amount_cents))
-  if (totalAbs === 0) return
+  if (totalAbs === 0) return { error: 'Nothing to share on a zero-amount transaction.' }
 
-  const shareCount = payerId ? owees.length + 1 : owees.length
-  const base = Math.floor(totalAbs / shareCount)
-  const remainder = totalAbs - base * shareCount
-  // Payer (if any) absorbs the remainder to keep sums clean; each owee gets `base`.
-  // When payer is null, give the remainder to the first owee so shares still sum to total.
-  const rows = owees.map((id, idx) => ({
-    household_id: ctx.householdId,
-    transaction_id,
-    member_id: id,
-    amount_cents: !payerId && idx === 0 ? base + remainder : base,
-  }))
+  const rows = splitByWeights(totalAbs, tx.member_id, members)
+  if (rows.length === 0) {
+    return { error: members.length < 2 ? 'Add another member before sharing.' : 'The household ratio leaves nothing for anyone else to owe.' }
+  }
 
-  if (rows.every((r) => r.amount_cents === 0)) return
-
-  await supabase.from('transaction_shares').insert(rows)
+  const { error } = await supabase.from('transaction_shares').insert(
+    rows.map((r) => ({
+      household_id: ctx.householdId,
+      transaction_id,
+      member_id: r.member_id,
+      amount_cents: r.amount_cents,
+      rule_id: null,
+    })),
+  )
+  if (error) return { error: error.message }
   revalidate()
+  return undefined
 }
 
 /**
@@ -81,12 +91,12 @@ export async function toggleShared(fd: FormData): Promise<void> {
  * the form. Keys: `share:<memberId>` = amount in dollars. Zero / empty means
  * no share row for that member.
  */
-export async function saveShareOverride(fd: FormData): Promise<void> {
+export async function saveShareOverride(fd: FormData): Promise<ShareActionState> {
   const transaction_id = String(fd.get('transaction_id') ?? '')
-  if (!transaction_id) return
+  if (!transaction_id) return { error: 'Missing transaction.' }
 
   const ctx = await getHouseholdContext()
-  if (!ctx) return
+  if (!ctx) return { error: 'Not authorized.' }
 
   const supabase = await createClient()
 
@@ -96,12 +106,11 @@ export async function saveShareOverride(fd: FormData): Promise<void> {
     .eq('id', transaction_id)
     .eq('household_id', ctx.householdId)
     .single()
-  if (!tx) return
+  if (!tx) return { error: 'Transaction not found.' }
 
   const totalAbs = Math.abs(Number(tx.amount_cents))
 
-  const rows: { household_id: string; transaction_id: string; member_id: string; amount_cents: number }[] =
-    []
+  const rows: { household_id: string; transaction_id: string; member_id: string; amount_cents: number; rule_id: null }[] = []
   let sum = 0
   for (const [key, value] of fd.entries()) {
     const m = key.match(/^share:([0-9a-f-]+)$/)
@@ -111,44 +120,46 @@ export async function saveShareOverride(fd: FormData): Promise<void> {
     const cents = parseMoneyToCents(String(value))
     if (cents === null || cents <= 0) continue
     sum += cents
-    rows.push({
-      household_id: ctx.householdId,
-      transaction_id,
-      member_id,
-      amount_cents: cents,
-    })
+    rows.push({ household_id: ctx.householdId, transaction_id, member_id, amount_cents: cents, rule_id: null })
   }
 
-  if (sum > totalAbs) return // silently reject overshoot; UI should prevent this
+  if (sum > totalAbs) return { error: 'Shares exceed the transaction total.' }
 
-  await supabase.from('transaction_shares').delete().eq('transaction_id', transaction_id)
-  if (rows.length > 0) await supabase.from('transaction_shares').insert(rows)
+  const { error: delErr } = await supabase.from('transaction_shares').delete().eq('transaction_id', transaction_id)
+  if (delErr) return { error: delErr.message }
+  if (rows.length > 0) {
+    const { error } = await supabase.from('transaction_shares').insert(rows)
+    if (error) return { error: error.message }
+  }
   revalidate()
+  return undefined
 }
 
-export async function clearShares(fd: FormData): Promise<void> {
+export async function clearShares(fd: FormData): Promise<ShareActionState> {
   const transaction_id = String(fd.get('transaction_id') ?? '')
-  if (!transaction_id) return
+  if (!transaction_id) return { error: 'Missing transaction.' }
 
   const ctx = await getHouseholdContext()
-  if (!ctx) return
+  if (!ctx) return { error: 'Not authorized.' }
 
   const supabase = await createClient()
-  await supabase.from('transaction_shares').delete().eq('transaction_id', transaction_id)
+  const { error } = await supabase.from('transaction_shares').delete().eq('transaction_id', transaction_id)
+  if (error) return { error: error.message }
   revalidate()
+  return undefined
 }
 
 /**
  * Share all transactions matching the given (account_id, month) that don't
- * already have shares. Uses the same equal-split logic as toggleShared.
+ * already have shares, by the household ratio.
  */
-export async function shareAllUnflagged(fd: FormData): Promise<void> {
+export async function shareAllUnflagged(fd: FormData): Promise<ShareActionState> {
   const account_id = String(fd.get('account_id') ?? '')
   const month = String(fd.get('month') ?? '')
-  if (!account_id || !/^\d{4}-\d{2}-01$/.test(month)) return
+  if (!account_id || !/^\d{4}-\d{2}-01$/.test(month)) return { error: 'Missing account or month.' }
 
   const ctx = await getHouseholdContext()
-  if (!ctx) return
+  if (!ctx) return { error: 'Not authorized.' }
 
   const supabase = await createClient()
 
@@ -156,7 +167,7 @@ export async function shareAllUnflagged(fd: FormData): Promise<void> {
   nextMonth.setMonth(nextMonth.getMonth() + 1)
   const nextMonthISO = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}-01`
 
-  const [{ data: txs }, { data: members }] = await Promise.all([
+  const [{ data: txs }, members] = await Promise.all([
     supabase
       .from('transactions')
       .select('id, amount_cents, member_id')
@@ -164,15 +175,10 @@ export async function shareAllUnflagged(fd: FormData): Promise<void> {
       .eq('account_id', account_id)
       .gte('occurred_on', month)
       .lt('occurred_on', nextMonthISO),
-    supabase
-      .from('members')
-      .select('id')
-      .eq('household_id', ctx.householdId)
-      .order('sort_order'),
+    loadActiveWeightedMembers(supabase, ctx.householdId),
   ])
 
-  if (!txs || txs.length === 0) return
-  const memberIds = (members ?? []).map((m) => m.id)
+  if (!txs || txs.length === 0) return { error: 'No transactions in that month.' }
 
   const { data: existing } = await supabase
     .from('transaction_shares')
@@ -183,45 +189,30 @@ export async function shareAllUnflagged(fd: FormData): Promise<void> {
     )
   const alreadyShared = new Set((existing ?? []).map((e) => e.transaction_id))
 
-  const rowsToInsert: {
-    household_id: string
-    transaction_id: string
-    member_id: string
-    amount_cents: number
-  }[] = []
-
+  const rowsToInsert: { household_id: string; transaction_id: string; member_id: string; amount_cents: number; rule_id: null }[] = []
   for (const t of txs) {
     if (alreadyShared.has(t.id)) continue
     const totalAbs = Math.abs(Number(t.amount_cents))
     if (totalAbs === 0) continue
-    const payerId = t.member_id
-    const owees = memberIds.filter((id) => id !== payerId)
-    if (owees.length === 0) continue
-    const shareCount = payerId ? owees.length + 1 : owees.length
-    const base = Math.floor(totalAbs / shareCount)
-    const remainder = totalAbs - base * shareCount
-    owees.forEach((id, idx) => {
-      rowsToInsert.push({
-        household_id: ctx.householdId,
-        transaction_id: t.id,
-        member_id: id,
-        amount_cents: !payerId && idx === 0 ? base + remainder : base,
-      })
-    })
+    for (const r of splitByWeights(totalAbs, t.member_id, members)) {
+      rowsToInsert.push({ household_id: ctx.householdId, transaction_id: t.id, member_id: r.member_id, amount_cents: r.amount_cents, rule_id: null })
+    }
   }
 
-  if (rowsToInsert.length === 0) return
-  await supabase.from('transaction_shares').insert(rowsToInsert)
+  if (rowsToInsert.length === 0) return { error: 'Everything here is already shared.' }
+  const { error } = await supabase.from('transaction_shares').insert(rowsToInsert)
+  if (error) return { error: error.message }
   revalidate()
+  return undefined
 }
 
-export async function unshareAll(fd: FormData): Promise<void> {
+export async function unshareAll(fd: FormData): Promise<ShareActionState> {
   const account_id = String(fd.get('account_id') ?? '')
   const month = String(fd.get('month') ?? '')
-  if (!account_id || !/^\d{4}-\d{2}-01$/.test(month)) return
+  if (!account_id || !/^\d{4}-\d{2}-01$/.test(month)) return { error: 'Missing account or month.' }
 
   const ctx = await getHouseholdContext()
-  if (!ctx) return
+  if (!ctx) return { error: 'Not authorized.' }
 
   const supabase = await createClient()
   const nextMonth = new Date(month + 'T00:00:00')
@@ -236,15 +227,16 @@ export async function unshareAll(fd: FormData): Promise<void> {
     .gte('occurred_on', month)
     .lt('occurred_on', nextMonthISO)
 
-  if (!txs || txs.length === 0) return
+  if (!txs || txs.length === 0) return undefined
 
-  await supabase
+  const { error } = await supabase
     .from('transaction_shares')
     .delete()
     .in(
       'transaction_id',
       txs.map((t) => t.id),
     )
-
+  if (error) return { error: error.message }
   revalidate()
+  return undefined
 }

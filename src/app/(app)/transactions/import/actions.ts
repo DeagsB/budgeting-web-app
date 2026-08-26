@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
+import { applyRulesToTransactions } from '@/lib/transaction-rules-apply'
 import {
   reconcileRows,
   buildCategoryIndex,
@@ -159,6 +160,7 @@ export async function commitImport(
   const inserted: { id: string; amount_cents: number; category_id: string | null }[] = []
   let skipped = 0
   let reconciled = 0
+  const touchedIds: string[] = []
   for (const r of rows) {
     if (!r.occurred_on || !/^\d{4}-\d{2}-\d{2}$/.test(r.occurred_on)) continue
     if (!r.account_id) continue
@@ -176,6 +178,7 @@ export async function commitImport(
           .eq('household_id', ctx.householdId)
       }
       reconciled += 1
+      touchedIds.push(r.matched_tx_id)
       continue
     }
 
@@ -213,6 +216,12 @@ export async function commitImport(
         sort_order: 0,
       })),
     )
+  }
+
+  // Rules run on new rows and on alerts whose title the statement just upgraded.
+  const ruleTargets = [...inserted.map((row) => row.id), ...touchedIds]
+  if (ruleTargets.length > 0) {
+    await applyRulesToTransactions(supabase, ctx.householdId, ruleTargets)
   }
 
   revalidatePath('/transactions')

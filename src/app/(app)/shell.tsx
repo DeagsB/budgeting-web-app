@@ -34,6 +34,7 @@ const DESTS = [
   // Split & settle — shared-money tasks.
   { href: '/shared',         label: 'Shared expenses', tabLabel: 'Shared',     icon: SharedIcon,      group: 'split'   },
   { href: '/settlements',    label: 'Settle up',     tabLabel: 'Settle',       icon: SettlementsIcon, group: 'split'   },
+  { href: '/rules',          label: 'Rules',         tabLabel: 'Rules',        icon: RulesIcon,       group: 'split'   },
   // Reports — read-only financial statements.
   { href: '/pnl',            label: 'Profit & Loss', tabLabel: 'P&L',          icon: ChartIcon,       group: 'reports' },
   { href: '/balance-sheet',  label: 'Balance sheet', tabLabel: 'Balance',      icon: ScaleIcon,       group: 'reports' },
@@ -863,6 +864,15 @@ function SharedIcon({ active }: { active: boolean }) {
     </svg>
   )
 }
+function RulesIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M4 6h16M4 12h10M4 18h7" />
+      <path d="M17 15l2 2 4-4" />
+    </svg>
+  )
+}
+
 function SettlementsIcon({ active }: { active: boolean }) {
   return (
     <svg {...iconProps(active)} aria-hidden>

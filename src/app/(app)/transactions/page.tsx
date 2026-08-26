@@ -61,7 +61,7 @@ export default async function TransactionsPage({
         .order('sort_order'),
       supabase
         .from('members')
-        .select('id, display_name')
+        .select('id, display_name, split_weight')
         .eq('household_id', ctx.householdId)
         .order('sort_order'),
       supabase
@@ -101,6 +101,7 @@ export default async function TransactionsPage({
   const txIds = transactions.map((t) => t.id)
   let splitsList: Split[] = []
   let sharedTxIds = new Set<string>()
+  const ruleSharedTxIds = new Set<string>()
   if (txIds.length > 0) {
     const [{ data: sp }, { data: sh }] = await Promise.all([
       supabase
@@ -108,10 +109,11 @@ export default async function TransactionsPage({
         .select('transaction_id, category_id, amount_cents, sort_order')
         .in('transaction_id', txIds)
         .order('sort_order'),
-      supabase.from('transaction_shares').select('transaction_id').in('transaction_id', txIds),
+      supabase.from('transaction_shares').select('transaction_id, rule_id').in('transaction_id', txIds),
     ])
     splitsList = (sp ?? []) as Split[]
     sharedTxIds = new Set((sh ?? []).map((r) => r.transaction_id))
+    for (const r of sh ?? []) if (r.rule_id) ruleSharedTxIds.add(r.transaction_id)
   }
 
   if (params.category) {
@@ -152,6 +154,7 @@ export default async function TransactionsPage({
   const accountOptions = (accounts ?? []).map((a) => ({ id: a.id, name: a.name }))
   const categoryOptions = (categories ?? []).map((c) => ({ id: c.id, parent_id: c.parent_id, name: c.name }))
   const memberOptions = (members ?? []).map((m) => ({ id: m.id, name: m.display_name }))
+  const memberWeights = (members ?? []).map((m) => ({ id: m.id, name: m.display_name, weight: Number(m.split_weight ?? 1) }))
 
   // Most-used categories (ranked by recent usage, padded with the first few
   // categories so a fresh household still shows quick-pick chips).
@@ -353,6 +356,7 @@ export default async function TransactionsPage({
                             categorySummary,
                             isSplit: splits.length > 1,
                             isShared: sharedTxIds.has(t.id),
+                            isRuleShared: ruleSharedTxIds.has(t.id),
                             splits: splits.map((s) => ({ category_id: s.category_id, amount_cents: s.amount_cents })),
                             member_id: t.member_id,
                             memberName: t.member_id ? (memberName.get(t.member_id) ?? null) : null,
@@ -360,6 +364,7 @@ export default async function TransactionsPage({
                           accounts={accountOptions}
                           categories={categoryOptions}
                           members={memberOptions}
+                          memberWeights={memberWeights}
                           isUncategorized={uncategorizedIds.has(t.id)}
                           topCategoryIds={topCategoryIds}
                         />

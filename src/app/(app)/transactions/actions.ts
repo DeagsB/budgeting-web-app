@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
+import { applyRulesToTransactions } from '@/lib/transaction-rules-apply'
 import { parseMoneyToCents } from '@/lib/format'
 
 export type TransactionState = { error: string } | undefined
@@ -28,6 +29,8 @@ function revalidate() {
   revalidatePath('/budgets')
   revalidatePath('/pnl')
   revalidatePath('/contributions')
+  revalidatePath('/shared')
+  revalidatePath('/settlements')
 }
 
 export async function createTransaction(
@@ -65,6 +68,9 @@ export async function createTransaction(
     sort_order: 0,
   })
   if (splitError) return { error: splitError.message }
+
+  // Rules (auto-share / auto-categorise) run on every ingest path.
+  await applyRulesToTransactions(supabase, ctx.householdId, [inserted.id as string])
 
   revalidate()
   return undefined
@@ -119,6 +125,10 @@ export async function updateTransaction(fd: FormData): Promise<void> {
     // Simpler path: leave splits alone, let the user re-open the split editor
     // if they want to rebalance. We still warn via the app layer.
   }
+
+  // Re-evaluate rules: a renamed merchant or changed amount may now match (or
+  // stop matching). Manual shares are never touched by this.
+  await applyRulesToTransactions(supabase, ctx.householdId, [id])
 
   revalidate()
 }
