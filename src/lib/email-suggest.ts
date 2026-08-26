@@ -1,7 +1,7 @@
 // Heuristic rule generator: takes a pasted bank-alert email and returns
-// regex suggestions to seed a bank_email_rules row. Pure functions — no LLM,
+// regex suggestions to seed a bank_email_rules row. Pure functions - no LLM,
 // no I/O. Calibrated against the Canadian big-six alert formats (RBC, TD,
-// BMO, CIBC, Scotia, National). Suggestions are *starting points* — the user
+// BMO, CIBC, Scotia, National). Suggestions are *starting points* - the user
 // can still tweak in the form.
 
 export type SampleEmail = {
@@ -17,7 +17,7 @@ export type SuggestedRule = {
   description_regex: string | null
   direction: 'outflow' | 'inflow' | 'auto'
   inflow_regex: string | null
-  // Captures group 1 from the body — the engine looks it up against
+  // Captures group 1 from the body - the engine looks it up against
   // accounts.last_four to route automatically.
   account_router_regex: string | null
   notes: string[]
@@ -32,15 +32,15 @@ const OUTFLOW_KEYWORDS =
 const DOLLAR_PATTERN = /\$\s?([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]{2}|[0-9]+\.[0-9]{2})/
 const PLAIN_AMOUNT_PATTERN = /\b([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]{2}|[0-9]+\.[0-9]{2})\s?(?:CAD|USD|cents)?\b/
 
-// Merchant labels seen in real Canadian bank alerts. Order matters — we want
+// Merchant labels seen in real Canadian bank alerts. Order matters - we want
 // the most specific match first so we don't capture trailing punctuation.
 const MERCHANT_PHRASES: Array<{ pattern: RegExp; regexSource: string }> = [
   // "at MERCHANT NAME on …" / "at MERCHANT NAME."
   { pattern: /\bat\s+([A-Z0-9][A-Z0-9 .&'\-/#]{1,80}?)(?=\s+(?:on|using|with|for|\.))/, regexSource: "at\\s+([A-Z0-9][A-Z0-9 .&'\\-/#]{1,80}?)(?=\\s+(?:on|using|with|for|\\.))" },
   { pattern: /\bat\s+([A-Z0-9][A-Z0-9 .&'\-/#]{2,80})/, regexSource: "at\\s+([A-Z0-9][A-Z0-9 .&'\\-/#]{2,80})" },
-  // "from MERCHANT" — common in deposit/transfer alerts
+  // "from MERCHANT" - common in deposit/transfer alerts
   { pattern: /\bfrom\s+([A-Z0-9][A-Z0-9 .&'\-/#]{2,80})/, regexSource: "from\\s+([A-Z0-9][A-Z0-9 .&'\\-/#]{2,80})" },
-  // "to MERCHANT" — bill payments
+  // "to MERCHANT" - bill payments
   { pattern: /\bto\s+([A-Z0-9][A-Z0-9 .&'\-/#]{2,80})/, regexSource: "to\\s+([A-Z0-9][A-Z0-9 .&'\\-/#]{2,80})" },
   // Labelled: "Merchant: X" or "Payee: X"
   { pattern: /\b(?:merchant|payee|description)\s*:\s*([^\r\n]{2,80})/i, regexSource: "(?:merchant|payee|description)\\s*:\\s*([^\\r\\n]{2,80})" },
@@ -63,7 +63,7 @@ function extractEmailAddress(raw: string): string | null {
 function buildFromRegex(rawFrom: string): string | null {
   const addr = extractEmailAddress(rawFrom)
   if (!addr) return null
-  // Match the full address, escaped — strict but predictable. Users can relax
+  // Match the full address, escaped - strict but predictable. Users can relax
   // it to a domain match in the form if needed.
   return escapeRegex(addr)
 }
@@ -128,30 +128,30 @@ const ROUTER_REGEX = 'ending\\s+(?:in|with)\\s+(\\d{4})|se terminant par\\s+(\\d
 export function suggestRule(sample: SampleEmail): SuggestedRule {
   const notes: string[] = []
   const match_from = buildFromRegex(sample.from)
-  if (!match_from) notes.push('Could not extract sender address from “From” — leaving blank.')
+  if (!match_from) notes.push('Could not extract sender address from “From” - leaving blank.')
 
   const match_subject = buildSubjectRegex(sample.subject)
-  if (!match_subject) notes.push('Subject was generic — left blank to match all subjects from this sender.')
+  if (!match_subject) notes.push('Subject was generic - left blank to match all subjects from this sender.')
 
   const amount = buildAmountRegex(sample.body)
-  if (!amount.sample) notes.push('No dollar amount detected in the body — using the default $X.XX pattern. Verify it matches a real alert.')
+  if (!amount.sample) notes.push('No dollar amount detected in the body - using the default $X.XX pattern. Verify it matches a real alert.')
   else notes.push(`Detected amount: $${amount.sample}.`)
 
   const description = buildDescriptionRegex(sample.body)
-  if (!description) notes.push('No merchant phrase detected — description will fall back to the email subject.')
+  if (!description) notes.push('No merchant phrase detected - description will fall back to the email subject.')
   else notes.push(`Detected merchant: “${description.sample}”.`)
 
   const dir = guessDirection(sample)
-  if (dir.direction === 'auto') notes.push('Direction was ambiguous — using auto-mode with an inflow keyword regex.')
+  if (dir.direction === 'auto') notes.push('Direction was ambiguous - using auto-mode with an inflow keyword regex.')
   else notes.push(`Direction: ${dir.direction}.`)
 
   const routerMatch = sample.body.match(ROUTER_DETECT)
   const last4 = routerMatch ? (routerMatch[1] || routerMatch[2]) : null
   const account_router_regex = last4 ? ROUTER_REGEX : null
   if (last4) {
-    notes.push(`Detected account discriminator: ····${last4}. Auto-routing wired up — set the same last-4 on the matching account in Accounts.`)
+    notes.push(`Detected account discriminator: ····${last4}. Auto-routing wired up - set the same last-4 on the matching account in Accounts.`)
   } else {
-    notes.push('No “ending in NNNN” pattern in the body — auto-routing left off; everything will land in the fallback account.')
+    notes.push('No “ending in NNNN” pattern in the body - auto-routing left off; everything will land in the fallback account.')
   }
 
   return {

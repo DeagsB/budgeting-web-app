@@ -25,7 +25,7 @@ export async function createClient() {
               cookieStore.set(name, value, options),
             )
           } catch {
-            // Server Components cannot set cookies. That's fine — the proxy
+            // Server Components cannot set cookies. That's fine - the proxy
             // refreshes the session for every request before the page renders.
           }
         },

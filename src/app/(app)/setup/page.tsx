@@ -12,7 +12,7 @@ import { NotificationSettings } from './notifications'
 import { DEFAULT_PREFS, type NotificationPrefs } from './notification-prefs'
 
 /**
- * Setup — the canonical home for household name, members, and categories.
+ * Setup - the canonical home for household name, members, and categories.
  * Three cards stacked so it reads like a preferences screen.
  */
 export default async function SetupPage() {

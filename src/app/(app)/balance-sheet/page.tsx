@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button'
 import { BalanceSheetPanel } from './panel'
 
 /**
- * Balance sheet — assets vs liabilities as of the selected month, grouped by
+ * Balance sheet - assets vs liabilities as of the selected month, grouped by
  * account type. For each account we use the latest snapshot with
  * `as_of_month <= selected month`; if none exists we fall back to the opening
  * balance. An "Update balances" sheet writes a snapshot for the selected month.

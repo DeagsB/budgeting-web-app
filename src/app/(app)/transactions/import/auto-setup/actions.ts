@@ -146,7 +146,7 @@ export async function addBankPreset(presetId: string): Promise<AddPresetState> {
 
   const fallbackAccountId = accounts?.[0]?.id ?? null
   if (!fallbackAccountId) {
-    return { error: 'Add at least one account first — every rule needs a fallback account.' }
+    return { error: 'Add at least one account first - every rule needs a fallback account.' }
   }
 
   const { data, error } = await supabase
@@ -207,7 +207,7 @@ export async function sendTestEmail(): Promise<TestEmailState> {
   const payload = {
     secret: household.email_ingest_secret,
     from: 'maple-test@maple.local',
-    subject: 'Maple test — purchase notification',
+    subject: 'Maple test - purchase notification',
     body:
       'This is a Maple test email.\n' +
       `A debit transaction of $4.20 was processed at MAPLE TEST MERCHANT on ${new Date().toISOString().slice(0, 10)}.\n` +
@@ -229,7 +229,7 @@ export async function sendTestEmail(): Promise<TestEmailState> {
       transaction_id?: string
     }
     // Treat HTTP failure or an explicit `error` status as a failure even
-    // though the webhook responded — the user wants to know it didn't work.
+    // though the webhook responded - the user wants to know it didn't work.
     if (!res.ok || json.status === 'error') {
       const baseMessage = json.error ?? `Webhook returned HTTP ${res.status}.`
       const hint =
@@ -290,7 +290,7 @@ export async function triggerGmailSync(): Promise<SyncNowState> {
   }
   try {
     // Apps Script /exec endpoints redirect through Google's auth chain even
-    // when "Anyone with the link" — fetch follows by default. 30s timeout
+    // when "Anyone with the link" - fetch follows by default. 30s timeout
     // since hourly batches can run a little long after a backlog.
     const res = await fetch(household.gmail_sync_url, {
       method: 'GET',
@@ -306,7 +306,7 @@ export async function triggerGmailSync(): Promise<SyncNowState> {
       skipped = Number(parsed?.result?.skipped ?? 0)
     } catch {
       // Apps Script can return HTML on error. Treat unparseable as success
-      // with unknown counts — the webhook log on Maple's side will show
+      // with unknown counts - the webhook log on Maple's side will show
       // whatever actually landed.
     }
     revalidatePath('/transactions/import/auto-setup')

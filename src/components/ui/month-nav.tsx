@@ -6,7 +6,7 @@ import { addMonths, monthLabel, monthStartISO } from '@/lib/format'
  * Link-based month navigator (prev / label / next + "This month").
  *
  * Built from `<Link>`s so it works inside server components that read the
- * current month from `searchParams` — navigation is a URL change, no client
+ * current month from `searchParams` - navigation is a URL change, no client
  * state. `makeHref` maps a `YYYY-MM-01` string to the href for that month.
  *
  * The "This month" pill renders only when the viewed month isn't already the

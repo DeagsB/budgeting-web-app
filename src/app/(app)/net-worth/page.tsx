@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { NetWorthHero, type NetWorthPoint } from './hero'
 
 /**
- * Net worth — the headline trend screen. A scrubbable 24-month chart drives a
+ * Net worth - the headline trend screen. A scrubbable 24-month chart drives a
  * big animated hero figure, with the assets/liabilities split underneath. The
  * year-over-year delta only appears once there's ≥13 months of real snapshot
  * history, so we never show a fabricated delta against carried-forward data.
@@ -80,7 +80,7 @@ export default async function NetWorthPage() {
 
   const latest = trail[trail.length - 1]
 
-  // Empty state: nothing to chart — no accounts, or no transactions/snapshots
+  // Empty state: nothing to chart - no accounts, or no transactions/snapshots
   // at all (a flat opening-balance line isn't worth a hero).
   const hasData = balanceTx.length > 0 || snaps.length > 0
   if (accountsList.length === 0 || !hasData) {
@@ -89,7 +89,7 @@ export default async function NetWorthPage() {
         <PageHeader eyebrow="Net worth" title="Two years of patience." />
         <EmptyState
           title="Nothing to chart yet"
-          body="Add your accounts and import (or auto-import) some transactions — your net worth then tracks your spending and income here, month by month."
+          body="Add your accounts and import (or auto-import) some transactions - your net worth then tracks your spending and income here, month by month."
           action={
             <Link href={accountsList.length === 0 ? '/accounts' : '/transactions/import'}>
               <Button variant="primary" size="md">

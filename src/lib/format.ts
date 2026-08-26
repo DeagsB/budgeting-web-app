@@ -6,7 +6,7 @@ const CAD = new Intl.NumberFormat('en-CA', {
 })
 
 export function formatMoney(cents: number | bigint | null | undefined): string {
-  if (cents === null || cents === undefined) return '—'
+  if (cents === null || cents === undefined) return '-'
   const n = typeof cents === 'bigint' ? Number(cents) : cents
   return CAD.format(n / 100)
 }
@@ -15,7 +15,7 @@ export function formatMoneySigned(
   cents: number | bigint | null | undefined,
   { plus = false }: { plus?: boolean } = {},
 ): string {
-  if (cents === null || cents === undefined) return '—'
+  if (cents === null || cents === undefined) return '-'
   const n = typeof cents === 'bigint' ? Number(cents) : cents
   const formatted = CAD.format(Math.abs(n) / 100)
   if (n < 0) return `-${formatted}`
@@ -24,7 +24,7 @@ export function formatMoneySigned(
 }
 
 export function formatMoneyCompact(cents: number | bigint | null | undefined): string {
-  if (cents === null || cents === undefined) return '—'
+  if (cents === null || cents === undefined) return '-'
   const n = typeof cents === 'bigint' ? Number(cents) : cents
   const dollars = n / 100
   const abs = Math.abs(dollars)
@@ -105,7 +105,7 @@ const DATE_FMT = new Intl.DateTimeFormat('en-CA', {
 })
 
 export function formatDate(isoDate: string | null | undefined): string {
-  if (!isoDate) return '—'
+  if (!isoDate) return '-'
   return DATE_FMT.format(new Date(isoDate + 'T00:00:00'))
 }
 

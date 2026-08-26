@@ -144,7 +144,7 @@ export function NotificationSettings({ prefs }: { prefs: NotificationPrefs }) {
         </p>
       )}
 
-      {/* What to be notified about — saved household-wide. */}
+      {/* What to be notified about - saved household-wide. */}
       <form action={prefAction} className="mt-5 flex flex-col gap-3 border-t border-hair pt-5">
         <div className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
           Notify me about
@@ -174,12 +174,12 @@ export function NotificationSettings({ prefs }: { prefs: NotificationPrefs }) {
         <Toggle
           name="unmatched_alert"
           label="A bank alert couldn’t be imported"
-          hint="No rule matched — so you can add one."
+          hint="No rule matched - so you can add one."
           defaultChecked={prefs.unmatched_alert}
         />
         <Toggle
           name="settlement_period"
-          label="Shared expenses closed — time to settle"
+          label="Shared expenses closed - time to settle"
           hint="Each member gets their own “you owe” on the close day."
           defaultChecked={prefs.settlement_period}
         />

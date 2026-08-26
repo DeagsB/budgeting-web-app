@@ -191,7 +191,7 @@ export function TransactionRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-3">
             <div className="min-w-0 truncate font-medium text-ink">
-              {t.description ?? '—'}
+              {t.description ?? '-'}
               {t.isSplit && (
                 <span className="ml-2 inline-flex items-center rounded-full bg-paper-2 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-ink-2">
                   Split
@@ -225,7 +225,7 @@ export function TransactionRow({
             <span>{t.memberName ?? 'Shared'}</span>
           </div>
 
-          {/* Row actions — always visible (no hover gating) with ≥44px tap
+          {/* Row actions - always visible (no hover gating) with ≥44px tap
               targets so they work on touch without a hover state. */}
           {!canEdit && (
             <p className="mt-1.5 text-[12px] text-ink-3">
@@ -360,6 +360,6 @@ function discColorFor(key: string) {
 
 function initialFor(category: string, description: string | null): string {
   const source =
-    (description?.trim() && description) || (category?.trim() && category) || '—'
+    (description?.trim() && description) || (category?.trim() && category) || '-'
   return (source.trim()[0] ?? '·').toUpperCase()
 }

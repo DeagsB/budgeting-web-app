@@ -5,7 +5,7 @@
  *
  * Three vertically stacked stripes matches the rhythm of every page in the
  * app (header, hero card, content section) without committing to any one
- * layout — looks at home everywhere from /dashboard to /transactions.
+ * layout - looks at home everywhere from /dashboard to /transactions.
  */
 export default function Loading() {
   return (

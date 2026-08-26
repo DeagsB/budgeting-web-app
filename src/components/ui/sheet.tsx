@@ -9,7 +9,7 @@ const FOCUSABLE =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 /**
- * Accessible overlay primitive — a bottom sheet on mobile that becomes a
+ * Accessible overlay primitive - a bottom sheet on mobile that becomes a
  * centered card at `sm:` and up. Renders into a portal on `document.body`,
  * locks body scroll, closes on Esc / scrim click, and traps focus while open.
  * Restores focus to the previously-active element on close.
@@ -35,7 +35,7 @@ export function Sheet({
   const panelRef = useRef<HTMLDivElement>(null)
   const restoreFocusRef = useRef<Element | null>(null)
 
-  // Only portal once mounted on the client — guards `document` for SSR.
+  // Only portal once mounted on the client - guards `document` for SSR.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true)

@@ -1,7 +1,7 @@
 // Canonical category-color source for Maple.
 //
 // Keyed to the real DB category names seeded by `seed_default_categories`
-// (Housing, Transportation, Food, …). Values are mode-agnostic CSS — either a
+// (Housing, Transportation, Food, …). Values are mode-agnostic CSS - either a
 // Maple token CSS var (which flips in dark mode) or a raw hex tuned to read
 // against both light cream and dark paper without per-mode re-tinting.
 //
@@ -41,7 +41,7 @@ const FALLBACK_PALETTE: readonly string[] = [
   '#9C6B4E', // cocoa
 ]
 
-// FNV-1a 32-bit string hash — fast, deterministic, good spread for short keys.
+// FNV-1a 32-bit string hash - fast, deterministic, good spread for short keys.
 function hashName(name: string): number {
   let h = 0x811c9dc5
   for (let i = 0; i < name.length; i += 1) {

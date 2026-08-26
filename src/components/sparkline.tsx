@@ -1,4 +1,4 @@
-// Lightweight SVG line chart for trend visualisation — no external deps.
+// Lightweight SVG line chart for trend visualisation - no external deps.
 // Renders a responsive line chart with optional area fill, x-axis labels, and
 // value readouts on hover (via CSS tooltip). Designed for tiny dashboards
 // rather than interactive analytics.

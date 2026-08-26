@@ -138,7 +138,7 @@ function AddMember() {
         required
         maxLength={80}
         aria-label="New member name"
-        placeholder="Add a member — first name is fine"
+        placeholder="Add a member - first name is fine"
         className="maple-input flex-1"
       />
       <Button type="submit" variant="primary" size="md" disabled={pending} className="shrink-0">

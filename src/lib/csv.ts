@@ -1,6 +1,6 @@
 // Minimal RFC 4180-ish CSV parser. Handles quoted fields, doubled quotes,
 // CRLF + LF line endings, and trimmed trailing newline. Returns a 2D array of
-// strings — no header interpretation. Good enough for pasted bank / brokerage
+// strings - no header interpretation. Good enough for pasted bank / brokerage
 // exports without pulling in a dep.
 
 export function parseCSV(input: string): string[][] {

@@ -3,8 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { humanizeDbError } from '@/lib/errors'
 
-// POST   — save (upsert) the caller's PushSubscription for their household.
-// DELETE — remove a subscription by endpoint.
+// POST   - save (upsert) the caller's PushSubscription for their household.
+// DELETE - remove a subscription by endpoint.
 // RLS scopes both to household members; the endpoint is the natural key.
 
 export async function POST(request: NextRequest) {

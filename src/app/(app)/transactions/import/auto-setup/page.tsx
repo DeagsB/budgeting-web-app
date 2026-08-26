@@ -82,7 +82,7 @@ export default async function AutoImportSetupPage() {
         </h1>
         <p className="mt-2 max-w-[640px] text-[14px] leading-relaxed text-ink-2">
           Every Canadian bank can email you the second a card is swiped. We pair that
-          with a tiny Gmail script you install once — alerts land here as transactions
+          with a tiny Gmail script you install once - alerts land here as transactions
           within seconds. No credentials shared, no monthly fees, you control every rule.
         </p>
       </header>

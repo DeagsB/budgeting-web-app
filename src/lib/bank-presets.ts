@@ -51,7 +51,7 @@ export const BANK_PRESETS: BankPreset[] = [
   {
     id: 'rbc',
     label: 'RBC',
-    hint: 'Royal Bank — chequing, savings, Visa, Mastercard',
+    hint: 'Royal Bank - chequing, savings, Visa, Mastercard',
     rule: {
       name: 'RBC alerts',
       enabled: true,
@@ -68,7 +68,7 @@ export const BANK_PRESETS: BankPreset[] = [
   {
     id: 'td',
     label: 'TD',
-    hint: 'TD Canada Trust — EasyWeb alerts',
+    hint: 'TD Canada Trust - EasyWeb alerts',
     rule: {
       name: 'TD EasyWeb alerts',
       enabled: true,
@@ -85,7 +85,7 @@ export const BANK_PRESETS: BankPreset[] = [
   {
     id: 'bmo',
     label: 'BMO',
-    hint: 'Bank of Montreal — accounts + Mastercards',
+    hint: 'Bank of Montreal - accounts + Mastercards',
     rule: {
       name: 'BMO alerts',
       enabled: true,
@@ -102,7 +102,7 @@ export const BANK_PRESETS: BankPreset[] = [
   {
     id: 'cibc',
     label: 'CIBC',
-    hint: 'CIBC — accounts + Visas',
+    hint: 'CIBC - accounts + Visas',
     rule: {
       name: 'CIBC alerts',
       enabled: true,
@@ -119,7 +119,7 @@ export const BANK_PRESETS: BankPreset[] = [
   {
     id: 'scotia',
     label: 'Scotiabank',
-    hint: 'Scotiabank — accounts + cards',
+    hint: 'Scotiabank - accounts + cards',
     rule: {
       name: 'Scotiabank alerts',
       enabled: true,
@@ -136,7 +136,7 @@ export const BANK_PRESETS: BankPreset[] = [
   {
     id: 'nbc',
     label: 'National Bank',
-    hint: 'NBC — bilingual alerts (en/fr)',
+    hint: 'NBC - bilingual alerts (en/fr)',
     rule: {
       name: 'National Bank alerts',
       enabled: true,

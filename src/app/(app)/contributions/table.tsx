@@ -45,8 +45,8 @@ function derive(r: Row) {
  * never scrolls horizontally on phones.
  *
  * Both layouts share one <form>; a single Save commits whatever is on screen.
- * The save bar reports honestly — green "Saved" only when the server action
- * returns ok — inside an aria-live region.
+ * The save bar reports honestly - green "Saved" only when the server action
+ * returns ok - inside an aria-live region.
  */
 export function ContributionTable({ year, rows }: { year: number; rows: Row[] }) {
   const [pending, startTransition] = useTransition()
@@ -286,7 +286,7 @@ function TableRow({ memberId, row, first }: { memberId: string; row: Row; first:
       </td>
       <td className="px-4 py-2 text-right tabular-nums text-ink">{formatMoney(row.contributed)}</td>
       <td className="px-4 py-2 text-right tabular-nums text-ink-3">
-        {row.withdrawn > 0 ? formatMoney(row.withdrawn) : '—'}
+        {row.withdrawn > 0 ? formatMoney(row.withdrawn) : '-'}
       </td>
       <td className="px-4 py-2 text-right">
         <Amount cents={available} tone={availTone} />

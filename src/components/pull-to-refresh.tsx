@@ -5,7 +5,7 @@ import { useRef, useState, type ReactNode } from 'react'
 /**
  * iOS-style pull-to-refresh. Wrap a screen's content; when the user drags down
  * from the very top of the page past the threshold and releases, `onRefresh`
- * runs (with a spinner) and the gesture resets. Touch-only — inert on desktop.
+ * runs (with a spinner) and the gesture resets. Touch-only - inert on desktop.
  */
 export function PullToRefresh({
   onRefresh,

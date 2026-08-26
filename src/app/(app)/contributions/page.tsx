@@ -247,7 +247,7 @@ export default async function ContributionsPage({
     <div className="flex flex-col gap-6 pb-10">
       <PageHeader
         eyebrow={`Contributions · ${year}`}
-        title="TFSA, RRSP, FHSA — room left."
+        title="TFSA, RRSP, FHSA - room left."
         subtitle="Carry-forward room and current-year contributions per member, with the CRA annual allowance applied. Override anything if your Notice of Assessment shows a different number."
       />
 
@@ -318,7 +318,7 @@ export default async function ContributionsPage({
         Opening room is the carry-forward balance at Jan 1. For <span className="font-semibold text-ink">RRSP</span>, paste the
         number from your latest Notice of Assessment; for <span className="font-semibold text-ink">TFSA</span>/FHSA, the app suggests
         next year&apos;s opening based on prior-year data (TFSA includes withdrawals that restore
-        on Jan 1; FHSA + RRSP do not). Suggested values appear as placeholders — edit and hit Save
+        on Jan 1; FHSA + RRSP do not). Suggested values appear as placeholders - edit and hit Save
         to lock them in. Allowance defaults to the CRA annual limit; use the override to paste a
         personalised figure.
       </p>

@@ -12,10 +12,10 @@ type Category = { id: string; parent_id: string | null; name: string }
  * exact moment you need it and apply it in one step. Drops into a chip row.
  *
  * `variant`:
- *  - `sheet`  — opens the shared bottom-sheet (for surfaces not already inside a
+ *  - `sheet`  - opens the shared bottom-sheet (for surfaces not already inside a
  *    Sheet, e.g. the inline QuickCategorize on a row).
- *  - `inline` — expands a small form in place (for the triage card, which is
- *    already rendered inside a Sheet — avoids stacking sheet-on-sheet).
+ *  - `inline` - expands a small form in place (for the triage card, which is
+ *    already rendered inside a Sheet - avoids stacking sheet-on-sheet).
  *
  * `onCreated(id, name, parentId)` fires once the category exists so the caller
  * can immediately assign it.
@@ -98,7 +98,7 @@ export function NewCategoryInline({
           aria-label="Parent category"
           className="maple-select"
         >
-          <option value="">— Top level —</option>
+          <option value="">- Top level -</option>
           {parents.map((p) => (
             <option key={p.id} value={p.id}>
               under {p.name}

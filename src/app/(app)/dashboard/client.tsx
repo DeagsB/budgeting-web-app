@@ -20,7 +20,7 @@ import { colorForCategory } from '@/lib/category-colors'
 
 // Fixed brand gradient for the net-worth hero. Uses the light-mode leaf values
 // directly (not tokens) so the surface stays deep green in BOTH light and dark
-// mode — tokens invert leaf to a pale mint in dark mode, which would wash the
+// mode - tokens invert leaf to a pale mint in dark mode, which would wash the
 // hero out. The chart + text below ride on top of this with light foreground
 // colours, so contrast holds either way.
 const HERO_GRADIENT = 'linear-gradient(150deg, #1f5641 0%, #154031 100%)'
@@ -207,7 +207,7 @@ export function DashboardClient({
   const firstName = me?.name?.split(' ')[0] ?? 'there'
 
   // Every dashboard section is built into the widgets map below. The return
-  // statement just iterates `layout` — that's what makes reorder work.
+  // statement just iterates `layout` - that's what makes reorder work.
   const widgets: Record<WidgetId, ReactNode> = {
     greeting: (
       <header key="greeting" className="flex items-end justify-between gap-4">
@@ -295,7 +295,7 @@ export function DashboardClient({
                 <span className="text-white/60">{displayedLabel}</span>
               </div>
             </div>
-            {/* Range selector (desktop) — translucent pills on the green */}
+            {/* Range selector (desktop) - translucent pills on the green */}
             <div className="hidden gap-0.5 rounded-full bg-white/10 p-1 sm:flex">
               {RANGES.map((r) => (
                 // 44px hit area on a 28px pill: the button carries the target,
@@ -486,7 +486,7 @@ export function DashboardClient({
                         transition: 'transform 600ms var(--ease-ios)',
                       }}
                     >
-                      {/* front — paper card */}
+                      {/* front - paper card */}
                       <div
                         className="absolute inset-0 flex flex-col rounded-md border border-hair bg-paper p-4"
                         style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}
@@ -511,7 +511,7 @@ export function DashboardClient({
                           {a.ownership === 'shared' ? 'Shared' : 'Personal'} · tap to flip
                         </div>
                       </div>
-                      {/* back — this-month stats. Both gradient stops are tokens
+                      {/* back - this-month stats. Both gradient stops are tokens
                           so the surface follows the theme instead of inverting
                           a hardcoded hex against a token. */}
                       <div
@@ -700,7 +700,7 @@ export function DashboardClient({
           <MapleLabel>Pace</MapleLabel>
           {!isCurrentMonth ? (
             <div className="mt-1.5 text-[13.5px] text-ink-2">
-              {pace.daysElapsed === 0 ? 'Future month — no pace yet.' : 'Month complete.'}
+              {pace.daysElapsed === 0 ? 'Future month - no pace yet.' : 'Month complete.'}
             </div>
           ) : (
             <>
@@ -733,7 +733,7 @@ export function DashboardClient({
         </div>
         {recurring.length === 0 ? (
           <div className="mt-1.5 text-[13.5px] text-ink-2">
-            Nothing detected yet — recurring transactions appear here once we see them in 2+ of the last 3 months.
+            Nothing detected yet - recurring transactions appear here once we see them in 2+ of the last 3 months.
           </div>
         ) : (
           <>
@@ -880,7 +880,7 @@ export function DashboardClient({
 
   return (
     <div className="flex flex-col gap-6 pb-10">
-      {/* A failed query means a card would otherwise read $0 — surface it so the
+      {/* A failed query means a card would otherwise read $0 - surface it so the
           user knows the number is missing data, not real. */}
       {hasError && (
         <div

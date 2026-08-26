@@ -184,7 +184,7 @@ export default async function SharedPage({
         subtitle={`${selectedAccount.name} · ${monthLabel(month)}`}
       />
 
-      {/* Net balance payoff — lifted above the control/stat chrome so the
+      {/* Net balance payoff - lifted above the control/stat chrome so the
           "who owes whom" answer is the first thing in view. */}
       {netPairs.length > 0 && (
         <Card padding="lg">

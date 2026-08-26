@@ -45,7 +45,7 @@ export function UncategorizedReview({
 
   return (
     <>
-      {/* Banner — hidden once nothing is left, but the Sheet stays mounted so an
+      {/* Banner - hidden once nothing is left, but the Sheet stays mounted so an
           in-progress queue can finish on its success screen even after the last
           transaction's save revalidates this list down to zero. */}
       {count > 0 && (
@@ -88,7 +88,7 @@ export function UncategorizedReview({
                 {count} transaction{count === 1 ? '' : 's'} need{count === 1 ? 's' : ''} a category or title
               </p>
               <p className="text-[12.5px] text-ink-2">
-                Review them one by one — set a title, category, owner, and more.
+                Review them one by one - set a title, category, owner, and more.
               </p>
             </div>
           </div>
@@ -151,7 +151,7 @@ function TriageQueue({
   // Categories created inline during this session, kept so they stay selectable
   // on later cards in the same walk. Dedupe by id: creating a category
   // revalidates /transactions, which eventually feeds the new category back in
-  // via the live `categories` prop — without this filter it would appear twice
+  // via the live `categories` prop - without this filter it would appear twice
   // (duplicate React key + doubled option).
   const [extraCategories, setExtraCategories] = useState<Category[]>([])
   const mergedCategories = useMemo(() => {
@@ -160,7 +160,7 @@ function TriageQueue({
   }, [categories, extraCategories])
   // Track which ids the user already handled in this session so the
   // "apply to similar" sibling lists don't re-offer transactions that have
-  // since been categorized — and so a transaction cleared via a sibling is
+  // since been categorized - and so a transaction cleared via a sibling is
   // skipped instead of shown again as its own card.
   const [handled, setHandled] = useState<Set<string>>(() => new Set())
 
@@ -173,7 +173,7 @@ function TriageQueue({
   const current = transactions[currentIndex]
 
   // Other still-unhandled transactions in this queue that share the current
-  // merchant string — candidates for a single bulk categorize.
+  // merchant string - candidates for a single bulk categorize.
   const similar = useMemo(() => {
     if (!current) return []
     const key = normalize(current.description)
@@ -289,7 +289,7 @@ function TriageCard({
   const [memberId, setMemberId] = useState(txn.member_id ?? '')
   const [description, setDescription] = useState(txn.description ?? '')
   // Only fan a category out to same-merchant siblings by default when THIS row
-  // is itself uncategorized — otherwise the user is likely just fixing a title.
+  // is itself uncategorized - otherwise the user is likely just fixing a title.
   const [applySimilar, setApplySimilar] = useState(!txn.category_id)
   const [error, setError] = useState<string | null>(null)
 
@@ -325,7 +325,7 @@ function TriageCard({
       {/* Transaction header */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate font-medium text-ink">{txn.description ?? '—'}</p>
+          <p className="truncate font-medium text-ink">{txn.description ?? '-'}</p>
           <p className="mt-0.5 text-[12px] text-ink-3">
             {txn.occurredLabel} · {txn.accountName}
           </p>

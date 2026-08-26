@@ -176,7 +176,7 @@ body {
   color: var(--color-ink);
   font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   /* Horizontal safe-area only. Vertical insets are handled by the components
-     that need to react to them (mobile top bar, bottom tab bar) — applying
+     that need to react to them (mobile top bar, bottom tab bar) - applying
      them on body would stack with the header's own safe-area padding when
      running as a PWA without Safari's URL bar, leaving a fat empty band at
      the top of every page. */
@@ -204,7 +204,7 @@ a,
 button,
 [role='button'] {
   -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
-  /* Stop iOS from showing the long-press preview popover on links and buttons —
+  /* Stop iOS from showing the long-press preview popover on links and buttons -
      it makes hand-rolled UI feel like a website instead of an app. */
   -webkit-touch-callout: none;
   /* Kill the 300ms double-tap-to-zoom delay on every control. */
@@ -218,6 +218,24 @@ button,
   outline: 2px solid var(--color-leaf);
   outline-offset: 2px;
   border-radius: 6px;
+}
+
+/* Mount reveal for dashboard cards. A CSS animation, not a JS-toggled
+   opacity, so server-rendered HTML paints the content immediately and the
+   fade runs on first paint even before hydration. `--reveal-y` and
+   animation-delay are set inline by <Reveal>. */
+@keyframes maple-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(var(--reveal-y, 8px));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.maple-reveal {
+  animation: maple-reveal 380ms var(--ease-ios-in) both;
 }
 
 /* Honour the OS "reduce motion" setting: collapse every animation and
@@ -273,14 +291,14 @@ body {
 html {
   height: 100%;
   min-height: 100dvh;
-  /* Prevent the rubber-band overscroll on body — we still allow it inside
+  /* Prevent the rubber-band overscroll on body - we still allow it inside
      scroll containers, but the page itself should feel anchored. */
   overscroll-behavior-y: none;
 }
 
 body {
   /* Momentum scrolling on iOS for any scroll container that inherits this
-     (most do) — tables, modals, the activity feed. */
+     (most do) - tables, modals, the activity feed. */
   -webkit-overflow-scrolling: touch;
 }
 
@@ -296,14 +314,14 @@ body {
 
 /* When installed as a PWA, push the bottom of every page above the iOS home
    indicator. Pages that have their own bottom-fixed UI (tab bar) opt out
-   with .has-tabbar — the tab bar handles its own safe-area padding. */
+   with .has-tabbar - the tab bar handles its own safe-area padding. */
 @media (display-mode: standalone) {
   body:not(.has-tabbar) main {
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
 
-/* Hide the desktop scrollbar in standalone mode — iOS apps don't show one. */
+/* Hide the desktop scrollbar in standalone mode - iOS apps don't show one. */
 @media (display-mode: standalone) {
   ::-webkit-scrollbar { width: 0; height: 0; }
 }
@@ -349,7 +367,7 @@ body {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   Maple shared form controls — used across Transactions, Shared, Budgets,
+   Maple shared form controls - used across Transactions, Shared, Budgets,
    Settlements, Accounts. Sourced from fixes/globals-patch.css.
    ───────────────────────────────────────────────────────────────────── */
 
@@ -365,7 +383,7 @@ body {
      focus. A class selector beats the element-level `input{font-size:16px}`
      rule, so this must stay 16px here too. Step down only at sm:+ (desktop). */
   font-size: 16px;
-  min-height: 44px; /* tap target — iPhone primary */
+  min-height: 44px; /* tap target - iPhone primary */
   line-height: 1.35;
   color: var(--color-ink);
   transition:

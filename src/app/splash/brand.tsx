@@ -5,6 +5,7 @@
  *
  * Only inline styles: this JSX is rendered by Satori, not the DOM.
  */
+import { BRAND_FONT_FAMILY } from './font'
 
 export const LEAF = '#1F5641'
 export const LEAF_DEEP = '#154031'
@@ -67,7 +68,7 @@ export function IconMark({
 
       <div
         style={{
-          fontFamily: 'serif',
+          fontFamily: BRAND_FONT_FAMILY,
           fontSize,
           color: PAPER,
           letterSpacing: '-0.04em',
@@ -138,9 +139,9 @@ export function Splash({ width, height }: { width: number; height: number }) {
       <div
         style={{
           marginTop: Math.round(height * 0.03),
-          fontFamily: 'serif',
+          fontFamily: BRAND_FONT_FAMILY,
           fontSize: wordSize,
-          fontWeight: 700,
+          fontWeight: 400,
           color: PAPER,
           letterSpacing: '-0.02em',
           lineHeight: 1,

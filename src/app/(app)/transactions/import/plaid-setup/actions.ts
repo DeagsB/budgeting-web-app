@@ -82,7 +82,7 @@ async function webhookUrl(): Promise<string | undefined> {
   return host ? `${proto}://${host}/api/plaid/webhook` : undefined
 }
 
-// OAuth-only institutions (most major Canadian banks — RBC, TD, Scotia…) require
+// OAuth-only institutions (most major Canadian banks - RBC, TD, Scotia…) require
 // a redirect_uri that the user is sent back to after authenticating on the bank's
 // own site. The value MUST exactly match an "Allowed redirect URI" registered in
 // the Plaid dashboard (Developers → API). We gate on the env var: if it isn't set

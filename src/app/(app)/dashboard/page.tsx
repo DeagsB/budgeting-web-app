@@ -116,7 +116,7 @@ export default async function DashboardPage() {
       .order('occurred_on', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(8),
-    // All transactions up to the end of the current month — drives the
+    // All transactions up to the end of the current month - drives the
     // cashflow-derived running balances + the net-worth trail.
     supabase
       .from('transactions')
@@ -191,7 +191,7 @@ export default async function DashboardPage() {
   const netWorthPrev = netWorthTrail[netWorthTrail.length - 2]?.value ?? netWorth
   const netWorthDelta = netWorth - netWorthPrev
 
-  // Per-account month stats — power the "useful stat" view on the back of
+  // Per-account month stats - power the "useful stat" view on the back of
   // each card flip. Outflow = positive amounts; inflow = negative amounts.
   const monthOutByAccount = new Map<string, number>()
   const monthInByAccount = new Map<string, number>()
@@ -253,7 +253,7 @@ export default async function DashboardPage() {
     .sort((a, b) => b.amount_cents - a.amount_cents)
     .slice(0, 6)
 
-  // Budget hero — total budgeted across top-level categories for the
+  // Budget hero - total budgeted across top-level categories for the
   // current month. Spend is `expenses` already computed.
   const budgetByCat = new Map<string, number>()
   for (const b of (budgetsRes.data ?? []) as Array<{ category_id: string; amount_cents: number | string }>) {
@@ -263,7 +263,7 @@ export default async function DashboardPage() {
     .filter(([id]) => !parentOf.get(id))
     .reduce((s, [, v]) => s + v, 0)
 
-  // Goals — active, not yet achieved, with progress.
+  // Goals - active, not yet achieved, with progress.
   const goals = ((goalsRes.data ?? []) as Array<{
     id: string
     name: string
@@ -281,7 +281,7 @@ export default async function DashboardPage() {
       target_date: g.target_date,
     }))
 
-  // Recurring detection — same algorithm as the budgets page.
+  // Recurring detection - same algorithm as the budgets page.
   type RecurRow = { amount_cents: number | string; description: string | null; occurred_on: string }
   const recGroups = new Map<string, { description: string; amount: number; months: Set<string> }>()
   for (const tx of (recurringTxRes.data ?? []) as RecurRow[]) {
@@ -306,7 +306,7 @@ export default async function DashboardPage() {
     .sort((a, b) => b.amount_cents - a.amount_cents)
   const recurringTotal = recurring.reduce((s, g) => s + g.amount_cents, 0)
 
-  // Recent activity — last 8 transactions overall, with account name resolved.
+  // Recent activity - last 8 transactions overall, with account name resolved.
   const accountNameById = new Map(accounts.map((a) => [a.id, a.name]))
   const recentActivity = ((recentTxRes.data ?? []) as Array<{
     id: string
@@ -318,11 +318,11 @@ export default async function DashboardPage() {
     id: t.id,
     amount_cents: Number(t.amount_cents),
     occurred_on: t.occurred_on,
-    description: t.description ?? '—',
-    account_name: accountNameById.get(t.account_id) ?? '—',
+    description: t.description ?? '-',
+    account_name: accountNameById.get(t.account_id) ?? '-',
   }))
 
-  // Pace — daily spend so far + projected month-end. Skipped in past/future
+  // Pace - daily spend so far + projected month-end. Skipped in past/future
   // months by the client when daysElapsed === 0 or === daysInMonth.
   const monthDate = new Date(currentMonth + 'T00:00:00')
   const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate()

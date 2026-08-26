@@ -67,7 +67,7 @@ export function QuickCategorize({
         )}
       </div>
 
-      {/* Most-used categories — one tap to assign */}
+      {/* Most-used categories - one tap to assign */}
       <div className="-mx-1 flex flex-wrap gap-1.5 px-1">
         {topCats.map((c) => (
           <button

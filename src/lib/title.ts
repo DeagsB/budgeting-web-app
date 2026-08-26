@@ -1,5 +1,5 @@
 // Deterministic, offline cleanup of cryptic bank/merchant descriptors into a
-// human-friendly transaction title. Pure — safe to run at every ingest path
+// human-friendly transaction title. Pure - safe to run at every ingest path
 // (CSV/OFX import, email alerts) and in the UI.
 //
 // Conservative by design: when a descriptor is already a plausible name it is
@@ -16,7 +16,7 @@ import { normalizeMerchant } from './statement-reconcile'
 export const merchantKey = normalizeMerchant
 
 // High-confidence expansions for very common cryptic Canadian / NA descriptors.
-// Small and unambiguous on purpose — a match short-circuits to the clean name.
+// Small and unambiguous on purpose - a match short-circuits to the clean name.
 const EXPANSIONS: Array<{ test: RegExp; name: string }> = [
   { test: /\bAMZN\b|\bAMAZON\s*MKTP\b|\bAMZNMKTP\b|\bAMAZON\.(?:CA|COM)\b/i, name: 'Amazon' },
   { test: /\bTIM\s*HORTONS?\b/i, name: 'Tim Hortons' },
@@ -30,7 +30,7 @@ const EXPANSIONS: Array<{ test: RegExp; name: string }> = [
   { test: /\bSPOTIFY\b/i, name: 'Spotify' },
   { test: /\bCANADIAN\s*TIRE\b/i, name: 'Canadian Tire' },
   { test: /\bSHOPPERS\s*DRUG(?:\s*MART)?\b/i, name: 'Shoppers Drug Mart' },
-  // "LOBLAWS" only — "Loblaw" / "Loblaw City Market" is a different banner.
+  // "LOBLAWS" only - "Loblaw" / "Loblaw City Market" is a different banner.
   { test: /\bLOBLAWS\b/i, name: 'Loblaws' },
   { test: /\bCOSTCO\b/i, name: 'Costco' },
   { test: /\bPRESTO\b/i, name: 'Presto' },
@@ -62,7 +62,7 @@ function stripTrailingNoise(s: string): string {
       .replace(/\s+#\s*\d+\s*$/i, '') // " #4412"
       .replace(/\s+\d{3,}\s*$/, '') // trailing long digit run "  0291"
       .replace(/\s+(?:CA|US|USA|CAN)\s*$/i, '') // country tail
-      // Trailing Canadian province/territory code only — a generic 2-letter
+      // Trailing Canadian province/territory code only - a generic 2-letter
       // strip would clip real words ("Gap US", "H&M").
       .replace(/\s+(?:AB|BC|MB|NB|NL|NS|NT|NU|ON|PE|QC|SK|YT)\s*$/, '')
       .replace(/[\s*#:/-]+$/, '') // dangling separators

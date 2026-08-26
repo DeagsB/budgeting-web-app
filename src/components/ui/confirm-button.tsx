@@ -30,7 +30,7 @@ const FOCUSABLE =
  *   </ConfirmButton>
  *
  * The component renders a real <form action={...}>, then submits it via
- * formRef.current.requestSubmit() once the user confirms — this preserves
+ * formRef.current.requestSubmit() once the user confirms - this preserves
  * React 19's server-action wiring instead of bypassing it with manual fetch.
  */
 export function ConfirmButton({
@@ -162,7 +162,7 @@ export function ConfirmModal({
     }
   }, [open])
 
-  // Esc to cancel, Enter to confirm — matches OS dialogs. Tab is trapped
+  // Esc to cancel, Enter to confirm - matches OS dialogs. Tab is trapped
   // within the modal so focus can't escape to the page behind it.
   useEffect(() => {
     if (!open) return
@@ -204,7 +204,7 @@ export function ConfirmModal({
   }, [open, onCancel, onConfirm])
 
   // Modal is closed by default in every caller, so SSR + first client render
-  // both return null — no hydration mismatch, no need for a mount latch.
+  // both return null - no hydration mismatch, no need for a mount latch.
   if (!isBrowser || !open) return null
 
   return createPortal(

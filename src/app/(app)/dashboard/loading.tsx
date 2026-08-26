@@ -1,7 +1,7 @@
 /**
- * Dashboard-specific skeleton. Mirrors the default widget layout — greeting,
+ * Dashboard-specific skeleton. Mirrors the default widget layout - greeting,
  * the green net-worth hero, the three-up month-stats row, and the horizontal
- * accounts strip — so navigating to Home gives instant, shape-accurate
+ * accounts strip - so navigating to Home gives instant, shape-accurate
  * feedback while the queries resolve.
  *
  * The hero uses the same fixed deep-green gradient as the real surface (a fixed

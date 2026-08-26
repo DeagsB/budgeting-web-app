@@ -1,5 +1,6 @@
 import { ImageResponse } from 'next/og'
 import { IconMark } from './splash/brand'
+import { brandFonts } from './splash/font'
 
 // Standard PWA icon (Android / Chrome installs read this from the manifest).
 // Same Maple mark as apple-icon.tsx, rendered at 512px. The 192px and
@@ -7,6 +8,6 @@ import { IconMark } from './splash/brand'
 export const size = { width: 512, height: 512 }
 export const contentType = 'image/png'
 
-export default function Icon() {
-  return new ImageResponse(<IconMark size={size.width} />, { ...size })
+export default async function Icon() {
+  return new ImageResponse(<IconMark size={size.width} />, { ...size, fonts: await brandFonts() })
 }

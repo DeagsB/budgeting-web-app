@@ -40,7 +40,7 @@ export function CategorySelect({
         ? { value, onChange: (e) => onChange?.(e.target.value) }
         : { defaultValue: defaultValue ?? '' })}
     >
-      <option value="">— Uncategorized —</option>
+      <option value="">- Uncategorized -</option>
       {parents.map((p) => {
         const kids = childrenOf(p.id)
         return (

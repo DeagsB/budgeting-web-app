@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
 /**
- * Service-role Supabase client. Bypasses RLS — only use from server code that
+ * Service-role Supabase client. Bypasses RLS - only use from server code that
  * authenticates the caller through some other channel (e.g. the email-ingest
  * webhook validates a per-household secret).
  *

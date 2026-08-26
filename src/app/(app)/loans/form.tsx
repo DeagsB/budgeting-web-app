@@ -23,7 +23,7 @@ export function LoanForm({ accountId, initial }: { accountId: string; initial: I
   const error = state && 'error' in state ? state.error : null
 
   // For a loan that already has terms, the form is secondary to the projection
-  // — collapse it into a disclosure so the payoff tiles lead. New loans render
+  // - collapse it into a disclosure so the payoff tiles lead. New loans render
   // the form open so the first thing the user sees is the terms entry.
   const form = (
     <form action={formAction} className="grid gap-3 sm:grid-cols-4">

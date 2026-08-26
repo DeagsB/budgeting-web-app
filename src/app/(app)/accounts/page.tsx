@@ -97,7 +97,7 @@ export default async function AccountsPage({
       <PageHeader
         eyebrow="Accounts"
         title="Where the money lives."
-        subtitle="Chequing, savings, registered, crypto, loans, credit cards, and cash — all in one ledger."
+        subtitle="Chequing, savings, registered, crypto, loans, credit cards, and cash - all in one ledger."
         actions={
           <Link
             href={showArchived ? '/accounts' : '/accounts?show=archived'}
@@ -162,7 +162,7 @@ export default async function AccountsPage({
             ) : (
               <EmptyState
                 title="No accounts yet"
-                body="Add your first account above — chequing, savings, a registered plan, or a loan — to start tracking where your money lives."
+                body="Add your first account above - chequing, savings, a registered plan, or a loan - to start tracking where your money lives."
               />
             )}
           </div>

@@ -89,7 +89,7 @@ export function RecordSettlementForm({
           <input
             name="note"
             maxLength={500}
-            placeholder="e.g. April settlement — e-transfer"
+            placeholder="e.g. April settlement - e-transfer"
             className="maple-input"
           />
         </Field>

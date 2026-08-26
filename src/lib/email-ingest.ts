@@ -1,5 +1,5 @@
 // Pure functions for parsing a forwarded bank-alert email against a set of
-// per-household regex rules. No I/O — the route handler does the DB work.
+// per-household regex rules. No I/O - the route handler does the DB work.
 
 import { cleanTitle } from './title'
 
@@ -137,7 +137,7 @@ export function parseEmail(
     const captured = amountMatch[1] ?? amountMatch[0]
     const absCents = parseAmountCents(captured)
     if (absCents === null) {
-      // Don't abort the whole candidate list — a later rule may parse cleanly.
+      // Don't abort the whole candidate list - a later rule may parse cleanly.
       nearMiss = { matched_rule_id: rule.id, detail: `Amount capture "${captured}" did not parse to a number.` }
       continue
     }
@@ -172,7 +172,7 @@ export function parseEmail(
       signedCents = isInflow ? -Math.abs(absCents) : Math.abs(absCents)
     }
 
-    // Account routing — try the rule's router regex first, then fall back
+    // Account routing - try the rule's router regex first, then fall back
     // to the rule's default. This is what lets one RBC rule serve chequing,
     // savings, and credit cards: the body says "ending in 1234" and we look
     // up the account whose last_four matches.
@@ -192,7 +192,7 @@ export function parseEmail(
     }
 
     // Member resolution: an explicit rule default wins; otherwise the
-    // transaction follows the routed account's owner — a member-owned account
+    // transaction follows the routed account's owner - a member-owned account
     // makes it personal to that member, a shared account leaves it shared.
     // This is multi-member correct: each member's own accounts route to them.
     let memberId = rule.default_member_id

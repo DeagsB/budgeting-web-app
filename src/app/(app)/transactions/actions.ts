@@ -161,11 +161,11 @@ async function resolveCategoryId(
  *
  * Because an uncategorized (or single-category) transaction always has exactly
  * one split spanning the full amount, categorising is an in-place UPDATE of
- * that split's category_id — atomic, and it preserves the splits-sum-equals-
+ * that split's category_id - atomic, and it preserves the splits-sum-equals-
  * total invariant with no delete/insert window. Multi-split transactions are
  * skipped (re-categorising them would destroy the user's allocation).
  *
- * `primaryIds` are always (re)categorised — the user acted on them directly.
+ * `primaryIds` are always (re)categorised - the user acted on them directly.
  * `siblingIds` (the "apply to similar" fan-out) are only touched while still
  * uncategorized, so a same-merchant row the user already gave an explicit
  * category isn't silently clobbered.
@@ -206,10 +206,10 @@ async function setCategoryForTransactions(
   for (const id of allIds) {
     if (!amountByTx.has(id)) continue // not in this household
     const cats = splitsByTx.get(id) ?? []
-    if (cats.length > 1) continue // multi-split — already categorised, leave it
+    if (cats.length > 1) continue // multi-split - already categorised, leave it
     if (!primarySet.has(id) && cats.length === 1 && cats[0] !== null) continue // sibling already categorised
     if (cats.length === 1) updateIds.push(id)
-    else insertIds.push(id) // 0 splits (defensive) — needs a fresh row
+    else insertIds.push(id) // 0 splits (defensive) - needs a fresh row
   }
 
   if (updateIds.length > 0) {
@@ -235,7 +235,7 @@ async function setCategoryForTransactions(
 
 /**
  * Lightweight single-transaction categorisation used by the inline
- * quick-categorize control on the transactions list. Just the category — no
+ * quick-categorize control on the transactions list. Just the category - no
  * full edit-form round trip. Throws on a DB failure so the client can surface
  * it instead of silently no-op'ing.
  */

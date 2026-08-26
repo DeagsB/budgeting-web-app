@@ -1,5 +1,6 @@
 import { ImageResponse } from 'next/og'
 import { SPLASH_DEVICES, Splash, splashFileName } from '../brand'
+import { brandFonts } from '../font'
 
 // iOS launch screens, one per device class, referenced from
 // `appleWebApp.startupImage` in src/app/layout.tsx. Prerendered at build time
@@ -23,6 +24,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ siz
   return new ImageResponse(<Splash width={width} height={height} />, {
     width,
     height,
+    fonts: await brandFonts(),
     headers: { 'Cache-Control': 'public, max-age=31536000, immutable' },
   })
 }

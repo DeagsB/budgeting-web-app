@@ -14,7 +14,7 @@ type FormState = { error: string } | { ok: true } | undefined
 /**
  * Maple "add transaction" inline form.
  *
- * Hero: amount + direction segmented toggle (Spent / Received) — the two
+ * Hero: amount + direction segmented toggle (Spent / Received) - the two
  * most common interactions. Everything else collapses into a tight grid below.
  * Submit is a pill button; errors render as a maple-soft banner.
  */

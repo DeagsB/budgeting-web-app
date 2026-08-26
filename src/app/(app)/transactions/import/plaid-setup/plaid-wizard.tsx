@@ -82,7 +82,7 @@ function clearOAuthArtifacts() {
     localStorage.removeItem(OAUTH_MODE_KEY)
     localStorage.removeItem(OAUTH_ITEM_KEY)
   } catch {
-    /* private mode / storage disabled — nothing to clean */
+    /* private mode / storage disabled - nothing to clean */
   }
   // Strip ?oauth_state_id so a refresh doesn't try to resume a spent flow.
   if (isOAuthReturn()) {
@@ -160,7 +160,7 @@ export function PlaidWizard({
   )
 
   const onExit = useCallback(() => {
-    // Abandoned (incl. cancelled OAuth) — drop the spent token so a later
+    // Abandoned (incl. cancelled OAuth) - drop the spent token so a later
     // attempt starts clean.
     clearOAuthArtifacts()
   }, [])
@@ -197,7 +197,7 @@ export function PlaidWizard({
           localStorage.setItem(OAUTH_MODE_KEY, 'connect')
           localStorage.removeItem(OAUTH_ITEM_KEY)
         } catch {
-          /* storage unavailable — non-OAuth banks still work */
+          /* storage unavailable - non-OAuth banks still work */
         }
         setLinkToken(res.linkToken)
       } else {
@@ -260,7 +260,7 @@ export function PlaidWizard({
             ? 'A bank needs re-authentication.'
             : res.skipped
               ? 'Nothing to sync right now.'
-              : `Synced — ${res.added} new, ${res.reconciled} enriched.`,
+              : `Synced - ${res.added} new, ${res.reconciled} enriched.`,
         )
         router.refresh()
       } else {
@@ -317,7 +317,7 @@ export function PlaidWizard({
               {items.length} of {maxItems} banks linked
             </div>
             <p className="mt-1 max-w-[520px] text-[13.5px] leading-relaxed text-ink-2">
-              Connect securely through Plaid. Your credentials go to your bank, never to Maple — we
+              Connect securely through Plaid. Your credentials go to your bank, never to Maple - we
               only receive read-only transactions.
             </p>
           </div>
@@ -388,7 +388,7 @@ export function PlaidWizard({
                       value={d.existingAccountId}
                       onChange={(e) => patchDraft(i, { existingAccountId: e.target.value })}
                     >
-                      <option value="">— Choose an account —</option>
+                      <option value="">- Choose an account -</option>
                       {accounts.map((a) => (
                         <option key={a.id} value={a.id}>
                           {a.name}
@@ -433,7 +433,7 @@ export function PlaidWizard({
                           value={d.createMemberId}
                           onChange={(e) => patchDraft(i, { createMemberId: e.target.value })}
                         >
-                          <option value="">— Choose a member —</option>
+                          <option value="">- Choose a member -</option>
                           {members.map((m) => (
                             <option key={m.id} value={m.id}>
                               {m.name}
@@ -528,7 +528,7 @@ export function PlaidWizard({
                         router.refresh()
                       }}
                       prompt={`Disconnect ${it.institutionName}?`}
-                      description="Stops syncing and removes the secure connection. Your accounts and their existing transactions stay — they just won’t update automatically."
+                      description="Stops syncing and removes the secure connection. Your accounts and their existing transactions stay - they just won’t update automatically."
                       confirmLabel="Disconnect"
                       destructive
                       className="inline-flex min-h-[44px] items-center px-2 text-[12.5px] font-semibold text-maple hover:underline"

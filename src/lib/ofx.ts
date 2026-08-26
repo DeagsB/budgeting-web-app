@@ -53,7 +53,7 @@ function pickField(block: string, tag: string): string | null {
 }
 
 export function parseOFX(input: string): OfxParseResult {
-  // Strip the OFX header (key:value lines up to a blank line) if present —
+  // Strip the OFX header (key:value lines up to a blank line) if present -
   // the body underneath is the SGML/XML payload we want.
   const headerEnd = input.search(/<OFX\b/i)
   const body = headerEnd >= 0 ? input.slice(headerEnd) : input

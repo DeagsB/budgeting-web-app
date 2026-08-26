@@ -61,7 +61,7 @@ export default async function PlaidSetupPage() {
           Link your bank. Get real merchant names.
         </h1>
         <p className="mt-2 max-w-[640px] text-[14px] leading-relaxed text-ink-2">
-          Plaid pulls your transactions automatically — with the actual merchant, not a
+          Plaid pulls your transactions automatically - with the actual merchant, not a
           &ldquo;withdrawal warning.&rdquo; The free tier covers up to {MAX_ITEMS} banks. Anything that
           matches an existing email-alert row just gets its name upgraded, so the two never double up.
         </p>
@@ -82,7 +82,7 @@ export default async function PlaidSetupPage() {
             <a href="https://dashboard.plaid.com" target="_blank" rel="noreferrer" className="font-semibold text-ink underline-offset-2 hover:underline">
               dashboard.plaid.com
             </a>{' '}
-            — use Sandbox keys to try it, then Production keys for the free Trial tier.
+            - use Sandbox keys to try it, then Production keys for the free Trial tier.
           </p>
         </section>
       )}

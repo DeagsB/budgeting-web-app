@@ -6,8 +6,8 @@ import { humanizeDbError } from '@/lib/errors'
 /**
  * Single source of truth for creating spending categories.
  *
- * Historically two divergent server actions inserted categories — the /setup
- * card and the /categories page — and they drifted: one set `sort_order`, the
+ * Historically two divergent server actions inserted categories - the /setup
+ * card and the /categories page - and they drifted: one set `sort_order`, the
  * other didn't; they revalidated different page sets; only one enforced the
  * two-level nesting rule. That divergence is why freshly-added categories
  * "didn't populate correctly" (wrong order, or missing on the page where you
@@ -18,7 +18,7 @@ import { humanizeDbError } from '@/lib/errors'
 export const CODE_RE = /^[A-Z][A-Z0-9_.]{0,39}$/
 
 // Every route whose server render reads the categories table. A category
-// mutation must bust the client Router Cache for all of them — `force-dynamic`
+// mutation must bust the client Router Cache for all of them - `force-dynamic`
 // on the (app) layout only re-renders on a fresh request, so a soft navigation
 // to an already-visited route still serves a stale RSC payload until the path
 // is revalidated.
@@ -49,7 +49,7 @@ export function slugCode(name: string, parentCode?: string | null): string {
 export type CreateCategoryInput = {
   name: string
   parentId?: string | null
-  /** Optional manual override — only the /categories page exposes this field. */
+  /** Optional manual override - only the /categories page exposes this field. */
   code?: string | null
 }
 
@@ -122,7 +122,7 @@ export async function createCategoryCore(
   if (!finalCode) return { ok: false, error: 'Could not generate a unique code for that name.' }
 
   // Next sort_order within the parent group. NOTE: top-level rows need
-  // `.is('parent_id', null)` — `.eq('parent_id', null)` matches nothing in
+  // `.is('parent_id', null)` - `.eq('parent_id', null)` matches nothing in
   // PostgREST, which is the latent bug that left new top-level categories at
   // sort_order 0 and jumbled their order everywhere.
   const orderBase = supabase

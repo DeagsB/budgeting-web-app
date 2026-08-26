@@ -24,7 +24,7 @@ import {
 // Apps Script caller can decide whether to mark the thread as processed.
 //
 // Auth: the `secret` body field is matched against households.email_ingest_secret.
-// No user session is involved — the route uses the Supabase service-role key
+// No user session is involved - the route uses the Supabase service-role key
 // (which bypasses RLS), so it MUST live behind that secret check.
 
 export async function POST(request: NextRequest) {
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     .maybeSingle()
 
   if (!household) {
-    // Don't log to email_ingestion_log — we have no household to attach it to.
+    // Don't log to email_ingestion_log - we have no household to attach it to.
     return NextResponse.json({ status: 'invalid_secret' }, { status: 401 })
   }
 

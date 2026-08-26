@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 /**
  * First-run / no-data placeholder. A centered, dashed-border card used across
  * dashboard and report screens in place of ad-hoc empty cards. Presentational
- * only — callers pass an optional icon, body copy, and an action node (e.g. a
+ * only - callers pass an optional icon, body copy, and an action node (e.g. a
  * <Button> or styled <Link>).
  */
 export function EmptyState({

@@ -57,7 +57,7 @@ export async function saveContributionRooms(
     })
   }
 
-  // Nothing parseable to write — treat as a no-op success so the UI doesn't
+  // Nothing parseable to write - treat as a no-op success so the UI doesn't
   // flash an error when a user saves an unchanged form.
   if (rows.length === 0) return { ok: true }
 

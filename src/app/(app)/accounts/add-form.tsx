@@ -64,7 +64,7 @@ export function AddAccountForm({ members }: { members: { id: string; name: strin
             className="maple-select disabled:cursor-not-allowed disabled:bg-paper-2 disabled:text-ink-3"
           >
             {ownership === 'shared' ? (
-              <option value="">— Shared —</option>
+              <option value="">- Shared -</option>
             ) : (
               <>
                 {members.length === 0 && <option value="">(no members)</option>}

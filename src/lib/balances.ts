@@ -1,6 +1,6 @@
 // Cashflow-derived account balances + net-worth trail. The balance of an
 // account at a point in time is its opening balance plus the net effect of
-// every transaction up to that month — so the figures move with actual
+// every transaction up to that month - so the figures move with actual
 // spending and income instead of sitting flat until someone records a manual
 // snapshot. A balance snapshot, when present, anchors the running balance and
 // only transactions after it are applied on top.

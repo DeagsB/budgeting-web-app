@@ -1,11 +1,11 @@
-'use client'
-
 import type { HTMLAttributes, ReactNode } from 'react'
-import { useEffect, useState } from 'react'
 
 /**
- * Mount-time fade + translate-up reveal. `delay` lets you stagger children.
- * Once `show` flips, the transform runs with an iOS-feel easing.
+ * Fade + translate-up reveal driven by a CSS animation (`.maple-reveal` in
+ * globals.css), so the content is painted by the server HTML and animates in
+ * on first paint - no JavaScript needed. Before hydration the card is never
+ * blank; on slow devices it simply fades in a beat later. `delay` staggers
+ * children; reduced-motion users get the final frame immediately.
  */
 export function Reveal({
   children,
@@ -13,6 +13,7 @@ export function Reveal({
   y = 8,
   show = true,
   className = '',
+  style,
   ...rest
 }: {
   children: ReactNode
@@ -20,19 +21,13 @@ export function Reveal({
   y?: number
   show?: boolean
 } & HTMLAttributes<HTMLDivElement>) {
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => {
-    if (!show) return
-    const id = setTimeout(() => setMounted(true), delay)
-    return () => clearTimeout(id)
-  }, [show, delay])
-
   return (
     <div
-      className={`transition-[opacity,transform] duration-[380ms] ease-[var(--ease-ios-in)] ${className}`}
+      className={`${show ? 'maple-reveal' : ''} ${className}`}
       style={{
-        opacity: mounted ? 1 : 0,
-        transform: mounted ? 'translateY(0)' : `translateY(${y}px)`,
+        ...style,
+        animationDelay: show && delay ? `${delay}ms` : undefined,
+        ['--reveal-y' as string]: `${y}px`,
       }}
       {...rest}
     >

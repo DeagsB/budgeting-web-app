@@ -1,7 +1,7 @@
 /**
- * P&L skeleton. Mirrors the real layout — stacked header + month nav, the
+ * P&L skeleton. Mirrors the real layout - stacked header + month nav, the
  * three-up income/expense/net tiles, the twelve-month bar card, and the
- * top-categories card — so navigating to /pnl gives instant, shape-accurate
+ * top-categories card - so navigating to /pnl gives instant, shape-accurate
  * feedback while the year's transactions resolve.
  */
 export default function Loading() {

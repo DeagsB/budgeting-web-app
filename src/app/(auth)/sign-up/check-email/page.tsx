@@ -1,7 +1,7 @@
 import Link from 'next/link'
 
 /**
- * /sign-up/check-email — shown after sign-up when email confirmation is ON
+ * /sign-up/check-email - shown after sign-up when email confirmation is ON
  * (Supabase returns no session). Static page; no form.
  */
 export default function CheckEmailPage() {

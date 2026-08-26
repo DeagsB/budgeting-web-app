@@ -61,7 +61,7 @@ const STARTER_TEMPLATES: Array<{
   value: Partial<Rule> & { name: string; amount_regex: string; direction: Rule['direction'] }
 }> = [
   {
-    label: 'Generic — “transaction of $X.XX at MERCHANT”',
+    label: 'Generic - “transaction of $X.XX at MERCHANT”',
     value: {
       name: 'Generic transaction alert',
       enabled: true,
@@ -75,7 +75,7 @@ const STARTER_TEMPLATES: Array<{
     },
   },
   {
-    label: 'RBC — debit / credit card alerts',
+    label: 'RBC - debit / credit card alerts',
     value: {
       name: 'RBC card alerts',
       enabled: true,
@@ -89,7 +89,7 @@ const STARTER_TEMPLATES: Array<{
     },
   },
   {
-    label: 'TD — EasyWeb alerts',
+    label: 'TD - EasyWeb alerts',
     value: {
       name: 'TD EasyWeb alerts',
       enabled: true,
@@ -125,16 +125,16 @@ export function SetupWizard({
 }) {
   const [editingRule, setEditingRule] = useState<Rule | 'new' | null>(null)
   // The secret is shown once, right after generation. Hold it in memory so
-  // step 3 can bake it straight into the Apps Script — the user never has to
+  // step 3 can bake it straight into the Apps Script - the user never has to
   // copy the key into a script property by hand. Lost on refresh by design
   // (we never re-fetch it from the server), which keeps the "shown once" model.
   const [freshSecret, setFreshSecret] = useState<string | null>(null)
 
   // Per-step completion, derived from the same server props the wizard already
-  // receives. Presentation only — nothing here changes how the script or secret
+  // receives. Presentation only - nothing here changes how the script or secret
   // are generated.
   //  1. Secret exists (already set, or freshly minted this session).
-  //  2. Bank alerts: a manual toggle at the bank — can't be detected, so it
+  //  2. Bank alerts: a manual toggle at the bank - can't be detected, so it
   //     stays informational ('manual'), never blocking.
   //  3. Script install depends on a secret being available to bake in.
   //  4. At least one rule defined.
@@ -150,7 +150,7 @@ export function SetupWizard({
     5: hasArrived ? 'done' : 'todo',
   }
 
-  // Count the auto-detectable steps that are done (steps 1, 3, 4, 5 — step 2 is
+  // Count the auto-detectable steps that are done (steps 1, 3, 4, 5 - step 2 is
   // a manual bank toggle we can't verify, so it's excluded from the tally).
   const trackable = [1, 3, 4, 5]
   const doneCount = trackable.filter((n) => stepStatus[n] === 'done').length
@@ -250,7 +250,7 @@ function ProgressSummary({
   )
 }
 
-// ─── Step 1 — Secret ──────────────────────────────────────────────────────
+// ─── Step 1 - Secret ──────────────────────────────────────────────────────
 
 function SecretCard({
   webhookUrl,
@@ -284,7 +284,7 @@ function SecretCard({
   return (
     <div className="flex flex-col gap-4">
       <p className="text-[13.5px] leading-relaxed text-ink-2">
-        Your webhook URL is fixed — your secret rotates each time you press the button.
+        Your webhook URL is fixed - your secret rotates each time you press the button.
         The secret is shown <b>once</b> right after generation. Copy it into the Gmail
         script in step 3, then we&rsquo;ll never display it again.
       </p>
@@ -298,7 +298,7 @@ function SecretCard({
         />
         {newlyMintedSecret ? (
           <CopyField
-            label="Your new secret — copy now"
+            label="Your new secret - copy now"
             value={newlyMintedSecret}
             copied={copied === 'secret'}
             onCopy={() => copy(newlyMintedSecret, 'secret')}
@@ -320,7 +320,7 @@ function SecretCard({
             <div className="mt-1 text-[13px] text-ink-2">
               {hasSecret
                 ? 'A secret is set. Press the button to rotate it (you’ll need to update the Gmail script if you do).'
-                : 'No secret yet — press the button to generate one.'}
+                : 'No secret yet - press the button to generate one.'}
             </div>
           </div>
         )}
@@ -382,7 +382,7 @@ function CopyField({
   )
 }
 
-// ─── Step 2 — Bank instructions ───────────────────────────────────────────
+// ─── Step 2 - Bank instructions ───────────────────────────────────────────
 
 function BankAlertHelp() {
   const banks = [
@@ -424,7 +424,7 @@ function BankAlertHelp() {
   )
 }
 
-// ─── Step 3 — Gmail Apps Script ───────────────────────────────────────────
+// ─── Step 3 - Gmail Apps Script ───────────────────────────────────────────
 
 function GmailScriptCard({ webhookUrl, secret }: { webhookUrl: string; secret: string | null }) {
   const [copied, setCopied] = useState(false)
@@ -441,13 +441,13 @@ function GmailScriptCard({ webhookUrl, secret }: { webhookUrl: string; secret: s
     <div className="flex flex-col gap-3">
       {secret ? (
         <div className="rounded-md border border-leaf bg-leaf-tint px-3 py-2 text-[12px] font-medium text-leaf-deep">
-          ✓ Your secret is already baked into the script below — no script property to set.
+          ✓ Your secret is already baked into the script below - no script property to set.
           Just paste, run <code className="rounded bg-paper px-1.5 py-0.5 font-mono text-[11px]">setup</code>, done.
         </div>
       ) : (
         <div className="rounded-md border border-honey bg-paper-2 px-3 py-2 text-[12px] leading-relaxed text-ink-2">
           Press <b>Rotate secret</b> in step 1 and the script below comes back with your key
-          already baked in — nothing to copy. Otherwise set the{' '}
+          already baked in - nothing to copy. Otherwise set the{' '}
           <code className="rounded bg-cream-2 px-1.5 py-0.5 font-mono text-[11px]">SECRET</code> script
           property by hand (step 3 below).
         </div>
@@ -470,7 +470,7 @@ function GmailScriptCard({ webhookUrl, secret }: { webhookUrl: string; secret: s
         {!secret && (
           <li>
             Set <code className="rounded bg-cream-2 px-1.5 py-0.5 font-mono text-[11.5px]">SECRET</code> in <b>Project Settings → Script properties</b>
-            {' '}to the secret from step 1. <span className="text-ink-3">(Or rotate the secret to skip this — see note above.)</span>
+            {' '}to the secret from step 1. <span className="text-ink-3">(Or rotate the secret to skip this - see note above.)</span>
           </li>
         )}
         <li>
@@ -481,14 +481,14 @@ function GmailScriptCard({ webhookUrl, secret }: { webhookUrl: string; secret: s
         </li>
         <li>
           In the editor, pick <code className="rounded bg-cream-2 px-1.5 py-0.5 font-mono text-[11.5px]">setup</code> from the
-          function dropdown and click <b>Run</b>. Approve Gmail access when prompted —
+          function dropdown and click <b>Run</b>. Approve Gmail access when prompted -
           this creates the label, installs the <b>hourly</b> trigger, and pulls existing alerts right away.
           {' '}<span className="text-ink-3">(One run does everything. Hourly is plenty; you can also pull on demand from the app.)</span>
         </li>
         <li>
           <b>For on-demand sync:</b> click <b>Deploy → New deployment</b> → type <b>Web app</b>,
           execute as <i>Me</i>, who has access <i>Anyone with the link</i>. Copy the resulting
-          <code className="rounded bg-cream-2 mx-1 px-1.5 py-0.5 font-mono text-[11.5px]">/exec</code> URL and paste it into Maple in step 5 — that&rsquo;s what
+          <code className="rounded bg-cream-2 mx-1 px-1.5 py-0.5 font-mono text-[11.5px]">/exec</code> URL and paste it into Maple in step 5 - that&rsquo;s what
           powers the &ldquo;Sync now&rdquo; button.
         </li>
       </ol>
@@ -517,24 +517,24 @@ function GmailScriptCard({ webhookUrl, secret }: { webhookUrl: string; secret: s
 
 function appsScriptCode(webhookUrl: string, secret: string | null): string {
   // The secret is 64 hex chars (gen_random_bytes(32) → hex), so it is safe to
-  // drop straight into a single-quoted JS literal — no escaping needed.
+  // drop straight into a single-quoted JS literal - no escaping needed.
   const bakedSecret = secret ?? ''
   return `// Forwards Gmail messages labelled "bank-alerts" to Maple.
 //
-// EASIEST SETUP — pick "setup" in the function dropdown above and click Run, once.
+// EASIEST SETUP - pick "setup" in the function dropdown above and click Run, once.
 // It creates the Gmail label, installs the hourly trigger, authorizes Gmail, and
 // pulls your existing alerts immediately. Nothing else to configure.
 //
 // Script properties (optional overrides):
-//   SECRET        — your Maple webhook secret. Baked in below when you copy the
+//   SECRET        - your Maple webhook secret. Baked in below when you copy the
 //                   script right after pressing "Generate/Rotate secret";
 //                   otherwise set it here (Project Settings ▸ Script properties).
-//   LABEL_NAME    — Gmail label to scan; defaults to "bank-alerts".
-//   LOOKBACK_DAYS — how far back to scan each run; defaults to 30. Bump to 365
+//   LABEL_NAME    - Gmail label to scan; defaults to "bank-alerts".
+//   LOOKBACK_DAYS - how far back to scan each run; defaults to 30. Bump to 365
 //                   once for a one-time backfill, then lower it again.
 //
 // Note: GmailApp only supports labels at the thread level, and bank alerts
-// with identical subjects often share a thread — so we do NOT track "already
+// with identical subjects often share a thread - so we do NOT track "already
 // imported" with a label (that would drop later alerts in a reused thread).
 // Instead we re-scan recent labelled mail each run and let Maple dedup by
 // message-id (it returns "duplicate" for anything already imported). Safe to
@@ -581,7 +581,7 @@ function ensureLabel_(name) {
 
 function forwardBankAlerts() {
   const secret = secret_();
-  if (!secret) throw new Error('No secret set. In Maple, press "Generate/Rotate secret", re-copy this script (the key bakes in), and run setup — or set the SECRET script property by hand.');
+  if (!secret) throw new Error('No secret set. In Maple, press "Generate/Rotate secret", re-copy this script (the key bakes in), and run setup - or set the SECRET script property by hand.');
   const labelName = labelName_();
   const lookback = PropertiesService.getScriptProperties().getProperty('LOOKBACK_DAYS') || '30';
   const query = 'label:' + labelName + ' newer_than:' + lookback + 'd';
@@ -616,19 +616,19 @@ function forwardBankAlerts() {
         const code = res.getResponseCode();
         if (code === 401) {
           // Bad/stale secret. Stop loudly instead of silently dropping every
-          // alert — rotate in Maple, re-copy the script, and run setup again.
+          // alert - rotate in Maple, re-copy the script, and run setup again.
           throw new Error('Maple rejected the secret (HTTP 401). In Maple, press "Generate/Rotate secret", re-copy this script, and run setup again.');
         }
         if (code !== 200) {
           failures++;
-          continue; // 5xx / network — leave it for the next run to retry
+          continue; // 5xx / network - leave it for the next run to retry
         }
         let status = '';
         try { status = JSON.parse(res.getContentText()).status || ''; } catch (e) {}
         if (status === 'inserted') imported++;
         else if (status === 'duplicate') duplicates++;
         else if (status === 'no_match') unmatched++;
-        else failures++; // parse_error etc — visible in Maple's ingestion log
+        else failures++; // parse_error etc - visible in Maple's ingestion log
       }
     }
     if (threads.length < PAGE) break;
@@ -637,7 +637,7 @@ function forwardBankAlerts() {
   return { imported: imported, skipped: duplicates, unmatched: unmatched, failures: failures };
 }
 
-// HTTP entry point — deploy this script as a Web App (Deploy → New
+// HTTP entry point - deploy this script as a Web App (Deploy → New
 // deployment → type: Web App, execute as Me, who has access: Anyone with
 // the link). Maple's "Sync now" button calls the resulting URL.
 function doGet() {
@@ -649,7 +649,7 @@ function doGet() {
 `
 }
 
-// ─── Step 4 — Rules ───────────────────────────────────────────────────────
+// ─── Step 4 - Rules ───────────────────────────────────────────────────────
 
 function RulesSection({
   rules,
@@ -683,7 +683,7 @@ function RulesSection({
   return (
     <div className="flex flex-col gap-3">
       <p className="text-[13.5px] leading-relaxed text-ink-2">
-        One rule per bank routes to all your accounts there — set the last 4
+        One rule per bank routes to all your accounts there - set the last 4
         digits on each account in <Link href="/accounts" className="font-semibold text-ink underline-offset-2 hover:underline">Accounts</Link>{' '}
         and the engine sends each alert to the right one.
       </p>
@@ -860,7 +860,7 @@ function RuleForm({
               onChange={(e) => applyTemplate(Number(e.target.value))}
               className="maple-select"
             >
-              <option value="">Blank — fill it in manually</option>
+              <option value="">Blank - fill it in manually</option>
               {STARTER_TEMPLATES.map((t, i) => (
                 <option key={t.label} value={i}>{t.label}</option>
               ))}
@@ -950,7 +950,7 @@ function RuleForm({
           >
             <option value="outflow">Always an outflow (debit / purchase)</option>
             <option value="inflow">Always an inflow (deposit / credit)</option>
-            <option value="auto">Auto — use inflow regex below</option>
+            <option value="auto">Auto - use inflow regex below</option>
           </select>
         </FormField>
 
@@ -993,7 +993,7 @@ function RuleForm({
           {accounts.some((a) => !a.last_four) && (
             <>
               {' · '}<span className="text-ink-3">
-                accounts without a last-4 won&rsquo;t auto-route — set them in Accounts.
+                accounts without a last-4 won&rsquo;t auto-route - set them in Accounts.
               </span>
             </>
           )}
@@ -1001,7 +1001,7 @@ function RuleForm({
       )}
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <FormField label="Fallback account (required)" hint="Used when the router regex doesn't match — e.g. an e-transfer with no card number.">
+        <FormField label="Fallback account (required)" hint="Used when the router regex doesn't match - e.g. an e-transfer with no card number.">
           <select
             name="default_account_id"
             required
@@ -1085,7 +1085,7 @@ function FormField({
   )
 }
 
-// ─── Step 5 — Verify ──────────────────────────────────────────────────────
+// ─── Step 5 - Verify ──────────────────────────────────────────────────────
 
 function VerifyLog({
   log: initial,
@@ -1118,7 +1118,7 @@ function VerifyLog({
         const next = await getRecentLog()
         if (!cancelled) setLog(next)
       } catch {
-        /* swallow — next tick will retry */
+        /* swallow - next tick will retry */
       }
     }
 
@@ -1157,7 +1157,7 @@ function VerifyLog({
           works end-to-end, and the result lands in the log right below. */}
       <p className="text-[13.5px] leading-relaxed text-ink-2">
         Hit <b>Send test email</b> to push a fake bank alert through the whole
-        pipeline. You&rsquo;ll see it land in the log below within a second — proof
+        pipeline. You&rsquo;ll see it land in the log below within a second - proof
         the wiring works before a real alert ever arrives.
       </p>
 
@@ -1175,7 +1175,7 @@ function VerifyLog({
             {testState && 'ok' in testState && testState.ok && (
               <p className="mt-1.5 text-[12px] font-medium text-leaf-deep">
                 Webhook responded with <b>{testState.status}</b>
-                {testState.transaction_id ? ` — transaction ${testState.transaction_id.slice(0, 8)}…` : ''}.
+                {testState.transaction_id ? ` - transaction ${testState.transaction_id.slice(0, 8)}…` : ''}.
                 {testState.status === 'inserted' && ' Check Activity to see it.'}
                 {testState.status === 'no_match' && ' Add a matching rule above so the engine can find your test email.'}
               </p>
@@ -1205,7 +1205,7 @@ function VerifyLog({
 
       {log.length === 0 ? (
         <p className="rounded-md border border-dashed border-hair bg-paper px-4 py-6 text-center text-[13px] text-ink-2">
-          No alerts yet. Send a test above, or wait for your Gmail script to fire — entries appear here within seconds.
+          No alerts yet. Send a test above, or wait for your Gmail script to fire - entries appear here within seconds.
         </p>
       ) : (
         <div className="overflow-hidden rounded-md border border-hair">
@@ -1225,10 +1225,10 @@ function VerifyLog({
                     {formatDate(l.received_at.slice(0, 10))}
                   </td>
                   <td className="max-w-[200px] truncate px-4 py-2 text-ink-2">
-                    {l.from_address ?? '—'}
+                    {l.from_address ?? '-'}
                   </td>
                   <td className="max-w-[280px] truncate px-4 py-2 text-ink">
-                    {l.subject ?? '—'}
+                    {l.subject ?? '-'}
                   </td>
                   <td className="px-4 py-2">
                     <StatusPill status={l.status} detail={l.error_detail} />
@@ -1249,7 +1249,7 @@ function VerifyLog({
         </div>
       )}
 
-      {/* On-demand sync editor — secondary to the test payoff above, so it sits
+      {/* On-demand sync editor - secondary to the test payoff above, so it sits
           last. The hourly trigger covers steady-state; this is for "I just
           bought something, pull it now". */}
       <div className="rounded-md border border-leaf bg-leaf-tint p-4">
@@ -1301,7 +1301,7 @@ function VerifyLog({
           )}
           {syncState && 'ok' in syncState && syncState.ok && (
             <p className="mt-2 text-[12px] font-medium text-leaf-deep">
-              Sync ran — script processed {syncState.imported} message{syncState.imported === 1 ? '' : 's'}
+              Sync ran - script processed {syncState.imported} message{syncState.imported === 1 ? '' : 's'}
               {syncState.skipped > 0 && `, skipped ${syncState.skipped} already-imported`}.
             </p>
           )}
@@ -1356,7 +1356,7 @@ function SmartSuggester({
     setError(null)
     setNotes(null)
     if (!body.trim()) {
-      setError('Paste the email body — that’s where the amount and merchant live.')
+      setError('Paste the email body - that’s where the amount and merchant live.')
       bodyRef.current?.focus()
       return
     }
@@ -1407,7 +1407,7 @@ function SmartSuggester({
               placeholder="Transaction notification"
             />
           </FormField>
-          <FormField label="Email body (required)" hint="Plain text — paste as much as you got">
+          <FormField label="Email body (required)" hint="Plain text - paste as much as you got">
             <textarea
               ref={bodyRef}
               value={body}
@@ -1480,7 +1480,7 @@ function Step({
       }`}
     >
       <header className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        {/* Number badge flips to a leaf check once the step's done — the check
+        {/* Number badge flips to a leaf check once the step's done - the check
             glyph is the non-color cue. */}
         <span
           className={`inline-flex h-[22px] w-[22px] items-center justify-center rounded-full font-serif text-[12px] tabular-nums text-paper ${

@@ -11,7 +11,7 @@
 // - Shares where share.member_id == transaction.member_id are ignored (a
 //   payer can't owe themselves).
 // - Transactions with no payer (transaction.member_id == null) are ignored
-//   — a shared-account transaction has no one to settle with.
+//   - a shared-account transaction has no one to settle with.
 //
 // Settlements are straightforward: from_member paid to_member; subtract
 // that from the running "from owes to" balance.

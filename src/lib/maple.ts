@@ -68,7 +68,7 @@ export function smoothPath(
 /**
  * Evenly-spaced horizontal gridline y-coordinates across a [0, h] box (inset by
  * `pad` top and bottom so lines don't sit on the frame). Returns `count` inner
- * lines — the outer edges are intentionally omitted. Pure + deterministic.
+ * lines - the outer edges are intentionally omitted. Pure + deterministic.
  */
 export function gridlines(
   h: number,

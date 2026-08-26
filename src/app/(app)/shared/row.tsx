@@ -61,7 +61,7 @@ export function SharedRow({
   return (
     <li className="flex flex-col">
       <div className="flex items-start gap-3 px-5 py-4 text-[14px] sm:gap-4">
-        {/* Maple-branded tick checkbox — 44px tap target wraps the 24px glyph */}
+        {/* Maple-branded tick checkbox - 44px tap target wraps the 24px glyph */}
         <form
           action={(fd) =>
             startTransition(async () => {
@@ -100,7 +100,7 @@ export function SharedRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-3">
             <div className="truncate font-medium text-ink">
-              {t.description ?? '—'}
+              {t.description ?? '-'}
             </div>
             <div className="shrink-0 text-[16px]">
               <Amount cents={t.amount_cents} sign="auto" tone={isExpense ? 'ink' : 'leaf'} />
@@ -320,7 +320,7 @@ function SplitEditor({
         </button>
       </div>
 
-      {/* Progress bar toward total — color + "over total" text both signal overshoot */}
+      {/* Progress bar toward total - color + "over total" text both signal overshoot */}
       <div className="h-1.5 overflow-hidden rounded-full bg-paper">
         <div
           role="progressbar"
@@ -370,7 +370,7 @@ function SplitEditor({
 
       {overshoot && (
         <p className="rounded-md bg-maple-soft px-3 py-2 text-[12.5px] font-medium text-maple">
-          Over total — shares can&rsquo;t exceed the transaction total ({formatMoney(sum)} &gt;{' '}
+          Over total - shares can&rsquo;t exceed the transaction total ({formatMoney(sum)} &gt;{' '}
           {formatMoney(totalAbs)}).
         </p>
       )}

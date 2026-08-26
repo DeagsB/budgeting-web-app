@@ -154,7 +154,7 @@ export function TxControls({
             placeholder="Search…"
             aria-label="Search transactions"
             // `.maple-input` is unlayered CSS and sets `padding` shorthand, which
-            // beats Tailwind's layered `pl-10` — so the left padding must be set
+            // beats Tailwind's layered `pl-10` - so the left padding must be set
             // inline to clear the search icon. (Right pad makes room for the
             // native search-clear affordance.)
             className="maple-input"
@@ -261,7 +261,7 @@ export function TxControls({
         ))}
       </div>
 
-      {/* Desktop: category select + clear — category list is hierarchical and
+      {/* Desktop: category select + clear - category list is hierarchical and
           long, so a select reads better than a chip-per-category row. */}
       {categories.length > 0 && (
         <div className="hidden flex-row items-end gap-3 md:flex">

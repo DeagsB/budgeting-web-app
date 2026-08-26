@@ -29,7 +29,7 @@ export async function saveBudgets(fd: FormData): Promise<SaveBudgetsResult> {
     rows.push({ household_id: ctx.householdId, category_id, month, amount_cents: amount })
   }
 
-  // Nothing parseable to write — treat as a no-op success so the UI doesn't
+  // Nothing parseable to write - treat as a no-op success so the UI doesn't
   // flash an error when a user saves an unchanged form.
   if (rows.length === 0) return { ok: true }
 

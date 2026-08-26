@@ -1,4 +1,5 @@
 import { ImageResponse } from 'next/og'
+import { BRAND_FONT_FAMILY, brandFonts } from './splash/font'
 
 // iOS home-screen icon. iOS auto-applies the squircle mask, so we render a
 // full-bleed rounded square at the standard 180px and let the OS do the
@@ -7,7 +8,7 @@ import { ImageResponse } from 'next/og'
 export const size = { width: 180, height: 180 }
 export const contentType = 'image/png'
 
-export default function AppleIcon() {
+export default async function AppleIcon() {
   return new ImageResponse(
     (
       <div
@@ -46,13 +47,13 @@ export default function AppleIcon() {
         {/* serif M */}
         <div
           style={{
-            fontFamily: 'serif',
+            fontFamily: BRAND_FONT_FAMILY,
             fontSize: 132,
             color: '#FFFDF7',
             letterSpacing: '-0.04em',
             lineHeight: 1,
             display: 'flex',
-            // textShadow not supported by ImageResponse — but the gradient gives
+            // textShadow not supported by ImageResponse - but the gradient gives
             // enough depth without it.
           }}
         >
@@ -72,6 +73,6 @@ export default function AppleIcon() {
         />
       </div>
     ),
-    { ...size },
+    { ...size, fonts: await brandFonts() },
   )
 }

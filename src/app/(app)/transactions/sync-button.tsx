@@ -10,7 +10,7 @@ import { triggerGmailSync, type SyncNowState } from './import/auto-setup/actions
  * user can refresh the feed seconds after a swipe instead of waiting for
  * the hourly trigger.
  *
- * Disabled state when no sync URL is configured — the user is nudged to
+ * Disabled state when no sync URL is configured - the user is nudged to
  * the auto-setup page where they paste it.
  */
 export function SyncNowButton({ hasSyncUrl }: { hasSyncUrl: boolean }) {

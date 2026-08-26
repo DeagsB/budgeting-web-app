@@ -1,5 +1,5 @@
 // Pure logic for reconciling a freshly-staged statement import (CSV/OFX)
-// against transactions that already exist in the household — chiefly the
+// against transactions that already exist in the household - chiefly the
 // near-real-time rows created by the email-alert pipeline. No I/O; the server
 // action does the DB work and feeds these functions.
 //

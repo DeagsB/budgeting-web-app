@@ -13,7 +13,7 @@ import { getPlaidEnv } from '@/lib/env'
  * when the integration isn't configured so callers can degrade gracefully
  * (the connect UI shows a "Plaid isn't set up" banner instead of crashing).
  *
- * Never import this from a Client Component — it reads server secrets and the
+ * Never import this from a Client Component - it reads server secrets and the
  * Plaid access token never leaves the server.
  */
 
@@ -40,7 +40,7 @@ export function createPlaidClient(): PlaidApi | null {
   )
 }
 
-/** Canada only — the app's market. */
+/** Canada only - the app's market. */
 export function plaidCountryCodes(): CountryCode[] {
   return [CountryCode.Ca]
 }
@@ -55,7 +55,7 @@ export function plaidProducts(): Products[] {
 // Maple convention: amount_cents is signed, POSITIVE = outflow (money leaving
 // the account). Plaid convention is identical: a positive `amount` is money
 // leaving the account (debit/purchase), negative is money in (refund/deposit).
-// So there is NO sign flip — this is the single highest-risk line in the
+// So there is NO sign flip - this is the single highest-risk line in the
 // integration, isolated here behind one tested helper.
 export function plaidAmountToCents(amount: number): number {
   if (!Number.isFinite(amount)) throw new Error(`Non-finite Plaid amount: ${amount}`)

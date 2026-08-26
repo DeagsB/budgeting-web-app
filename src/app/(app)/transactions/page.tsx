@@ -258,10 +258,10 @@ export default async function TransactionsPage({
         }
       />
 
-      {/* Month nav — link-based; "This month" pill only shows off the current month. */}
+      {/* Month nav - link-based; "This month" pill only shows off the current month. */}
       <MonthNav monthISO={month} makeHref={monthHref} className="-ml-2" />
 
-      {/* Triage — slim pill (mobile) / banner (md+) + step-through queue for
+      {/* Triage - slim pill (mobile) / banner (md+) + step-through queue for
           transactions that need a category and/or a real title. */}
       <UncategorizedReview
         transactions={attentionVMs}
@@ -270,7 +270,7 @@ export default async function TransactionsPage({
         topCategoryIds={topCategoryIds}
       />
 
-      {/* Stats — reflect the active filter set. Compact three-up on mobile
+      {/* Stats - reflect the active filter set. Compact three-up on mobile
           (whole dollars so three fit a 375px screen), full tiles on md+. */}
       <section className="grid grid-cols-3 gap-2 md:hidden">
         <StatTile compact label="Outflow" value={<Amount cents={outflow} tone="maple" compact />} tone="maple" />
@@ -292,7 +292,7 @@ export default async function TransactionsPage({
         />
       </section>
 
-      {/* Controls — search + chip filters + add (always visible). */}
+      {/* Controls - search + chip filters + add (always visible). */}
       {accountOptions.length === 0 ? (
         <EmptyState
           title="Add an account first"
@@ -371,13 +371,13 @@ export default async function TransactionsPage({
                       const splits = splitsByTx.get(t.id) ?? []
                       const splitCategories = splits
                         .map((s) =>
-                          s.category_id ? (categoryName.get(s.category_id) ?? '—') : 'Uncategorized',
+                          s.category_id ? (categoryName.get(s.category_id) ?? '-') : 'Uncategorized',
                         )
                         .filter((s, i, arr) => arr.indexOf(s) === i)
                       const categorySummary =
                         splits.length <= 1
                           ? splits[0]?.category_id
-                            ? (categoryName.get(splits[0].category_id!) ?? '—')
+                            ? (categoryName.get(splits[0].category_id!) ?? '-')
                             : 'Uncategorized'
                           : `Split: ${splitCategories.join(' + ')}`
                       const primaryCategoryId = splits[0]?.category_id ?? null

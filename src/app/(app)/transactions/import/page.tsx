@@ -49,7 +49,7 @@ export default async function ImportPage() {
           Paste a statement, keep its shape.
         </h1>
         <p className="mt-2 max-w-[620px] text-[14px] leading-relaxed text-ink-2">
-          CSV from your bank, or an OFX/QFX export — the wizard handles both. We auto-detect
+          CSV from your bank, or an OFX/QFX export - the wizard handles both. We auto-detect
           common columns and dedup OFX rows by their bank-issued ID.
         </p>
       </header>
@@ -59,7 +59,7 @@ export default async function ImportPage() {
           <MapleLabel>Hands-free</MapleLabel>
           <p className="mt-1.5 max-w-[520px] text-[13.5px] leading-relaxed text-ink-2">
             Want every purchase to land here automatically? Forward your bank&rsquo;s
-            transaction-alert emails through Gmail and we&rsquo;ll record them in seconds —
+            transaction-alert emails through Gmail and we&rsquo;ll record them in seconds -
             no credentials, no monthly fees.
           </p>
         </div>
@@ -76,7 +76,7 @@ export default async function ImportPage() {
           <MapleLabel>Connect a bank</MapleLabel>
           <p className="mt-1.5 max-w-[520px] text-[13.5px] leading-relaxed text-ink-2">
             Want the real merchant on every row instead of a &ldquo;withdrawal warning&rdquo;? Link your
-            bank through Plaid — transactions sync in automatically, with names and amounts. Free for up
+            bank through Plaid - transactions sync in automatically, with names and amounts. Free for up
             to 10 banks; it enriches your email alerts rather than duplicating them.
           </p>
         </div>
@@ -91,8 +91,8 @@ export default async function ImportPage() {
       <section className="rounded-lg border border-hair bg-cream-2 p-5 md:p-6">
         <MapleLabel>What we look for</MapleLabel>
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <Hint tag="CSV — required" items={['Date', 'Amount', 'Description']} />
-          <Hint tag="CSV — optional" items={['Category (code or name)', 'Account (name)', 'Member (name)']} />
+          <Hint tag="CSV - required" items={['Date', 'Amount', 'Description']} />
+          <Hint tag="CSV - optional" items={['Category (code or name)', 'Account (name)', 'Member (name)']} />
           <Hint tag="OFX / QFX" items={['No mapping needed', 'Bank-issued ID dedup', 'Sign convention auto']} />
         </div>
       </section>

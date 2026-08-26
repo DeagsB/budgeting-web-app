@@ -28,7 +28,7 @@ import {
  * transaction that reconciles to an existing email-alert row UPGRADES that row's
  * generic title with the real merchant instead of inserting a duplicate.
  *
- * Runs with the service-role client (no user session) — invoked by the webhook
+ * Runs with the service-role client (no user session) - invoked by the webhook
  * (in the background via `after()`), the daily cron sweep, the manual "Sync
  * now" action and pull-to-refresh.
  *

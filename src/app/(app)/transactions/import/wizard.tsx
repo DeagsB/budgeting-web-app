@@ -150,7 +150,7 @@ export function ImportWizard({
         setFileError(e instanceof Error ? e.message : 'Failed to parse OFX.')
       }
     } else {
-      // CSV fallback — dump into the textarea so the existing pipeline runs.
+      // CSV fallback - dump into the textarea so the existing pipeline runs.
       setOfxRows(null)
       setOfxFileName(null)
       setRaw(text)
@@ -168,7 +168,7 @@ export function ImportWizard({
   const [mapping, setMapping] = useState<FieldKey[]>([])
 
   // Re-seed mapping whenever the header row changes length (new paste). The
-  // setState-in-effect is deliberate here — auto-detect has to react to
+  // setState-in-effect is deliberate here - auto-detect has to react to
   // *parsed* input, not to a direct user action.
   useEffect(() => {
     if (headers.length > 0 && mapping.length !== headers.length) {
@@ -304,7 +304,7 @@ export function ImportWizard({
   const [annotations, setAnnotations] = useState<RowAnnotation[] | null>(null)
   const [analyzing, startAnalyze] = useTransition()
 
-  // The preview indices that survive into stagedRows, in the same order — lets
+  // The preview indices that survive into stagedRows, in the same order - lets
   // us zip annotations back onto the rendered preview rows.
   const readyPreviewIdx = useMemo(
     () =>
@@ -369,7 +369,7 @@ export function ImportWizard({
   const [state, formAction, pending] = useActionState<ImportState, FormData>(commitImport, undefined)
 
   // After a successful commit, clear the parsed input so the staged-rows
-  // <input> empties out — without this the same payload sits in the form and a
+  // <input> empties out - without this the same payload sits in the form and a
   // second click would re-submit (and re-skip) every row. The success banner
   // reads from `state`, which survives clearAll(), so the confirmation stays
   // visible. Tracked with a ref so we only reset once per successful action.
@@ -398,7 +398,7 @@ export function ImportWizard({
                 </div>
                 <div className="mt-0.5 text-[11.5px] text-ink-2">
                   {ofxRows!.length} transaction{ofxRows!.length === 1 ? '' : 's'} parsed.
-                  Each carries a bank-issued ID — re-importing the same file is safe (duplicates are skipped).
+                  Each carries a bank-issued ID - re-importing the same file is safe (duplicates are skipped).
                 </div>
               </div>
               <button
@@ -509,7 +509,7 @@ export function ImportWizard({
               onChange={(e) => setDefaultDirection(e.target.value as 'auto' | 'out' | 'in')}
               className="maple-select"
               disabled={inputMode === 'ofx'}
-              title={inputMode === 'ofx' ? 'OFX files include a sign — this is ignored.' : undefined}
+              title={inputMode === 'ofx' ? 'OFX files include a sign - this is ignored.' : undefined}
             >
               <option value="auto">Auto (respect minus sign)</option>
               <option value="out">All rows are outflows</option>
@@ -625,11 +625,11 @@ export function ImportWizard({
                     </div>
                     {d.matched && (
                       <div className="mt-1 text-[11px] text-ink-3">
-                        Enriches an existing transaction{d.matchedDate ? ` from ${d.matchedDate}` : ''} — no duplicate.
+                        Enriches an existing transaction{d.matchedDate ? ` from ${d.matchedDate}` : ''} - no duplicate.
                       </div>
                     )}
                     <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11.5px]">
-                      <MetaPair label="Date" value={r.date || '—'} mono />
+                      <MetaPair label="Date" value={r.date || '-'} mono />
                       <MetaPair label="Account" value={d.accountName} />
                       <MetaPair
                         label="Category"
@@ -678,7 +678,7 @@ export function ImportWizard({
                         </Td>
                         <Td mono>{r.date}</Td>
                         <Td>
-                          {r.description || <span className="text-ink-3">—</span>}
+                          {r.description || <span className="text-ink-3">-</span>}
                           {d.matched && (
                             <span className="ml-1.5 text-[11px] text-ink-3">· enriches existing</span>
                           )}
@@ -744,7 +744,7 @@ export function ImportWizard({
 // ── UI bits ──
 
 // Resolve the display fields a preview row shows in both the mobile card stack
-// and the desktop table — keeps the two layouts in lock-step.
+// and the desktop table - keeps the two layouts in lock-step.
 function derivePreview(
   r: PreviewRow,
   accounts: Account[],
@@ -752,7 +752,7 @@ function derivePreview(
   members: Member[],
   ann?: RowAnnotation,
 ) {
-  const accountName = accounts.find((a) => a.id === r.accountId)?.name ?? '—'
+  const accountName = accounts.find((a) => a.id === r.accountId)?.name ?? '-'
   let categoryName = categories.find((c) => c.id === r.categoryId)?.name ?? 'Uncategorized'
   let categorySuggested = false
   if (!r.categoryId && ann?.suggestedCategoryId) {
@@ -763,7 +763,7 @@ function derivePreview(
     }
   }
   const memberName = r.memberId
-    ? (members.find((m) => m.id === r.memberId)?.name ?? '—')
+    ? (members.find((m) => m.id === r.memberId)?.name ?? '-')
     : 'Shared'
   const amt = r.amountCents
   const isIncome = amt !== null && amt < 0
@@ -779,7 +779,7 @@ function derivePreview(
   }
 }
 
-// Status chip — the text label is the non-color cue, so the verdict survives
+// Status chip - the text label is the non-color cue, so the verdict survives
 // in greyscale. A reconciled row ('Matches existing') enriches a transaction
 // you already have instead of importing a duplicate.
 function StatusChip({ error, matched }: { error?: string; matched?: boolean }) {

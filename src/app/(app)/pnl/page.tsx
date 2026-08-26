@@ -13,7 +13,7 @@ import { colorForCategory } from '@/lib/category-colors'
 import Link from 'next/link'
 
 /**
- * P&L — twelve-month income vs expense rollup, plus a breakdown by top-level
+ * P&L - twelve-month income vs expense rollup, plus a breakdown by top-level
  * category for the selected month. Serif numbers, maple-red for expenses,
  * leaf-green for income.
  */
@@ -58,7 +58,7 @@ export default async function PnlPage({
   const idx = (iso: string) =>
     buckets.findIndex((b) => b.month.slice(0, 7) === iso.slice(0, 7))
 
-  // No `direction` column — sign convention is amount_cents > 0 means an
+  // No `direction` column - sign convention is amount_cents > 0 means an
   // outflow (expense) and amount_cents < 0 means an inflow (income).
   for (const t of txs ?? []) {
     const i = idx(t.occurred_on as string)
@@ -85,7 +85,7 @@ export default async function PnlPage({
     catTotals.set(id, (catTotals.get(id) ?? 0) + cents)
   }
   const topCats = [...catTotals.entries()]
-    .map(([id, cents]) => ({ id, name: nameOf.get(id) ?? '—', cents }))
+    .map(([id, cents]) => ({ id, name: nameOf.get(id) ?? '-', cents }))
     .sort((a, b) => b.cents - a.cents)
 
   const thisMonth = buckets.find((b) => b.month === selected) ?? { income: 0, expense: 0, month: selected }
@@ -98,7 +98,7 @@ export default async function PnlPage({
   const topCatMax = Math.max(1, ...topCats.map((c) => c.cents))
   const topCatTotal = topCats.reduce((s, c) => s + c.cents, 0)
 
-  // True when there's no activity at all this year — drives the empty state.
+  // True when there's no activity at all this year - drives the empty state.
   const hasAnyActivity = buckets.some((b) => b.income > 0 || b.expense > 0)
 
   const makeHref = (iso: string) =>
@@ -178,7 +178,7 @@ export default async function PnlPage({
                     <Link
                       key={b.month}
                       href={makeHref(b.month)}
-                      aria-label={`View ${monthLabel(b.month)} — income ${formatMoney(b.income)}, expense ${formatMoney(b.expense)}`}
+                      aria-label={`View ${monthLabel(b.month)} - income ${formatMoney(b.income)}, expense ${formatMoney(b.expense)}`}
                       className="group flex min-w-0 flex-col items-center gap-1.5"
                     >
                       <div className="relative flex h-[140px] w-full items-end justify-center gap-0.5">

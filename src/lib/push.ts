@@ -1,4 +1,4 @@
-// Web Push fan-out. All functions are best-effort and never throw — a push
+// Web Push fan-out. All functions are best-effort and never throw - a push
 // failure must never break the webhook that triggered it. Sends use the
 // service-role client (bypasses RLS) and prune dead subscriptions.
 //
@@ -158,7 +158,7 @@ export async function notifyUnmatchedAlert(
 }
 
 /**
- * Notify when an outflow pushes a category over its monthly budget — only on
+ * Notify when an outflow pushes a category over its monthly budget - only on
  * the transaction that crosses the line (so it fires once, not every spend
  * after). categoryId may be a child; we roll up to whichever category carries
  * the monthly budget.

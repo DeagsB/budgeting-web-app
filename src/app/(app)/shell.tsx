@@ -32,25 +32,25 @@ import { useOnline } from '@/lib/run-action'
 // tab bar; anything not on the tab bar shows up in the More sheet.
 
 const DESTS = [
-  // Spending — daily drivers (rendered unlabeled at the top of the sidebar).
+  // Spending - daily drivers (rendered unlabeled at the top of the sidebar).
   { href: '/dashboard',      label: 'Home',          tabLabel: 'Home',         icon: HomeIcon,        group: 'main'    },
   { href: '/transactions',   label: 'Transactions',  tabLabel: 'Transactions', icon: ActivityIcon,    group: 'main'    },
   { href: '/budgets',        label: 'Budgets',       tabLabel: 'Budgets',      icon: BudgetsIcon,     group: 'main'    },
   { href: '/accounts',       label: 'Accounts',      tabLabel: 'Accounts',     icon: AccountsIcon,    group: 'main'    },
-  // Split & settle — shared-money tasks.
+  // Split & settle - shared-money tasks.
   { href: '/shared',         label: 'Shared expenses', tabLabel: 'Shared',     icon: SharedIcon,      group: 'split'   },
   { href: '/settlements',    label: 'Settle up',     tabLabel: 'Settle',       icon: SettlementsIcon, group: 'split'   },
   { href: '/rules',          label: 'Rules',         tabLabel: 'Rules',        icon: RulesIcon,       group: 'split'   },
-  // Reports — read-only financial statements.
+  // Reports - read-only financial statements.
   { href: '/pnl',            label: 'Profit & Loss', tabLabel: 'P&L',          icon: ChartIcon,       group: 'reports' },
   { href: '/balance-sheet',  label: 'Balance sheet', tabLabel: 'Balance',      icon: ScaleIcon,       group: 'reports' },
   { href: '/net-worth',      label: 'Net worth',     tabLabel: 'Net worth',    icon: TrendIcon,       group: 'reports' },
-  // Plans & savings — forward-looking trackers.
+  // Plans & savings - forward-looking trackers.
   { href: '/goals',          label: 'Goals',         tabLabel: 'Goals',        icon: TargetIcon,      group: 'plans'   },
   { href: '/contributions',  label: 'Contributions', tabLabel: 'Contribs',     icon: PiggyIcon,       group: 'plans'   },
   { href: '/loans',          label: 'Loans',         tabLabel: 'Loans',        icon: LoanIcon,        group: 'plans'   },
   { href: '/time-off',       label: 'Time off',      tabLabel: 'Time off',     icon: PlaneIcon,       group: 'plans'   },
-  // Setup — household name, members, categories.
+  // Setup - household name, members, categories.
   { href: '/setup',          label: 'Setup',         tabLabel: 'Setup',        icon: SettingsIcon,    group: 'setup'   },
 ] as const
 
@@ -222,7 +222,7 @@ export function AppShell({
 
   // ─── Single-tap bottom-nav during momentum scroll ───
   // iOS Safari consumes the first tap that lands while the page is still
-  // inertially scrolling to stop the scroll — it never becomes a `click`, so a
+  // inertially scrolling to stop the scroll - it never becomes a `click`, so a
   // fixed tab bar feels like it needs two taps. `pointerup` *does* fire on that
   // tap, so we resolve a tap there and navigate immediately, then suppress the
   // duplicate click that follows on a normal (non-scrolling) tap.
@@ -415,7 +415,7 @@ export function AppShell({
           className="mx-auto max-w-[720px] px-4 py-5 md:max-w-[1080px] md:px-10 md:py-10"
           style={{ paddingBottom: 'calc(72px + env(safe-area-inset-bottom) + 16px)' }}
         >
-          {/* Pull-to-sync wraps every screen so the gesture is universal — a
+          {/* Pull-to-sync wraps every screen so the gesture is universal - a
               pull-down at the top of any page triggers a Gmail sync + refresh.
               <ViewTransition> cross-fades the page body on route changes
               (duration lives in globals.css under .maple-fade). */}

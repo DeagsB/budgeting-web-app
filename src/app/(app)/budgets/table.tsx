@@ -365,18 +365,18 @@ function TableRow({ row }: { row: RenderRow }) {
             {formatMoney(row.rollover)}
           </span>
         ) : (
-          <span className="text-ink-3">—</span>
+          <span className="text-ink-3">-</span>
         )}
       </td>
       <td className="py-3 pr-3 text-right align-top tabular-nums text-ink">
         {formatMoney(row.actual)}
       </td>
       <td className="py-3 pr-3 text-right align-top tabular-nums" style={{ color: varColor }}>
-        {row.variance === 0 ? '—' : formatMoneySigned(row.variance, { plus: true })}
+        {row.variance === 0 ? '-' : formatMoneySigned(row.variance, { plus: true })}
         {row.variance > 0 && <span className="ml-1 text-[10.5px] font-semibold uppercase">over</span>}
       </td>
       <td className="py-3 pr-5 text-right align-top text-[12.5px] tabular-nums" style={{ color: ytdColor }}>
-        {row.ytdVariance === 0 ? '—' : formatMoneySigned(row.ytdVariance, { plus: true })}
+        {row.ytdVariance === 0 ? '-' : formatMoneySigned(row.ytdVariance, { plus: true })}
       </td>
     </tr>
   )

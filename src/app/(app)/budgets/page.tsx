@@ -80,7 +80,7 @@ export default async function BudgetsPage({
       .gt('amount_cents', 0)
       .gte('transaction.occurred_on', yearStart)
       .lt('transaction.occurred_on', nextMonth),
-    // Transactions from the prior three months — used to detect recurring
+    // Transactions from the prior three months - used to detect recurring
     // patterns. We pull from `transactions` (not splits) because the same
     // logical merchant lives on a single transaction, not split by category.
     supabase
@@ -269,12 +269,12 @@ export default async function BudgetsPage({
               </span>
             </div>
             {/* Progress bar. When over budget, the bar fills the full track but
-                splits at the budget-100% mark — leaf for the budgeted portion,
-                maple for the overage — with a paper-colored tick line at the
+                splits at the budget-100% mark - leaf for the budgeted portion,
+                maple for the overage - with a paper-colored tick line at the
                 boundary so the 100% mark stays visible. */}
             <ProgressBar pctUsed={pctUsed} />
 
-            {/* Top-spending budgeted categories — quick glance before the full
+            {/* Top-spending budgeted categories - quick glance before the full
                 editor. Mini bars match the hero's tone: leaf when within
                 budget, maple when over. */}
             {topCategories.length > 0 && (
@@ -390,7 +390,7 @@ function RecurringInsight({
       <div className="rounded-lg border border-hair bg-paper p-4 md:p-5">
         <MapleLabel>Recurring</MapleLabel>
         <div className="mt-1.5 font-serif text-[22px] leading-tight tracking-[-0.02em] text-ink-3 md:text-[26px]">
-          —
+          -
         </div>
         <div className="mt-1 text-[12px] leading-relaxed text-ink-3">
           Nothing yet. Once a transaction with the same description and amount lands in 2+ of the last 3 months, it&rsquo;ll show up here.

@@ -22,7 +22,7 @@ type Account = {
 }
 
 /**
- * Small icon glyph per account type — drawn SVG so it inherits the palette.
+ * Small icon glyph per account type - drawn SVG so it inherits the palette.
  * Switches on the real `AccountType` union so registered (tfsa/rrsp/fhsa),
  * investment, and crypto accounts each get a distinct glyph instead of the
  * chequing fallback.
@@ -41,10 +41,10 @@ function AccountIcon({ type }: { type: string }) {
     case 'tfsa':
     case 'rrsp':
     case 'fhsa':
-      // Registered plans — shield to signal tax-sheltered status.
+      // Registered plans - shield to signal tax-sheltered status.
       return (<svg {...common}><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" /></svg>)
     case 'taxable_investment':
-      // Investment — growth chart.
+      // Investment - growth chart.
       return (<svg {...common}><path d="M3 17l5-5 3 3 7-7M16 6h4v4" /></svg>)
     case 'cash':
       return (<svg {...common}><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="3" /></svg>)
@@ -117,7 +117,7 @@ export function AccountRow({
                 className="maple-select sm disabled:bg-paper-2 disabled:text-ink-3"
               >
                 {ownership === 'shared' ? (
-                  <option value="">— Shared —</option>
+                  <option value="">- Shared -</option>
                 ) : (
                   members.map((m) => (
                     <option key={m.id} value={m.id}>

@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 
 // Locking the background with `body { overflow: hidden }` alone does NOT stop
-// scroll on iOS Safari — the page still rubber-bands behind an open overlay.
+// scroll on iOS Safari - the page still rubber-bands behind an open overlay.
 // The reliable fix is to pin the body with `position: fixed` and offset it by
 // the current scroll position, then restore the scroll on release.
 //

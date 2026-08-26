@@ -189,7 +189,7 @@ export default async function LoansPage() {
                 />
                 <StatTile
                   label="Projected debt-free"
-                  value={householdPayoff ?? '—'}
+                  value={householdPayoff ?? '-'}
                   hint={
                     householdPayoff === 'Open-ended'
                       ? 'a payment never clears'
@@ -293,7 +293,7 @@ function LoanCard({
                   <Amount cents={nextRow.interest_cents} tone="maple" className="text-[16px] sm:text-[18px]" />
                 </span>
               ) : (
-                '—'
+                '-'
               )
             }
             hint={hasRateChanges ? 'principal + interest · schedule applies' : 'principal + interest'}

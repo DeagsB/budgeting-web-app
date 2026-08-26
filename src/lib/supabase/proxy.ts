@@ -35,7 +35,7 @@ export async function updateSession(request: NextRequest) {
     },
   )
 
-  // Verified user fetch — triggers session refresh if the access token expired.
+  // Verified user fetch - triggers session refresh if the access token expired.
   let user = null
   try {
     const { data } = await supabase.auth.getUser()
@@ -54,7 +54,7 @@ export async function updateSession(request: NextRequest) {
     // sign-in / sign-up; acceptance itself requires a session.
     pathname.startsWith('/invite') ||
     // Public ingestion webhooks authenticate via per-household secret in the
-    // request body, not via cookies — don't bounce unauth callers to /sign-in.
+    // request body, not via cookies - don't bounce unauth callers to /sign-in.
     pathname.startsWith('/api/ingest') ||
     // Plaid webhook (verified via signed JWT) and the scheduled cron route
     // (CRON_SECRET bearer) are called by external services with no cookie.

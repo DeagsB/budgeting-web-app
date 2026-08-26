@@ -54,7 +54,7 @@ export default async function GoalsPage() {
       <PageHeader
         eyebrow="Goals"
         title="What you're saving toward."
-        subtitle="A trip, a down payment, an emergency fund — anything you're working toward. Add a target and watch the leaf bar climb."
+        subtitle="A trip, a down payment, an emergency fund - anything you're working toward. Add a target and watch the leaf bar climb."
         actions={active.length > 0 ? <GoalControls accounts={accountList} /> : undefined}
       />
 
@@ -71,7 +71,7 @@ export default async function GoalsPage() {
         {active.length === 0 ? (
           <EmptyState
             title="No active goals yet"
-            body="Add your first one with the Add goal button — a target amount and an optional deadline is all it takes."
+            body="Add your first one with the Add goal button - a target amount and an optional deadline is all it takes."
             action={<GoalControls accounts={accountList} />}
           />
         ) : (

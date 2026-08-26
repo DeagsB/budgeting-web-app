@@ -63,7 +63,7 @@ export function AddGoalForm({
 
       <Field label="Funding account" hint="Optional">
         <select name="funding_account_id" className="maple-select">
-          <option value="">—</option>
+          <option value="">-</option>
           {accounts.map((a) => (
             <option key={a.id} value={a.id}>
               {a.name}
