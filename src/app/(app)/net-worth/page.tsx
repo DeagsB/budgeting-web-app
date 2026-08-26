@@ -6,7 +6,7 @@ import { LIABILITY_TYPES, type AccountType } from '@/lib/domain'
 import { accountBalanceAt, groupTxByAccount, groupSnapsByAccount } from '@/lib/balances'
 import { PageHeader } from '@/components/ui/page-header'
 import { StatTile } from '@/components/ui/stat-tile'
-import { Amount } from '@/components/ui/amount'
+import { ResponsiveAmount } from '@/components/ui/responsive-amount'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { NetWorthHero, type NetWorthPoint } from './hero'
@@ -127,16 +127,22 @@ export default async function NetWorthPage() {
       <NetWorthHero trail={trail} yoy={yoy} yoyFromLabel={yoyFromLabel} />
 
       {/* Assets / liabilities split at the latest month */}
-      <section className="grid gap-3 sm:grid-cols-2">
+      <section className="grid grid-cols-2 gap-2 sm:gap-3">
         <StatTile
-          label="Assets · today"
+          compact
+          label="Assets"
           tone="leaf"
-          value={<Amount cents={latest.assets} tone="leaf" />}
+          value={<ResponsiveAmount cents={latest.assets} tone="leaf" />}
+          hint="today"
+          className="sm:p-4"
         />
         <StatTile
-          label="Liabilities · today"
+          compact
+          label="Liabilities"
           tone="maple"
-          value={<Amount cents={latest.liabilities} tone="maple" />}
+          value={<ResponsiveAmount cents={latest.liabilities} tone="maple" />}
+          hint="today"
+          className="sm:p-4"
         />
       </section>
     </div>

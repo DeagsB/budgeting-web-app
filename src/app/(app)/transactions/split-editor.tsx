@@ -5,6 +5,7 @@ import { formatMoney } from '@/lib/format'
 import { saveSplits, type SplitsState } from './actions'
 import { CategorySelect } from './category-select'
 import { Button } from '@/components/ui/button'
+import { MoneyInput } from '@/components/ui/money-input'
 
 type Category = { id: string; parent_id: string | null; name: string }
 
@@ -37,6 +38,8 @@ export function SplitEditor({
       : [{ category_id: null, amount_cents: totalAmountCents }]
     ).map((s, i) => ({ key: i, category_id: s.category_id, amount_cents: s.amount_cents })),
   )
+  const [invalid, setInvalid] = useState<Record<number, boolean>>({})
+  const hasInvalid = rows.some((r) => invalid[r.key])
   const nextKey = () => Math.max(0, ...rows.map((r) => r.key)) + 1
 
   const currentSum = rows.reduce((s, r) => s + (r.amount_cents || 0), 0)
@@ -108,15 +111,21 @@ export function SplitEditor({
             />
             <div className="flex items-center rounded-md border border-hair bg-paper px-3 py-1.5 transition-colors focus-within:border-leaf">
               <span className="text-[12px] text-ink-3">$</span>
-              <input
-                name={`split_amount:${r.key}`}
-                type="text"
-                inputMode="decimal"
-                value={r.amount_cents === 0 ? '' : (r.amount_cents / 100).toFixed(2)}
-                placeholder="0.00"
-                onChange={(e) => updateRow(r.key, { amount_cents: parseAmount(e.target.value) })}
+              <MoneyInput
+                size="sm"
+                cents={r.amount_cents}
+                allowNegative
                 aria-label={`Split ${i + 1} amount in dollars`}
-                className="w-full bg-transparent text-right text-[13px] tabular-nums text-ink outline-none placeholder:text-ink-3"
+                onCents={(next) => {
+                  setInvalid((prev) => ({ ...prev, [r.key]: next === null }))
+                  if (next !== null) updateRow(r.key, { amount_cents: next })
+                }}
+              />
+              {/* Server parses dollars under `split_amount:<key>`; post the committed cents as dollars. */}
+              <input
+                type="hidden"
+                name={`split_amount:${r.key}`}
+                value={(r.amount_cents / 100).toFixed(2)}
               />
             </div>
             {rows.length > 1 ? (
@@ -171,6 +180,11 @@ export function SplitEditor({
 
       {/* Feedback */}
       <div aria-live="polite">
+        {hasInvalid && (
+          <p className="rounded-md bg-maple-soft px-3 py-2 text-[12.5px] font-medium text-maple">
+            Enter each split as a dollar amount, e.g. 12.50.
+          </p>
+        )}
         {state && 'error' in state && state.error && (
           <p className="rounded-md bg-maple-soft px-3 py-2 text-[12.5px] font-medium text-maple">
             {state.error}
@@ -184,18 +198,10 @@ export function SplitEditor({
       </div>
 
       <div>
-        <Button type="submit" variant="primary" size="sm" disabled={pending}>
+        <Button type="submit" variant="primary" size="sm" disabled={pending || hasInvalid}>
           {pending ? 'Saving…' : 'Save splits'}
         </Button>
       </div>
     </form>
   )
-}
-
-function parseAmount(raw: string): number {
-  const cleaned = raw.replace(/[^0-9.\-]/g, '')
-  if (!cleaned || cleaned === '-' || cleaned === '.') return 0
-  const n = Number(cleaned)
-  if (!Number.isFinite(n)) return 0
-  return Math.round(n * 100)
 }

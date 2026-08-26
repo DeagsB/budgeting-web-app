@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
@@ -16,6 +17,8 @@ export default function AppError({
   error: Error & { digest?: string }
   unstable_retry: () => void
 }) {
+  const router = useRouter()
+
   useEffect(() => {
     console.error('[app-error]', error)
   }, [error])
@@ -39,7 +42,7 @@ export default function AppError({
           <Button variant="primary" onClick={() => unstable_retry()}>
             Try again
           </Button>
-          <Button onClick={() => (window.location.href = '/dashboard')}>Go to dashboard</Button>
+          <Button onClick={() => router.push('/dashboard')}>Go to dashboard</Button>
         </div>
       </Card>
     </div>

@@ -138,14 +138,17 @@ export function BudgetTable({
           <span className="text-[11px] text-ink-3">Edit any amount, then save</span>
         </header>
         <DataTable minWidth={780}>
+          <caption className="sr-only">
+            Monthly budget by category: budgeted, rollover, actual, variance and year-to-date variance
+          </caption>
           <thead>
             <tr className="border-b border-hair text-left text-[10px] font-bold uppercase tracking-[0.08em] text-ink-3">
-              <th className="px-5 py-2.5">Category</th>
-              <th className="px-3 py-2.5 text-right">Budgeted</th>
-              <th className="px-3 py-2.5 text-right">Rollover</th>
-              <th className="px-3 py-2.5 text-right">Actual</th>
-              <th className="px-3 py-2.5 text-right">Variance</th>
-              <th className="px-5 py-2.5 text-right">YTD</th>
+              <th scope="col" className="px-5 py-2.5">Category</th>
+              <th scope="col" className="px-3 py-2.5 text-right">Budgeted</th>
+              <th scope="col" className="px-3 py-2.5 text-right">Rollover</th>
+              <th scope="col" className="px-3 py-2.5 text-right">Actual</th>
+              <th scope="col" className="px-3 py-2.5 text-right">Variance</th>
+              <th scope="col" className="px-5 py-2.5 text-right">YTD</th>
             </tr>
           </thead>
           <tbody>

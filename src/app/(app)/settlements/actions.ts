@@ -7,6 +7,8 @@ import { parseMoneyToCents } from '@/lib/format'
 import { computeBalancesByPeriod, computePeriodStatement } from '@/lib/settlement'
 import { loadSettlementData } from '@/lib/settlement-data'
 import { closePeriod } from '@/lib/settlement-close'
+import { todayISO } from '@/lib/dates'
+import { humanizeDbError } from '@/lib/errors'
 
 export type SettlementState = { error: string } | { ok: true } | undefined
 
@@ -14,10 +16,6 @@ function revalidate() {
   revalidatePath('/settlements')
   revalidatePath('/shared')
   revalidatePath('/dashboard')
-}
-
-function todayISO(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Toronto', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
 }
 
 export async function recordSettlement(_prev: SettlementState, fd: FormData): Promise<SettlementState> {
@@ -58,7 +56,7 @@ export async function recordSettlement(_prev: SettlementState, fd: FormData): Pr
     note,
     period_id,
   })
-  if (error) return { error: error.message }
+  if (error) return { error: humanizeDbError(error) }
 
   revalidate()
   return { ok: true }
@@ -93,8 +91,8 @@ export async function closePeriodNow(): Promise<SettlementState> {
   try {
     await closePeriod(supabase, { householdId: ctx.householdId, endISO: todayISO(), closedBy: ctx.memberId })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Could not close the period.'
-    return { error: msg.includes('no_open_period') ? 'There is no open period to close.' : msg }
+    const msg = e instanceof Error ? e.message : ''
+    return { error: msg.includes('no_open_period') ? 'There is no open period to close.' : 'Could not close the period. Refresh and try again.' }
   }
   revalidate()
   return { ok: true }
@@ -106,7 +104,7 @@ export async function closePeriodNow(): Promise<SettlementState> {
  */
 export async function markPeriodSettled(fd: FormData): Promise<SettlementState> {
   const periodId = String(fd.get('period_id') ?? '')
-  if (!periodId) return { error: 'Missing period.' }
+  if (!periodId) return { error: "Couldn't save that. Refresh and try again." }
   const ctx = await getHouseholdContext()
   if (!ctx) return { error: 'Not authorized.' }
   const supabase = await createClient()
@@ -136,7 +134,7 @@ export async function markPeriodSettled(fd: FormData): Promise<SettlementState> 
         period_id: periodId,
       })),
     )
-    if (error) return { error: error.message }
+    if (error) return { error: humanizeDbError(error) }
   }
 
   const { error: upErr } = await supabase

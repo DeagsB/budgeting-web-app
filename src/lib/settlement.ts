@@ -21,6 +21,8 @@
 // or the open period. The open period's statement adds the carry-forward:
 // whatever each closed period still nets to after its own settlements.
 
+import { nextMonthStartISO } from './dates'
+
 export type TxnLite = {
   id: string
   amount_cents: number
@@ -306,7 +308,5 @@ export function nextAutoCloseDate(todayISO: string, closeDay: number, lastClosed
   if (shouldAutoClose({ todayISO, closeDay, lastClosedAtISO })) return closeDateForMonth(todayISO, closeDay)
   const thisMonth = closeDateForMonth(todayISO, closeDay)
   if (todayISO < thisMonth && !(lastClosedAtISO && lastClosedAtISO.slice(0, 7) === todayISO.slice(0, 7))) return thisMonth
-  const d = new Date(todayISO.slice(0, 7) + '-01T00:00:00Z')
-  d.setUTCMonth(d.getUTCMonth() + 1)
-  return closeDateForMonth(d.toISOString().slice(0, 10), closeDay)
+  return closeDateForMonth(nextMonthStartISO(todayISO), closeDay)
 }

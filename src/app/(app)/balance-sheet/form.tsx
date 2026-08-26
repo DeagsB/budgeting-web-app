@@ -93,12 +93,13 @@ function Section({
         <Amount cents={sum} className="text-[14px]" />
       </div>
       <DataTable minWidth={560}>
+        <caption className="sr-only">{title} balances as of {monthName}</caption>
         <thead className="bg-cream-2 text-left text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
           <tr>
-            <th className="px-4 py-2 font-bold">Account</th>
-            <th className="px-3 py-2 text-right font-bold">Prev. month</th>
-            <th className="px-3 py-2 text-right font-bold">As of {monthName}</th>
-            <th className="px-3 py-2 text-right font-bold">Change</th>
+            <th scope="col" className="px-4 py-2 font-bold">Account</th>
+            <th scope="col" className="px-3 py-2 text-right font-bold">Prev. month</th>
+            <th scope="col" className="px-3 py-2 text-right font-bold">As of {monthName}</th>
+            <th scope="col" className="px-3 py-2 text-right font-bold">Change</th>
           </tr>
         </thead>
         <tbody>

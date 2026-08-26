@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { applyRulesToTransactions } from '@/lib/transaction-rules-apply'
 import { parseMoneyToCents } from '@/lib/format'
+import { humanizeDbError } from '@/lib/errors'
 
 export type TransactionState = { error: string } | undefined
 
@@ -58,7 +59,7 @@ export async function createTransaction(
     })
     .select('id')
     .single()
-  if (error || !inserted) return { error: error?.message ?? 'Failed to insert transaction.' }
+  if (error || !inserted) return { error: humanizeDbError(error) }
 
   const { error: splitError } = await supabase.from('transaction_splits').insert({
     household_id: ctx.householdId,
@@ -67,7 +68,7 @@ export async function createTransaction(
     amount_cents: v.amount_cents,
     sort_order: 0,
   })
-  if (splitError) return { error: splitError.message }
+  if (splitError) return { error: humanizeDbError(splitError) }
 
   // Rules (auto-share / auto-categorise) run on every ingest path.
   await applyRulesToTransactions(supabase, ctx.householdId, [inserted.id as string])
@@ -216,7 +217,7 @@ async function setCategoryForTransactions(
       .from('transaction_splits')
       .update({ category_id: safeCategoryId })
       .in('transaction_id', updateIds)
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(humanizeDbError(error))
   }
   if (insertIds.length > 0) {
     const { error } = await supabase.from('transaction_splits').insert(
@@ -228,7 +229,7 @@ async function setCategoryForTransactions(
         sort_order: 0,
       })),
     )
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(humanizeDbError(error))
   }
 }
 
@@ -300,7 +301,7 @@ export async function applyTransactionAttributes(fd: FormData): Promise<void> {
     .update(patch)
     .eq('id', id)
     .eq('household_id', ctx.householdId)
-  if (updateError) throw new Error(updateError.message)
+  if (updateError) throw new Error(humanizeDbError(updateError))
 
   // Category (+ same category for any "apply to similar" siblings).
   await setCategoryForTransactions(supabase, ctx.householdId, {
@@ -332,7 +333,7 @@ export type SplitsState = { error: string } | { ok: true } | undefined
 
 export async function saveSplits(_prev: SplitsState, fd: FormData): Promise<SplitsState> {
   const transaction_id = String(fd.get('transaction_id') ?? '')
-  if (!transaction_id) return { error: 'Missing transaction id.' }
+  if (!transaction_id) return { error: "Couldn't save that. Refresh and try again." }
 
   const ctx = await getHouseholdContext()
   if (!ctx) return { error: 'Not authorized.' }
@@ -344,7 +345,7 @@ export async function saveSplits(_prev: SplitsState, fd: FormData): Promise<Spli
     .eq('id', transaction_id)
     .eq('household_id', ctx.householdId)
     .single()
-  if (txError || !tx) return { error: txError?.message ?? 'Transaction not found.' }
+  if (txError || !tx) return { error: 'That transaction is no longer here. Refresh and try again.' }
 
   // Read incoming rows: keys `split_category:<index>` + `split_amount:<index>`
   const rows: { index: number; category_id: string | null; amount_cents: number }[] = []
@@ -383,7 +384,7 @@ export async function saveSplits(_prev: SplitsState, fd: FormData): Promise<Spli
       sort_order: idx,
     })),
   )
-  if (insertError) return { error: insertError.message }
+  if (insertError) return { error: humanizeDbError(insertError) }
 
   revalidate()
   return { ok: true }

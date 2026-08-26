@@ -344,13 +344,13 @@ function LoanCard({
             <DataTable minWidth={680}>
               <thead className="text-left text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3 bg-cream-2">
                 <tr>
-                  <th className="px-4 py-2.5">#</th>
-                  <th className="px-4 py-2.5 text-right">Rate</th>
-                  <th className="px-4 py-2.5 text-right">Starting</th>
-                  <th className="px-4 py-2.5 text-right">Interest</th>
-                  <th className="px-4 py-2.5 text-right">Principal</th>
-                  <th className="px-4 py-2.5 text-right">Payment</th>
-                  <th className="px-4 py-2.5 text-right">Ending</th>
+                  <th scope="col" className="px-4 py-2.5">#</th>
+                  <th scope="col" className="px-4 py-2.5 text-right">Rate</th>
+                  <th scope="col" className="px-4 py-2.5 text-right">Starting</th>
+                  <th scope="col" className="px-4 py-2.5 text-right">Interest</th>
+                  <th scope="col" className="px-4 py-2.5 text-right">Principal</th>
+                  <th scope="col" className="px-4 py-2.5 text-right">Payment</th>
+                  <th scope="col" className="px-4 py-2.5 text-right">Ending</th>
                 </tr>
               </thead>
               <tbody>
@@ -364,10 +364,10 @@ function LoanCard({
                       <Amount cents={r.starting_cents} />
                     </td>
                     <td className="px-4 py-1.5 text-right">
-                      <Amount cents={r.interest_cents} tone="maple" />
+                      <Amount cents={r.interest_cents} tone="maple" sign="always" />
                     </td>
                     <td className="px-4 py-1.5 text-right">
-                      <Amount cents={r.principal_cents} tone="leaf" />
+                      <Amount cents={r.principal_cents} tone="leaf" sign="always" />
                     </td>
                     <td className="px-4 py-1.5 text-right">
                       <Amount cents={r.payment_cents} />

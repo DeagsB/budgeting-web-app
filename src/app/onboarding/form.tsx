@@ -16,7 +16,7 @@ export function OnboardingForm() {
 
   return (
     <form action={formAction} className="flex flex-col gap-6">
-      {/* Live preview pill — reinforces the "household + you" mental model */}
+      {/* Live preview pill - reinforces the "household + you" mental model */}
       <div className="flex items-center gap-3 rounded-[16px] bg-[var(--color-cream-2)] px-4 py-3">
         <div
           className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-[var(--color-paper)] font-serif text-[18px] text-[var(--color-ink)]"
@@ -36,7 +36,7 @@ export function OnboardingForm() {
 
       <Field
         label="Household name"
-        hint="Shows at the top of every page — e.g. “The Tremblay household”."
+        hint="Shows at the top of every page - e.g. “The Tremblay household”."
       >
         <input
           name="household_name"
@@ -94,28 +94,6 @@ export function OnboardingForm() {
           )}
         </button>
       </div>
-
-      {/* Local input style — assumes globals.css defines var(--color-*) tokens */}
-      <style jsx>{`
-        :global(.maple-input) {
-          width: 100%;
-          border-radius: 12px;
-          border: 1px solid var(--color-hair);
-          background: var(--color-paper);
-          padding: 12px 14px;
-          font-size: 15px;
-          color: var(--color-ink);
-          transition: border-color 120ms var(--ease-ios), box-shadow 120ms var(--ease-ios);
-        }
-        :global(.maple-input::placeholder) {
-          color: var(--color-ink-3);
-        }
-        :global(.maple-input:focus) {
-          outline: none;
-          border-color: var(--color-leaf);
-          box-shadow: 0 0 0 3px var(--color-leaf-soft);
-        }
-      `}</style>
     </form>
   )
 }

@@ -3,7 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
-import { revalidateCategoryConsumers } from '@/lib/categories'
+import { CODE_RE, revalidateCategoryConsumers } from '@/lib/categories'
+import { humanizeDbError } from '@/lib/errors'
 
 async function hh() {
   const ctx = await getHouseholdContext()
@@ -90,11 +91,20 @@ export async function renameCategory(fd: FormData) {
   const h = await hh()
   if (!h) return
   const id = String(fd.get('id') ?? '')
-  const name = String(fd.get('name') ?? '').trim()
+  const name = String(fd.get('name') ?? '').trim().slice(0, 80)
   if (!id || !name) return
+  // `code` is optional: the /categories screen exposes it, Setup does not.
+  // When present it must satisfy the DB CHECK constraint on categories.code.
+  const rawCode = fd.get('code')
+  const patch: { name: string; code?: string } = { name }
+  if (rawCode !== null) {
+    const code = String(rawCode).trim().toUpperCase()
+    if (!CODE_RE.test(code)) return
+    patch.code = code
+  }
   await h.supabase
     .from('categories')
-    .update({ name })
+    .update(patch)
     .eq('id', id)
     .eq('household_id', h.ctx.householdId)
   revalidateCategoryConsumers()
@@ -161,7 +171,7 @@ export async function saveSplitWeights(fd: FormData): Promise<{ ok: true } | { e
   if (updates.length > 0 && updates.every((u) => u.weight === 0)) return { error: 'At least one member needs a weight above zero.' }
   for (const u of updates) {
     const { error } = await h.supabase.from('members').update({ split_weight: u.weight }).eq('id', u.id).eq('household_id', h.ctx.householdId)
-    if (error) return { error: error.message }
+    if (error) return { error: humanizeDbError(error) }
   }
   revalidatePath('/setup')
   revalidatePath('/shared')
@@ -177,7 +187,7 @@ export async function updateCloseDay(fd: FormData): Promise<{ ok: true } | { err
   const day = Math.floor(Number(String(fd.get('close_day') ?? '')))
   if (!Number.isFinite(day) || day < 1 || day > 28) return { error: 'Pick a day between 1 and 28.' }
   const { error } = await h.supabase.from('households').update({ settlement_close_day: day }).eq('id', h.ctx.householdId)
-  if (error) return { error: error.message }
+  if (error) return { error: humanizeDbError(error) }
   revalidatePath('/setup')
   revalidatePath('/settlements')
   return { ok: true }

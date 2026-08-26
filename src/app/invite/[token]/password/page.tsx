@@ -11,7 +11,7 @@ export default async function InvitePasswordPage() {
   if (!data.user) redirect('/sign-in')
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[var(--color-cream)] px-6 py-10 text-[var(--color-ink)]">
+    <main className="flex min-h-dvh items-center justify-center bg-[var(--color-cream)] px-6 pb-10 pt-[calc(env(safe-area-inset-top)+40px)] text-[var(--color-ink)]">
       <div className="w-full max-w-[440px]">
         <div className="mb-6 text-center">
           <div className="font-serif text-[36px] leading-none tracking-[-0.02em]">Maple</div>

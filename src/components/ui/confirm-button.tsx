@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { createPortal, useFormStatus } from 'react-dom'
 import { useScrollLock } from '@/lib/use-scroll-lock'
 
 // `document` is only available on the client; this 'use client' file still
@@ -70,9 +70,9 @@ export function ConfirmButton({
         {Object.entries(formData).map(([k, v]) => (
           <input key={k} type="hidden" name={k} value={v} />
         ))}
-        <button type="button" onClick={() => setOpen(true)} className={className}>
+        <TriggerButton open={open} onOpen={() => setOpen(true)} className={className}>
           {children}
-        </button>
+        </TriggerButton>
       </form>
       <ConfirmModal
         open={open}
@@ -85,6 +85,38 @@ export function ConfirmButton({
         onConfirm={handleConfirm}
       />
     </>
+  )
+}
+
+/**
+ * The visible trigger. Disabled while the confirm sheet is up and while the
+ * server action is in flight, so a second tap can't stack a duplicate confirm
+ * or re-submit mid-request. Must render inside the <form> for useFormStatus.
+ */
+function TriggerButton({
+  open,
+  onOpen,
+  className,
+  children,
+}: {
+  open: boolean
+  onOpen: () => void
+  className?: string
+  children: React.ReactNode
+}) {
+  const { pending } = useFormStatus()
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      disabled={open || pending}
+      aria-haspopup="dialog"
+      aria-expanded={open}
+      aria-busy={pending || undefined}
+      className={className}
+    >
+      {children}
+    </button>
   )
 }
 
@@ -185,6 +217,7 @@ export function ConfirmModal({
       <button
         type="button"
         aria-hidden="true"
+        tabIndex={-1}
         onClick={onCancel}
         className="absolute inset-0 bg-black/45 backdrop-blur-[2px]"
       />

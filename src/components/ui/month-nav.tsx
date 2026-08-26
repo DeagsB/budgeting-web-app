@@ -55,14 +55,14 @@ export function MonthNav({
       {isCurrent ? (
         <span
           aria-hidden
-          className="ml-1 inline-flex min-h-[36px] items-center rounded-full border border-hair px-3 py-1.5 text-[12px] font-semibold text-ink-3 opacity-50"
+          className="ml-1 inline-flex min-h-[44px] items-center rounded-full border border-hair px-3 py-1.5 text-[12px] font-semibold text-ink-3 opacity-50"
         >
           This month
         </span>
       ) : (
         <Link
           href={makeHref(current)}
-          className="ml-1 inline-flex min-h-[36px] items-center rounded-full border border-hair px-3 py-1.5 text-[12px] font-semibold text-ink-2 transition-colors hover:bg-paper-2"
+          className="ml-1 inline-flex min-h-[44px] items-center rounded-full border border-hair px-3 py-1.5 text-[12px] font-semibold text-ink-2 transition-colors hover:bg-paper-2"
         >
           This month
         </Link>

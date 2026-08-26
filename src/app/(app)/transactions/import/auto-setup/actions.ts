@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { suggestRule, type SampleEmail, type SuggestedRule } from '@/lib/email-suggest'
 import { BANK_PRESETS } from '@/lib/bank-presets'
+import { humanizeDbError } from '@/lib/errors'
 
 export type RotateSecretState =
   | { ok: true; secret: string }
@@ -48,7 +49,7 @@ function readRuleFromForm(fd: FormData): RuleInput | { error: string } {
   const amount_regex = String(fd.get('amount_regex') ?? '').trim()
   if (!name) return { error: 'Name is required.' }
   if (!amount_regex) return { error: 'Amount regex is required.' }
-  try { new RegExp(amount_regex) } catch { return { error: 'Amount regex is invalid.' } }
+  try { new RegExp(amount_regex) } catch { return { error: "That amount pattern isn't a valid regular expression. Check for an unclosed bracket or parenthesis." } }
 
   const direction = String(fd.get('direction') ?? 'outflow') as RuleInput['direction']
   if (!['outflow', 'inflow', 'auto'].includes(direction)) {
@@ -57,7 +58,7 @@ function readRuleFromForm(fd: FormData): RuleInput | { error: string } {
   const accountRouterRegex = String(fd.get('account_router_regex') ?? '').trim()
   if (accountRouterRegex) {
     try { new RegExp(accountRouterRegex) } catch {
-      return { error: 'Account router regex is invalid.' }
+      return { error: "That account pattern isn't a valid regular expression. Check for an unclosed bracket or parenthesis." }
     }
   }
   const idRaw = fd.get('id')
@@ -95,10 +96,10 @@ export async function saveRule(_prev: RuleFormState, fd: FormData): Promise<Rule
       .update(payload)
       .eq('id', id)
       .eq('household_id', ctx.householdId)
-    if (error) return { error: error.message }
+    if (error) return { error: humanizeDbError(error, { entity: 'rule name' }) }
   } else {
     const { error } = await supabase.from('bank_email_rules').insert(payload)
-    if (error) return { error: error.message }
+    if (error) return { error: humanizeDbError(error, { entity: 'rule name' }) }
   }
   revalidatePath('/transactions/import/auto-setup')
   return { ok: true }
@@ -265,7 +266,7 @@ export async function saveSyncUrl(_prev: SaveSyncUrlState, fd: FormData): Promis
     .from('households')
     .update({ gmail_sync_url: raw || null })
     .eq('id', ctx.householdId)
-  if (error) return { error: error.message }
+  if (error) return { error: humanizeDbError(error, { entity: 'rule name' }) }
   revalidatePath('/transactions/import/auto-setup')
   return { ok: true }
 }

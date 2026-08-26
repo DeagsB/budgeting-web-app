@@ -2,11 +2,13 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { accountTypeLabel, LIABILITY_TYPES, type AccountType } from '@/lib/domain'
+import { monthStartISO } from '@/lib/format'
+import { accountBalanceAt, groupSnapsByAccount, groupTxByAccount } from '@/lib/balances'
 import { PageHeader } from '@/components/ui/page-header'
 import { Card } from '@/components/ui/card'
 import { StatTile } from '@/components/ui/stat-tile'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Amount } from '@/components/ui/amount'
+import { ResponsiveAmount } from '@/components/ui/responsive-amount'
 import { MapleLabel } from '@/components/ui/label'
 import { AddAccountForm } from './add-form'
 import { AccountRow } from './row'
@@ -24,7 +26,11 @@ export default async function AccountsPage({
 
   const supabase = await createClient()
 
-  const [{ data: accounts }, { data: members }] = await Promise.all([
+  // Same query shape as balance-sheet/page.tsx so the headline here derives
+  // the SAME current balances (opening/snapshot anchor + transactions) that
+  // the dashboard, balance sheet and net-worth views show - not the opening
+  // balances, which drift from reality the moment a transaction lands.
+  const [{ data: accounts }, { data: members }, { data: snapshots }, { data: txData }] = await Promise.all([
     supabase
       .from('accounts')
       .select('id, name, type, ownership, member_id, opening_balance_cents, last_four, archived_at')
@@ -35,19 +41,50 @@ export default async function AccountsPage({
       .select('id, display_name')
       .eq('household_id', ctx.householdId)
       .order('sort_order'),
+    supabase
+      .from('account_balance_snapshots')
+      .select('account_id, balance_cents, as_of_month')
+      .eq('household_id', ctx.householdId)
+      .order('as_of_month', { ascending: false }),
+    supabase
+      .from('transactions')
+      .select('account_id, occurred_on, amount_cents')
+      .eq('household_id', ctx.householdId)
+      .limit(20000),
   ])
 
   const memberName = new Map((members ?? []).map((m) => [m.id, m.display_name]))
   const visible = (accounts ?? []).filter((a) => (showArchived ? a.archived_at : !a.archived_at))
   const archivedCount = (accounts ?? []).filter((a) => a.archived_at).length
 
-  // Headline split: assets sum opening balances of non-liability accounts;
-  // owing sums opening balances of liability accounts (loan / credit_card).
-  // Summing everything together would let a loan inflate the asset total.
+  const txByAccount = groupTxByAccount(
+    (txData ?? []).map((t) => ({
+      account_id: t.account_id as string,
+      occurred_on: t.occurred_on as string,
+      amount_cents: Number(t.amount_cents),
+    })),
+  )
+  const snapsByAccount = groupSnapsByAccount(
+    (snapshots ?? []).map((s) => ({
+      account_id: s.account_id as string,
+      as_of_month: s.as_of_month as string,
+      balance_cents: Number(s.balance_cents),
+    })),
+  )
+  const thisMonth = monthStartISO()
+
+  // Headline split: "you have" sums current balances of non-liability
+  // accounts; "you owe" sums current balances of liabilities (loan /
+  // credit_card). Summing everything together would let a loan inflate assets.
   let assetsCents = 0
   let owingCents = 0
   for (const a of visible) {
-    const cents = Number(a.opening_balance_cents)
+    const cents = accountBalanceAt(
+      { id: a.id, type: a.type as AccountType, opening_balance_cents: Number(a.opening_balance_cents) },
+      thisMonth,
+      txByAccount,
+      snapsByAccount,
+    )
     if (LIABILITY_TYPES.has(a.type as AccountType)) owingCents += cents
     else assetsCents += cents
   }
@@ -71,25 +108,33 @@ export default async function AccountsPage({
         }
       />
 
+      {/* One compact three-up row so the ledger stays above the fold on a
+          375px screen. Mobile abbreviates the value; sm+ shows cents. */}
       {!showArchived && (
-        <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <section className="grid grid-cols-3 gap-2 sm:gap-3">
           <StatTile
-            label="Assets"
-            value={<Amount cents={assetsCents} />}
+            compact
+            className="sm:p-4"
+            label="You have"
+            value={<ResponsiveAmount cents={assetsCents} />}
             tone="leaf"
-            hint="Opening balances across non-liability accounts"
+            hint="Cash + investments"
           />
           <StatTile
-            label="Owing"
-            value={<Amount cents={owingCents} />}
+            compact
+            className="sm:p-4"
+            label="You owe"
+            value={<ResponsiveAmount cents={owingCents} />}
             tone="maple"
-            hint="Loans & credit cards"
+            hint="Loans + cards"
           />
           <StatTile
-            label="Net opening"
-            value={<Amount cents={netCents} sign="auto" />}
+            compact
+            className="sm:p-4"
+            label="Net worth"
+            value={<ResponsiveAmount cents={netCents} sign="auto" />}
             tone={netCents >= 0 ? 'leaf' : 'maple'}
-            hint="Assets minus owing"
+            hint="Have minus owe"
           />
         </section>
       )}

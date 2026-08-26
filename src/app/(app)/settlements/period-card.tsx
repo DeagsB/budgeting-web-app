@@ -13,15 +13,32 @@ import { closePeriodNow, markPeriodSettled } from './actions'
 
 export type LineVM = NetBalance & { fromName: string; toName: string; involvesMe: boolean }
 
+const MONTH_DAY = new Intl.DateTimeFormat('en-CA', { month: 'short', day: 'numeric' })
+
+/** "Sep 28" for a YYYY-MM-DD civil date. */
+function formatMonthDay(isoDate: string): string {
+  return MONTH_DAY.format(new Date(isoDate + 'T00:00:00'))
+}
+
+/** 1 -> "1st", 22 -> "22nd", 13 -> "13th". */
+function ordinal(n: number): string {
+  const mod100 = n % 100
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`
+  const suffix = n % 10 === 1 ? 'st' : n % 10 === 2 ? 'nd' : n % 10 === 3 ? 'rd' : 'th'
+  return `${n}${suffix}`
+}
+
 /** The running tally: what is owed right now, and the button to close early. */
 export function OpenPeriodCard({
   periodStart,
+  today,
   lines,
   carryForward,
   nextAutoClose,
   closeDay,
 }: {
   periodStart: string
+  today: string
   lines: LineVM[]
   carryForward: LineVM[]
   nextAutoClose: string
@@ -37,7 +54,9 @@ export function OpenPeriodCard({
     <Card padding="lg">
       <div className="flex items-baseline justify-between gap-3">
         <MapleLabel>Running tally</MapleLabel>
-        <span className="text-[12px] text-ink-3">Open since {formatDate(periodStart)}</span>
+        <span className="text-[12px] text-ink-3">
+          {periodStart > today ? `New period starts ${formatMonthDay(periodStart)}` : `Open since ${formatDate(periodStart)}`}
+        </span>
       </div>
       {lines.length === 0 ? (
         <p className="mt-3 rounded-md bg-leaf-soft px-4 py-3 text-[13.5px] leading-relaxed text-leaf">All square so far. Shared expenses land here as they happen.</p>
@@ -53,7 +72,7 @@ export function OpenPeriodCard({
       )}
       <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <span className="text-[12.5px] text-ink-2">
-          Closes automatically on {formatDate(nextAutoClose)} (day {closeDay} each month).
+          Closes {formatMonthDay(nextAutoClose)} · every month on the {ordinal(closeDay)}
         </span>
         <Button type="button" variant="secondary" size="sm" onClick={() => setConfirm(true)} className="shrink-0">
           Close period now

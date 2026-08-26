@@ -12,9 +12,10 @@ import {
   encryptToken,
   decryptToken,
 } from '@/lib/plaid'
-import { syncPlaidItem, type SyncTrigger } from '@/lib/plaid-sync'
+import { refreshPlaidBalances, syncPlaidItem, type SyncTrigger } from '@/lib/plaid-sync'
 import { getPlaidEnv } from '@/lib/env'
 import type { AccountType } from '@/lib/domain'
+import { humanizeDbError } from '@/lib/errors'
 
 const MAX_ITEMS = 10 // Plaid free Trial tier cap.
 
@@ -255,7 +256,7 @@ export async function saveAccountMapping(
         .update({ plaid_account_id: m.plaid_account_id, plaid_item_id: itemRowId })
         .eq('id', m.target.accountId)
         .eq('household_id', ctx.householdId)
-      if (error) return { error: error.message }
+      if (error) return { error: humanizeDbError(error, { entity: 'account name' }) }
     } else {
       const { error } = await supabase.from('accounts').insert({
         household_id: ctx.householdId,
@@ -268,15 +269,28 @@ export async function saveAccountMapping(
         plaid_account_id: m.plaid_account_id,
         plaid_item_id: itemRowId,
       })
-      if (error) return { error: error.message }
+      if (error) return { error: humanizeDbError(error, { entity: 'account name' }) }
     }
   }
 
   // Initial pull so transactions land immediately.
   await triggerPlaidSync(itemRowId)
+
+  // Anchor every mapped account on the bank's real-time balance. The sync
+  // above already wrote snapshots from its (possibly cached) balances, but
+  // only for accounts that carried transactions; /accounts/balance/get covers
+  // the rest and is fresher. Best-effort.
+  const plaid = createPlaidClient()
+  const service = createServiceClient()
+  if (plaid && service) {
+    await refreshPlaidBalances(service, plaid, { id: itemRowId, household_id: ctx.householdId })
+  }
+
   revalidatePath('/transactions/import/plaid-setup')
   revalidatePath('/transactions')
   revalidatePath('/dashboard')
+  revalidatePath('/accounts')
+  revalidatePath('/balance-sheet')
   return { ok: true }
 }
 

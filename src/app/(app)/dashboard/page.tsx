@@ -87,7 +87,8 @@ export default async function DashboardPage() {
       .from('categories')
       .select('id, name, parent_id')
       .eq('household_id', ctx.householdId)
-      .is('archived_at', null),
+      .is('archived_at', null)
+      .order('sort_order'),
     supabase
       .from('monthly_budgets')
       .select('category_id, amount_cents')
@@ -359,6 +360,7 @@ export default async function DashboardPage() {
         daysElapsed,
         daysInMonth,
       }}
+      categories={categories.map((c) => ({ id: c.id, parent_id: c.parent_id, name: c.name }))}
       hasError={hasError}
     />
   )

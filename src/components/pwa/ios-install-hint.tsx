@@ -2,16 +2,24 @@
 
 import { useEffect, useState } from 'react'
 
-const DISMISS_KEY = 'maple.iosInstallHint.dismissed'
+const DISMISS_KEY = 'maple.iosInstallHint.dismissedAt'
+const DISMISS_TTL_MS = 14 * 24 * 60 * 60 * 1000
+
+function persistDismiss() {
+  try {
+    localStorage.setItem(DISMISS_KEY, String(Date.now()))
+  } catch {}
+}
 
 /**
- * One-time bottom sheet shown to iPhone users browsing in Safari (not yet
- * installed) telling them to tap Share → Add to Home Screen. iOS doesn't
- * surface a beforeinstallprompt event — Safari requires the user to do it
- * manually — so this is the closest we get to a "Install" CTA.
+ * Bottom hint shown to iPhone users browsing in Safari (not yet installed)
+ * telling them to tap Share then Add to Home Screen. iOS doesn't surface a
+ * beforeinstallprompt event - Safari requires the user to do it manually -
+ * so this is the closest we get to an "Install" CTA.
  *
  * Hidden if: not iOS, already installed (display-mode: standalone), or the
- * user dismissed it. Won't show server-side or before mount.
+ * user dismissed it within the last 14 days. Won't show server-side or
+ * before mount. Sits above the bottom tab bar so it never covers navigation.
  */
 export function IOSInstallHint() {
   const [show, setShow] = useState(false)
@@ -19,7 +27,9 @@ export function IOSInstallHint() {
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
-      if (localStorage.getItem(DISMISS_KEY) === '1') return
+      const raw = localStorage.getItem(DISMISS_KEY)
+      const dismissedAt = raw ? Number(raw) : 0
+      if (dismissedAt && Date.now() - dismissedAt < DISMISS_TTL_MS) return
     } catch {}
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !('MSStream' in window)
     const isStandalone =
@@ -32,8 +42,20 @@ export function IOSInstallHint() {
     return () => clearTimeout(t)
   }, [])
 
+  // Escape dismisses, like any transient notice.
+  useEffect(() => {
+    if (!show) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      persistDismiss()
+      setShow(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [show])
+
   function dismiss() {
-    try { localStorage.setItem(DISMISS_KEY, '1') } catch {}
+    persistDismiss()
     setShow(false)
   }
 
@@ -41,11 +63,13 @@ export function IOSInstallHint() {
 
   return (
     <div
-      role="dialog"
+      role="status"
       aria-label="Install Maple to your home screen"
       className="fixed inset-x-0 z-50 px-3"
       style={{
-        bottom: 'calc(env(safe-area-inset-bottom) + 12px)',
+        // 72px is the tab bar's height; keep the card clear of it and the
+        // home indicator.
+        bottom: 'calc(72px + env(safe-area-inset-bottom) + 12px)',
       }}
     >
       <div
@@ -68,14 +92,14 @@ export function IOSInstallHint() {
               <span aria-label="Share" role="img" className="inline-block align-[-2px]">
                 <ShareIcon />
               </span>
-              {' '}then <b>Add to Home Screen</b> — opens like a real app, no browser bar.
+              {' '}then <b>Add to Home Screen</b> - opens like a real app, no browser bar.
             </p>
           </div>
           <button
             type="button"
             onClick={dismiss}
             aria-label="Dismiss install hint"
-            className="-mr-1 -mt-1 flex h-8 w-8 items-center justify-center rounded-full text-[var(--color-ink-2)]"
+            className="-mr-3 -mt-3 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--color-ink-2)]"
           >
             <CloseIcon />
           </button>

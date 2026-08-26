@@ -7,6 +7,8 @@ import { parseMoneyToCents } from '@/lib/format'
 import { normalizeMerchant } from '@/lib/statement-reconcile'
 import { applyRulesToTransactions, recentTransactionIds } from '@/lib/transaction-rules-apply'
 import type { RuleDirection, ShareMode } from '@/lib/transaction-rules'
+import { humanizeDbError } from '@/lib/errors'
+import { addMonthsISO, todayISO } from '@/lib/dates'
 
 export type SaveRuleState =
   | { ok: true; ruleId: string; applied?: { shared: number; categorized: number; skippedManual: number } }
@@ -30,9 +32,7 @@ function revalidate() {
 }
 
 function sinceISO(): string {
-  const d = new Date()
-  d.setMonth(d.getMonth() - RETRO_MONTHS)
-  return d.toISOString().slice(0, 10)
+  return addMonthsISO(todayISO(), -RETRO_MONTHS)
 }
 
 type ParsedRule = {
@@ -124,7 +124,7 @@ export async function saveRule(_prev: SaveRuleState, fd: FormData): Promise<Save
   let ruleId = id
   if (id) {
     const { error } = await supabase.from('transaction_rules').update(parsed).eq('id', id).eq('household_id', ctx.householdId)
-    if (error) return { error: error.message }
+    if (error) return { error: humanizeDbError(error, { entity: 'rule name' }) }
   } else {
     const { data: last } = await supabase
       .from('transaction_rules')
@@ -182,7 +182,7 @@ export async function applyRuleToExisting(fd: FormData): Promise<ApplyState> {
   const ctx = await getHouseholdContext()
   if (!ctx) return { error: 'Not authorized.' }
   const id = String(fd.get('id') ?? '')
-  if (!id) return { error: 'Missing rule.' }
+  if (!id) return { error: "Couldn't save that. Refresh and try again." }
   const supabase = await createClient()
   const ids = await recentTransactionIds(supabase, ctx.householdId, sinceISO(), RETRO_CAP)
   const res = await applyRulesToTransactions(supabase, ctx.householdId, ids, { onlyRuleIds: [id] })
@@ -195,10 +195,10 @@ export async function toggleRuleEnabled(fd: FormData): Promise<SimpleState> {
   if (!ctx) return { error: 'Not authorized.' }
   const id = String(fd.get('id') ?? '')
   const enabled = String(fd.get('enabled')) === 'true'
-  if (!id) return { error: 'Missing rule.' }
+  if (!id) return { error: "Couldn't save that. Refresh and try again." }
   const supabase = await createClient()
   const { error } = await supabase.from('transaction_rules').update({ enabled }).eq('id', id).eq('household_id', ctx.householdId)
-  if (error) return { error: error.message }
+  if (error) return { error: humanizeDbError(error, { entity: 'rule name' }) }
   revalidate()
   return { ok: true }
 }
@@ -208,7 +208,7 @@ export async function reorderRule(fd: FormData): Promise<SimpleState> {
   if (!ctx) return { error: 'Not authorized.' }
   const id = String(fd.get('id') ?? '')
   const dir = String(fd.get('direction')) === 'up' ? -1 : 1
-  if (!id) return { error: 'Missing rule.' }
+  if (!id) return { error: "Couldn't save that. Refresh and try again." }
   const supabase = await createClient()
   const { data: rules } = await supabase
     .from('transaction_rules')
@@ -235,14 +235,14 @@ export async function deleteRule(fd: FormData): Promise<SimpleState> {
   const ctx = await getHouseholdContext()
   if (!ctx) return { error: 'Not authorized.' }
   const id = String(fd.get('id') ?? '')
-  if (!id) return { error: 'Missing rule.' }
+  if (!id) return { error: "Couldn't save that. Refresh and try again." }
   const supabase = await createClient()
   if (String(fd.get('unshare')) === 'yes') {
     const { error } = await supabase.from('transaction_shares').delete().eq('rule_id', id).eq('household_id', ctx.householdId)
-    if (error) return { error: error.message }
+    if (error) return { error: humanizeDbError(error, { entity: 'rule name' }) }
   }
   const { error } = await supabase.from('transaction_rules').delete().eq('id', id).eq('household_id', ctx.householdId)
-  if (error) return { error: error.message }
+  if (error) return { error: humanizeDbError(error, { entity: 'rule name' }) }
   revalidate()
   return { ok: true }
 }

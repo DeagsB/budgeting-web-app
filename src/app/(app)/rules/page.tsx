@@ -3,6 +3,7 @@ import { getHouseholdContext } from '@/lib/household'
 import { PageHeader } from '@/components/ui/page-header'
 import { ruleMatches, type TransactionRule } from '@/lib/transaction-rules'
 import { RulesList, type RuleRowVM } from './rules-list'
+import { addMonthsISO, todayISO } from '@/lib/dates'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,9 +17,7 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
   if (!ctx) return null
   const supabase = await createClient()
 
-  const since = new Date()
-  since.setMonth(since.getMonth() - 12)
-  const sinceISO = since.toISOString().slice(0, 10)
+  const sinceISO = addMonthsISO(todayISO(), -12)
 
   const [{ data: rules }, { data: accounts }, { data: categories }, { data: members }, { data: ruleShares }, { data: txs }] =
     await Promise.all([

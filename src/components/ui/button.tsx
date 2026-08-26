@@ -5,8 +5,10 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react'
 type Size = 'sm' | 'md' | 'lg'
 type Variant = 'primary' | 'secondary' | 'ghost'
 
+// Every size clears the 44px tap-target floor; `sm` only shrinks the type and
+// horizontal padding.
 const heights: Record<Size, string> = {
-  sm: 'h-[38px] text-[13px] px-4',
+  sm: 'h-11 text-[13px] px-4',
   md: 'h-[46px] text-[14px] px-5',
   lg: 'h-[54px] text-[16px] px-6',
 }

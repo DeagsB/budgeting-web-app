@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useFormStatus } from 'react-dom'
 import { ACCOUNT_TYPES, ACCOUNT_OWNERSHIP, LIABILITY_TYPES, type AccountType } from '@/lib/domain'
 import { Amount } from '@/components/ui/amount'
 import { Button } from '@/components/ui/button'
@@ -153,9 +154,7 @@ export function AccountRow({
             </EditField>
           </div>
           <div className="flex items-center gap-3 pt-1">
-            <Button type="submit" variant="primary" size="sm">
-              Save
-            </Button>
+            <SubmitButton>Save</SubmitButton>
             <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>
               Cancel
             </Button>
@@ -227,12 +226,7 @@ export function AccountRow({
         {account.archived ? (
           <form action={unarchiveAccount}>
             <input type="hidden" name="id" value={account.id} />
-            <button
-              type="submit"
-              className="inline-flex min-h-[44px] items-center px-2 font-semibold text-ink-2 hover:text-ink hover:underline"
-            >
-              Unarchive
-            </button>
+            <UnarchiveButton />
           </form>
         ) : (
           <ConfirmButton
@@ -269,5 +263,29 @@ function EditField({
       </span>
       {children}
     </label>
+  )
+}
+
+/** Save button that greys out while the server action runs. Must render inside the <form>. */
+function SubmitButton({ children }: { children: React.ReactNode }) {
+  const { pending } = useFormStatus()
+  return (
+    <Button type="submit" variant="primary" size="sm" disabled={pending} aria-busy={pending || undefined}>
+      {pending ? 'Saving...' : children}
+    </Button>
+  )
+}
+
+function UnarchiveButton() {
+  const { pending } = useFormStatus()
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      aria-busy={pending || undefined}
+      className="inline-flex min-h-[44px] items-center px-2 font-semibold text-ink-2 hover:text-ink hover:underline disabled:opacity-50"
+    >
+      {pending ? 'Restoring...' : 'Unarchive'}
+    </button>
   )
 }

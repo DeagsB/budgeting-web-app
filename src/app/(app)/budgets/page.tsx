@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { addMonths, formatMoney, monthStartISO } from '@/lib/format'
+import { cleanTitle } from '@/lib/title'
 import { MapleLabel } from '@/components/ui/label'
 import { PageHeader } from '@/components/ui/page-header'
 import { MonthNav } from '@/components/ui/month-nav'
@@ -189,6 +190,7 @@ export default async function BudgetsPage({
     .filter((g) => g.months.size >= 2)
     .map((g) => ({
       description: g.description,
+      title: displayTitle(g.description),
       amount_cents: g.amount,
       monthsSeen: g.months.size,
     }))
@@ -226,7 +228,20 @@ export default async function BudgetsPage({
         />
       ) : (
         <>
-          {/* Big progress hero */}
+          {/* Zero-budget state: no "$X of $0" math, just the first-run nudge. */}
+          {budgetedTopLevel.length === 0 ? (
+            <EmptyState
+              title="Set your first budget"
+              body="Pick a category below and give it a monthly amount. Maple tracks it from this month on."
+              action={
+                <a href="#categories">
+                  <Button variant="primary" size="md">
+                    Pick a category
+                  </Button>
+                </a>
+              }
+            />
+          ) : (
           <Card padding="lg">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
               <div>
@@ -306,29 +321,30 @@ export default async function BudgetsPage({
               </div>
             )}
           </Card>
+          )}
 
-          <section className="grid gap-3 sm:grid-cols-2">
+          <section className={'grid gap-3 ' + (budgetedTopLevel.length > 0 ? 'sm:grid-cols-2' : '')}>
             <RecurringInsight
               total={recurringMonthlyTotal}
               count={recurring.length}
               shareOfBudget={recurringShareOfBudget}
               top={recurringTop}
             />
-            <StatTile
-              label="Over budget"
-              value={`${categoriesOver} of ${budgetedTopLevel.length}`}
-              tone={categoriesOver > 0 ? 'maple' : 'leaf'}
-              hint={
-                budgetedTopLevel.length === 0
-                  ? 'No budgets configured yet'
-                  : categoriesOver === 0
+            {budgetedTopLevel.length > 0 && (
+              <StatTile
+                label="Over budget"
+                value={`${categoriesOver} of ${budgetedTopLevel.length}`}
+                tone={categoriesOver > 0 ? 'maple' : 'leaf'}
+                hint={
+                  categoriesOver === 0
                     ? 'Every category on track this month'
                     : `${categoriesOver} categor${categoriesOver === 1 ? 'y' : 'ies'} need${categoriesOver === 1 ? 's' : ''} attention`
-              }
-            />
+                }
+              />
+            )}
           </section>
 
-          <div className="flex items-center gap-2">
+          <div id="categories" className="flex scroll-mt-4 items-center gap-2">
             <MapleLabel>Categories</MapleLabel>
             <span className="text-[11.5px] text-ink-3">
               {budgetedTopLevel.length} of {topLevel.length} budgeted
@@ -367,7 +383,7 @@ function RecurringInsight({
   total: number
   count: number
   shareOfBudget: number | null
-  top: { description: string; amount_cents: number; monthsSeen: number }[]
+  top: { description: string; title: string; amount_cents: number; monthsSeen: number }[]
 }) {
   if (count === 0) {
     return (
@@ -401,12 +417,11 @@ function RecurringInsight({
         <ul className="mt-3 flex flex-col gap-1.5 border-t border-hair pt-3">
           {top.map((g) => (
             <li key={g.description + g.amount_cents} className="flex items-baseline gap-2 text-[12px]">
-              <span className="min-w-0 flex-1 truncate text-ink">{g.description}</span>
-              <span
-                className="shrink-0 rounded-full bg-paper-2 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-ink-3"
-                title={`Seen in ${g.monthsSeen} of last 3 months`}
-              >
-                {g.monthsSeen}/3
+              <span className="min-w-0 flex-1 truncate text-ink" title={g.description}>
+                {g.title}
+              </span>
+              <span className="shrink-0 whitespace-nowrap rounded-full bg-paper-2 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-ink-3">
+                {g.monthsSeen} of last 3 months
               </span>
               <span className="shrink-0 font-serif text-[13px] tabular-nums text-ink-2">
                 {formatMoney(g.amount_cents)}
@@ -417,6 +432,21 @@ function RecurringInsight({
       )}
     </div>
   )
+}
+
+/**
+ * Human-friendly label for a recurring group. `description` is the user-facing
+ * title (retitling edits it in place), so a hand-set name passes through
+ * `cleanTitle` untouched. Raw bank strings get the shared merchant cleanup;
+ * anything still SHOUTING afterwards is title-cased with whitespace collapsed.
+ */
+function displayTitle(description: string): string {
+  const cleaned = cleanTitle(description) ?? description.replace(/\s+/g, ' ').trim()
+  const shouting = /\b[A-Z]{3,}\b/.test(cleaned) || /[a-z][A-Z]{2,}/.test(cleaned)
+  if (!shouting) return cleaned
+  return cleaned
+    .toLowerCase()
+    .replace(/(^|[\s(])([a-z])/g, (_, pre: string, c: string) => pre + c.toUpperCase())
 }
 
 function ProgressBar({ pctUsed }: { pctUsed: number }) {

@@ -1,28 +1,47 @@
 /* Maple service worker.
  *
  * Goals (in priority order):
- *   1. Be installable — Safari iOS only treats a site as a PWA if a SW is
+ *   1. Be installable - Safari iOS only treats a site as a PWA if a SW is
  *      registered, even if the SW does almost nothing.
- *   2. Don't serve stale financial data — money screens must be live.
- *      Network-first for navigations; never cache API or Supabase calls.
+ *   2. Don't serve stale financial data - money screens must be live.
+ *      Network-first for navigations; never touch API, Supabase, or
+ *      React Server Component (RSC) payloads. Client-side <Link>
+ *      navigations fetch `/route?_rsc=...` with an `RSC: 1` header and
+ *      carry rendered financial data, so they must never hit a cache.
  *   3. Static asset cache for /_next/static/* so the app shell paints fast
  *      after the first visit and works offline (showing /offline.html when
  *      the network is gone).
+ *   4. Never swap a new worker in under a live session without asking.
+ *      A deploy mid-session used to 404 old chunks; now the new worker
+ *      waits until the page posts SKIP_WAITING (see sw-registrar.tsx).
  *
- * No Workbox, no build step, no precache manifest — change this file by hand.
+ * No Workbox, no build step, no precache manifest - change this file by hand.
  */
 
-const CACHE_VERSION = 'maple-v2'
+const CACHE_VERSION = 'maple-v3'
 const STATIC_CACHE = `${CACHE_VERSION}-static`
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`
 const OFFLINE_URL = '/offline.html'
+
+// Same-origin paths that are safe to serve stale-while-revalidate. Anything
+// not listed here (and not a static chunk or navigation) is network-only.
+const RUNTIME_PATH_PREFIXES = ['/splash/', '/_next/image']
+const RUNTIME_PATHS = new Set([
+  '/icon',
+  '/icon-192',
+  '/icon-maskable',
+  '/apple-icon',
+  '/manifest.webmanifest',
+  OFFLINE_URL,
+])
+const RUNTIME_DESTINATIONS = new Set(['font', 'image', 'style', 'script'])
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(STATIC_CACHE)
       await cache.addAll([OFFLINE_URL, '/apple-icon', '/icon'])
-      await self.skipWaiting()
+      // No skipWaiting() here: the page decides when to swap workers.
     })(),
   )
 })
@@ -33,12 +52,24 @@ self.addEventListener('activate', (event) => {
       const keys = await caches.keys()
       await Promise.all(
         keys
-          .filter((k) => !k.startsWith(CACHE_VERSION))
+          .filter((k) => !k.startsWith(`${CACHE_VERSION}-`))
           .map((k) => caches.delete(k)),
       )
+      // Let the browser start the navigation fetch in parallel with SW boot.
+      if (self.registration.navigationPreload) {
+        try {
+          await self.registration.navigationPreload.enable()
+        } catch {
+          /* unsupported or disabled - networkFirstPage falls back to fetch */
+        }
+      }
       await self.clients.claim()
     })(),
   )
+})
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting()
 })
 
 self.addEventListener('fetch', (event) => {
@@ -48,7 +79,11 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url)
   if (url.origin !== self.location.origin) return
 
-  // Never cache anything that looks like data — keep money live.
+  // Next.js App Router internals: RSC payloads, prefetches, server actions.
+  // These carry rendered user data and must go straight to the network.
+  if (isNextRouterRequest(req, url)) return
+
+  // Never cache anything that looks like data - keep money live.
   if (
     url.pathname.startsWith('/api/') ||
     url.pathname.startsWith('/auth/') ||
@@ -58,21 +93,45 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Cache-first for hashed Next static assets — they're immutable by URL.
+  // Cache-first for hashed Next static assets - they're immutable by URL.
   if (url.pathname.startsWith('/_next/static/')) {
     event.respondWith(cacheFirst(req))
     return
   }
 
   // Navigation requests: network-first, fall back to cached shell offline.
+  // Never caches the HTML itself (authed pages must stay live).
   if (req.mode === 'navigate') {
-    event.respondWith(networkFirstPage(req))
+    event.respondWith(networkFirstPage(event))
     return
   }
 
-  // Everything else (icons, manifest, fonts): stale-while-revalidate.
-  event.respondWith(staleWhileRevalidate(req))
+  // Explicit allowlist of app-shell assets: stale-while-revalidate.
+  if (isRuntimeCacheable(req, url)) {
+    event.respondWith(staleWhileRevalidate(req))
+    return
+  }
+
+  // Everything else: network only, no respondWith.
 })
+
+function isNextRouterRequest(req, url) {
+  if (req.headers.get('RSC') === '1') return true
+  if (url.searchParams.has('_rsc')) return true
+  if (req.headers.get('Next-Router-Prefetch') === '1') return true
+  if (req.headers.get('Next-Action')) return true
+  if (req.destination === '' && req.mode === 'cors') {
+    const accept = req.headers.get('Accept') || ''
+    if (accept.includes('text/x-component')) return true
+  }
+  return false
+}
+
+function isRuntimeCacheable(req, url) {
+  if (RUNTIME_PATHS.has(url.pathname)) return true
+  if (RUNTIME_PATH_PREFIXES.some((p) => url.pathname.startsWith(p))) return true
+  return RUNTIME_DESTINATIONS.has(req.destination)
+}
 
 async function cacheFirst(req) {
   const cache = await caches.open(STATIC_CACHE)
@@ -87,10 +146,11 @@ async function cacheFirst(req) {
   }
 }
 
-async function networkFirstPage(req) {
+async function networkFirstPage(event) {
   try {
-    const res = await fetch(req)
-    return res
+    const preloaded = event.preloadResponse ? await event.preloadResponse : null
+    if (preloaded) return preloaded
+    return await fetch(event.request)
   } catch {
     const cache = await caches.open(STATIC_CACHE)
     const offline = await cache.match(OFFLINE_URL)
@@ -110,7 +170,7 @@ async function staleWhileRevalidate(req) {
   return cached || network
 }
 
-// ─── Web Push ──────────────────────────────────────────────────────────────
+// --- Web Push ---------------------------------------------------------------
 // The server sends a JSON payload { title, body, url, tag }. iOS shows these
 // only for the home-screen-installed PWA (iOS 16.4+).
 
@@ -145,7 +205,7 @@ self.addEventListener('notificationclick', (event) => {
             try {
               await client.navigate(url)
             } catch {
-              /* cross-origin or not allowed — just focus */
+              /* cross-origin or not allowed - just focus */
             }
           }
           return client.focus()

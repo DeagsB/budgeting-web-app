@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { parseMoneyToCents } from '@/lib/format'
+import { humanizeDbError } from '@/lib/errors'
 
 export type GoalState = { error: string } | undefined
 
@@ -54,7 +55,7 @@ export async function createGoal(_prev: GoalState, fd: FormData): Promise<GoalSt
     household_id: ctx.householdId,
     ...parsed.ok,
   })
-  if (error) return { error: error.message }
+  if (error) return { error: humanizeDbError(error, { entity: 'goal name' }) }
 
   revalidatePath('/goals')
   return undefined
@@ -75,7 +76,7 @@ export async function updateGoal(_prev: GoalState, fd: FormData): Promise<GoalSt
     .update(parsed.ok)
     .eq('id', id)
     .eq('household_id', ctx.householdId)
-  if (error) return { error: error.message }
+  if (error) return { error: humanizeDbError(error, { entity: 'goal name' }) }
 
   revalidatePath('/goals')
   return undefined

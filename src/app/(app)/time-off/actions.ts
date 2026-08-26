@@ -3,12 +3,13 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
+import { parseDecimal } from '@/lib/format'
+import { humanizeDbError } from '@/lib/errors'
 
+/** Hours are a non-negative decimal; blank or unparseable input counts as 0. */
 function parseHours(str: string): number {
-  const cleaned = str.replace(/[^0-9.]/g, '')
-  if (!cleaned) return 0
-  const n = Number(cleaned)
-  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : 0
+  const n = parseDecimal(str) ?? 0
+  return Math.max(0, n)
 }
 
 export type SaveTimeOffResult = { ok: true } | { ok: false; error: string }
@@ -51,14 +52,14 @@ export async function saveTimeOff(fd: FormData): Promise<SaveTimeOffResult> {
   }
 
   if (upserts.length === 0) {
-    return { ok: false, error: 'Nothing to save.' }
+    return { ok: false, error: 'Nothing changed.' }
   }
   const supabase = await createClient()
   const { error } = await supabase
     .from('time_off_entries')
     .upsert(upserts, { onConflict: 'member_id,period_month' })
 
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: humanizeDbError(error) }
 
   revalidatePath('/time-off')
   return { ok: true }

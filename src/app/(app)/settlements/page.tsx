@@ -3,11 +3,13 @@ import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { computeBalancesByPeriod, computePeriodStatement, nextAutoCloseDate } from '@/lib/settlement'
 import { loadSettlementData } from '@/lib/settlement-data'
+import { todayISO } from '@/lib/dates'
 import { Sparkline, type SparklinePoint } from '@/components/sparkline'
 import { PageHeader } from '@/components/ui/page-header'
 import { Card } from '@/components/ui/card'
 import { StatTile } from '@/components/ui/stat-tile'
 import { Amount } from '@/components/ui/amount'
+import { ResponsiveAmount } from '@/components/ui/responsive-amount'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { MapleLabel } from '@/components/ui/label'
@@ -16,10 +18,6 @@ import { AwaitingSettlementCard, OpenPeriodCard, type LineVM } from './period-ca
 import { PeriodHistory, type PeriodVM } from './period-history'
 
 export const dynamic = 'force-dynamic'
-
-function todayISO(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Toronto', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
-}
 
 /**
  * /settlements - the running tally, any statement waiting to be paid, a
@@ -46,7 +44,7 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
         <PageHeader eyebrow="Settlements" title="Square up, gently." />
         <EmptyState
           title="Add a second member to settle up"
-          body="Settlements track who owes whom between household members, so you need at least two before there's anything to square up."
+          body="Settlements track who owes whom, so you need at least two people first."
           action={
             <Link href="/setup">
               <Button variant="primary" size="md">
@@ -124,14 +122,30 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
     <div className="flex flex-col gap-6 pb-10">
       <PageHeader eyebrow="Settlements" title="Square up, gently." subtitle="Shared expenses close on a schedule; settle each statement in one tap." />
 
-      <section className="grid gap-3 sm:grid-cols-3">
-        <StatTile label="Shared this period" value={<Amount cents={openStatement?.totalOwedCents ?? 0} tone="ink" />} tone="ink" />
-        <StatTile label="Awaiting payment" value={String(awaiting.length)} tone={awaiting.length > 0 ? 'maple' : 'ink'} hint={awaiting.length === 1 ? 'statement' : 'statements'} />
+      {/* "Outstanding now" is the page's single number, so it keeps the hero
+          tile; the two supporting stats share one compact row beneath it. */}
+      <section className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
         <StatTile
           label="Outstanding now"
           value={<Amount cents={totalOutstanding} tone={totalOutstanding > 0 ? 'maple' : 'ink'} />}
           tone={totalOutstanding > 0 ? 'maple' : 'ink'}
           hint={totalOutstanding > 0 ? 'incl. carry-forward' : 'all square'}
+          className="col-span-2 sm:col-span-1"
+        />
+        <StatTile
+          compact
+          label="Shared this period"
+          value={<ResponsiveAmount cents={openStatement?.totalOwedCents ?? 0} tone="ink" />}
+          tone="ink"
+          className="sm:p-4"
+        />
+        <StatTile
+          compact
+          label="Awaiting payment"
+          value={String(awaiting.length)}
+          tone={awaiting.length > 0 ? 'maple' : 'ink'}
+          hint={awaiting.length === 1 ? 'statement' : 'statements'}
+          className="sm:p-4"
         />
       </section>
 
@@ -145,6 +159,7 @@ export default async function SettlementsPage({ searchParams }: { searchParams: 
       {open && openStatement && (
         <OpenPeriodCard
           periodStart={open.period_start}
+          today={today}
           lines={openStatement.lines.map(toVM)}
           carryForward={openStatement.carryForward.map(toVM)}
           nextAutoClose={nextClose}

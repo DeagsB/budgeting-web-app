@@ -2,7 +2,8 @@ import type { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Maple — household budgeting',
+    id: '/',
+    name: 'Maple - household budgeting',
     short_name: 'Maple',
     description: 'Multi-member household budgeting with Canadian tax-advantaged accounts.',
     start_url: '/dashboard',
@@ -14,13 +15,21 @@ export default function manifest(): MetadataRoute.Manifest {
     categories: ['finance', 'productivity'],
     icons: [
       {
+        src: '/app-icon-192.png',
+        sizes: '192x192',
+        type: 'image/png',
+        purpose: 'any',
+      },
+      {
         src: '/icon',
         sizes: '512x512',
         type: 'image/png',
         purpose: 'any',
       },
       {
-        src: '/icon',
+        // Padded variant: glyph inside the 40% safe zone so Android's
+        // circle / squircle masks never clip the M.
+        src: '/app-icon-maskable.png',
         sizes: '512x512',
         type: 'image/png',
         purpose: 'maskable',

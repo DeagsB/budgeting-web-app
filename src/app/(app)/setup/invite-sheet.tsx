@@ -83,7 +83,7 @@ export function InviteSheet({
               autoComplete="email"
               required
               className="maple-input"
-              placeholder="partner@domain.ca"
+              placeholder="them@domain.ca"
               autoFocus
             />
           </Field>

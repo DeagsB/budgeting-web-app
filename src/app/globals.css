@@ -9,6 +9,12 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
+ * Note on `hover:` - Tailwind v4 already gates its built-in hover variant
+ * behind `@media (hover: hover)`, so hover styles never stick after a tap on
+ * touch screens. No override needed here.
+ */
+
+/*
  * Maple design tokens. Every color surfaces as a Tailwind utility (bg-cream,
  * text-ink, border-hair, etc.) through @theme inline.
  *
@@ -16,16 +22,27 @@
  */
 
 :root {
+  color-scheme: light;
+
   /* surfaces */
   --color-cream: #f6f1e7;
   --color-cream-2: #efe7d7;
   --color-paper: #fffdf7;
   --color-paper-2: #fbf5e9;
 
-  /* ink (text) */
+  /* ink (text)
+     ink-3 is the quietest colour that still passes WCAG AA for small text on
+     paper (#6f6357 on #fffdf7 is ~5.4:1). ink-4 keeps the old, lighter value
+     for decorative use only (hairline glyphs, chevrons) - never for copy. */
   --color-ink: #1e1a17;
   --color-ink-2: #6b5f54;
-  --color-ink-3: #a89b8e;
+  --color-ink-3: #6f6357;
+  --color-ink-4: #a89b8e;
+
+  /* iOS status-bar band. We use `black-translucent`, so the system glyphs are
+     white and must sit on a dark surface. Leaf in light mode; in dark mode
+     the page background is already dark, so the band matches it. */
+  --color-statusbar: #1f5641;
 
   /* hairlines */
   --color-hair: rgba(94, 76, 58, 0.12);
@@ -60,6 +77,8 @@
 }
 
 .dark {
+  color-scheme: dark;
+
   --color-cream: #181410;
   --color-cream-2: #0f0c09;
   --color-paper: #221d18;
@@ -67,7 +86,10 @@
 
   --color-ink: #f4efe5;
   --color-ink-2: #b8aa99;
-  --color-ink-3: #7a6e61;
+  --color-ink-3: #9a8f83;
+  --color-ink-4: #7a6e61;
+
+  --color-statusbar: #181410;
 
   --color-hair: rgba(244, 239, 229, 0.10);
   --color-hair-2: rgba(244, 239, 229, 0.05);
@@ -106,6 +128,8 @@
   --color-ink: var(--color-ink);
   --color-ink-2: var(--color-ink-2);
   --color-ink-3: var(--color-ink-3);
+  --color-ink-4: var(--color-ink-4);
+  --color-statusbar: var(--color-statusbar);
 
   --color-hair: var(--color-hair);
   --color-hair-2: var(--color-hair-2);
@@ -183,6 +207,59 @@ button,
   /* Stop iOS from showing the long-press preview popover on links and buttons —
      it makes hand-rolled UI feel like a website instead of an app. */
   -webkit-touch-callout: none;
+  /* Kill the 300ms double-tap-to-zoom delay on every control. */
+  touch-action: manipulation;
+}
+
+/* One focus ring for every keyboard-reachable control. Form fields keep their
+   own ring (see .maple-input:focus below); overlays with tabindex="-1" are
+   programmatically focused and deliberately excluded. */
+:where(a, button, [role='button'], [tabindex]:not([tabindex='-1'])):focus-visible {
+  outline: 2px solid var(--color-leaf);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Honour the OS "reduce motion" setting: collapse every animation and
+   transition to a single frame. View-transition snapshots are covered below. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+/* Route navigations cross-fade via React <ViewTransition> (see the app
+   shell). Keep it quick so it reads as a beat, not a curtain. */
+::view-transition-old(root),
+::view-transition-new(root),
+::view-transition-old(.maple-fade),
+::view-transition-new(.maple-fade) {
+  animation-duration: 160ms;
+  animation-timing-function: var(--ease-ios);
+}
+
+/* Fixed strip behind the iOS status bar (see src/app/layout.tsx). Height is
+   the top safe-area inset, so it collapses to nothing in desktop browsers
+   and in Safari with the URL bar showing. */
+.status-bar-band {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top, 0px);
+  background: var(--color-statusbar);
+  z-index: 35;
+  pointer-events: none;
 }
 
 html,
@@ -195,6 +272,7 @@ body {
    against the actual screen, not a 0-height document. */
 html {
   height: 100%;
+  min-height: 100dvh;
   /* Prevent the rubber-band overscroll on body — we still allow it inside
      scroll containers, but the page itself should feel anchored. */
   overscroll-behavior-y: none;
@@ -309,7 +387,7 @@ body {
 
 .maple-input::placeholder,
 .maple-textarea::placeholder {
-  color: var(--color-ink-3);
+  color: var(--color-ink-4);
 }
 
 .maple-input:focus,
@@ -322,10 +400,16 @@ body {
 
 .maple-select {
   padding-right: 38px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none' stroke='%239a8e80' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+  /* Chevron colour tracks ink-3 per theme. <select> can't host pseudo-elements
+     in WebKit, so it's two data URIs (light / dark) rather than currentColor. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none' stroke='%236f6357' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 14px center;
   background-size: 12px 8px;
+}
+
+.dark .maple-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none' stroke='%239a8f83' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
 }
 
 .maple-textarea {

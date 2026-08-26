@@ -126,8 +126,20 @@ export default async function PnlPage({
         />
       ) : (
         <>
-          {/* Hero numbers */}
-          <section className="grid gap-3 md:grid-cols-3">
+          {/* Hero numbers. Mobile: one compact three-up row (whole dollars so
+              the values fit a 375px column). sm+: the full tiles. */}
+          <section className="grid grid-cols-3 gap-2 sm:hidden">
+            <StatTile compact label="Income" tone="leaf" value={<Amount cents={thisMonth.income} tone="leaf" compact />} />
+            <StatTile compact label="Expenses" tone="maple" value={<Amount cents={thisMonth.expense} tone="maple" compact />} />
+            <StatTile
+              compact
+              label="Net"
+              tone={net >= 0 ? 'leaf' : 'maple'}
+              value={<Amount cents={net} tone={net >= 0 ? 'leaf' : 'maple'} compact />}
+              hint={net >= 0 ? 'surplus' : 'shortfall'}
+            />
+          </section>
+          <section className="hidden gap-3 sm:grid sm:grid-cols-3">
             <StatTile
               label={`${monthLabel(selected)} income`}
               tone="leaf"

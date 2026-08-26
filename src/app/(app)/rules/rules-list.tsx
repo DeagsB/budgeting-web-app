@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Sheet } from '@/components/ui/sheet'
+import { ConfirmModal } from '@/components/ui/confirm-button'
 import { formatMoney } from '@/lib/format'
 import { describeRuleMatch, prefillRuleFromTransaction, type TransactionRule } from '@/lib/transaction-rules'
 import { RuleSheet, type RuleSheetInitial, type RuleSheetMember } from './rule-sheet'
@@ -76,9 +77,11 @@ export function RulesList({
         <p className="text-[13px] text-ink-2">
           Rules run top to bottom; for each transaction the first match decides sharing and the first with a category decides category.
         </p>
-        <Button type="button" variant="primary" onClick={openNew} className="shrink-0">
-          New rule
-        </Button>
+        {rows.length > 0 && (
+          <Button type="button" variant="primary" onClick={openNew} className="shrink-0">
+            New rule
+          </Button>
+        )}
       </div>
 
       {rows.length === 0 ? (
@@ -110,6 +113,8 @@ function RuleRow({ row, first, last, onEdit }: { row: RuleRowVM; first: boolean;
   const [note, setNote] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [unshare, setUnshare] = useState(true)
+  const [confirmApply, setConfirmApply] = useState(false)
+  const applyFormRef = useRef<HTMLFormElement>(null)
   const r = row.rule
 
   const action = (fn: (fd: FormData) => Promise<{ error: string } | { ok: true } | undefined | { ok: true; shared: number; categorized: number; skippedManual: number }>) =>
@@ -118,7 +123,7 @@ function RuleRow({ row, first, last, onEdit }: { row: RuleRowVM; first: boolean;
         const res = await fn(fd)
         if (res && 'error' in res) setNote(res.error)
         else if (res && 'shared' in res) {
-          setNote(`Applied: ${res.shared} shared${res.categorized ? `, ${res.categorized} categorised` : ''}${res.skippedManual ? `, ${res.skippedManual} left as you set them` : ''}.`)
+          setNote(`Applied: ${res.shared} shared${res.categorized ? `, ${res.categorized} categorized` : ''}${res.skippedManual ? `, ${res.skippedManual} left as you set them` : ''}.`)
           router.refresh()
         } else {
           setNote(null)
@@ -127,7 +132,7 @@ function RuleRow({ row, first, last, onEdit }: { row: RuleRowVM; first: boolean;
       })
 
   const shareLabel =
-    r.share_mode === 'household' ? 'Household ratio' : r.share_mode === 'custom' ? `Custom ${row.customLabel ?? ''}` : 'Not shared'
+    r.share_mode === 'household' ? 'Household split' : r.share_mode === 'custom' ? `Custom ${row.customLabel ?? ''}` : 'Not shared'
 
   return (
     <li>
@@ -152,14 +157,14 @@ function RuleRow({ row, first, last, onEdit }: { row: RuleRowVM; first: boolean;
               <form action={action(reorderRule)}>
                 <input type="hidden" name="id" value={r.id} />
                 <input type="hidden" name="direction" value="up" />
-                <button type="submit" disabled={pending || first} aria-label="Move up" className="flex h-8 w-8 items-center justify-center rounded-full text-ink-2 hover:bg-cream-2 disabled:opacity-30">
+                <button type="submit" disabled={pending || first} aria-label="Move up" className="flex h-11 w-11 items-center justify-center rounded-full text-ink-2 hover:bg-cream-2 disabled:opacity-30">
                   ▲
                 </button>
               </form>
               <form action={action(reorderRule)}>
                 <input type="hidden" name="id" value={r.id} />
                 <input type="hidden" name="direction" value="down" />
-                <button type="submit" disabled={pending || last} aria-label="Move down" className="flex h-8 w-8 items-center justify-center rounded-full text-ink-2 hover:bg-cream-2 disabled:opacity-30">
+                <button type="submit" disabled={pending || last} aria-label="Move down" className="flex h-11 w-11 items-center justify-center rounded-full text-ink-2 hover:bg-cream-2 disabled:opacity-30">
                   ▼
                 </button>
               </form>
@@ -170,10 +175,15 @@ function RuleRow({ row, first, last, onEdit }: { row: RuleRowVM; first: boolean;
             <button type="button" onClick={onEdit} className="inline-flex min-h-[44px] items-center px-2 font-semibold text-ink-2 hover:text-ink hover:underline">
               Edit
             </button>
-            <form action={action(applyRuleToExisting)}>
+            <form ref={applyFormRef} action={action(applyRuleToExisting)}>
               <input type="hidden" name="id" value={r.id} />
-              <button type="submit" disabled={pending || !r.enabled} className="inline-flex min-h-[44px] items-center px-2 font-semibold text-ink-2 hover:text-ink hover:underline disabled:opacity-50">
-                Apply to past
+              <button
+                type="button"
+                onClick={() => setConfirmApply(true)}
+                disabled={pending || !r.enabled}
+                className="inline-flex min-h-[44px] items-center px-2 font-semibold text-ink-2 hover:text-ink hover:underline disabled:opacity-50"
+              >
+                Apply to last 12 months
               </button>
             </form>
             <form action={action(toggleRuleEnabled)}>
@@ -187,9 +197,24 @@ function RuleRow({ row, first, last, onEdit }: { row: RuleRowVM; first: boolean;
               Delete
             </button>
           </div>
-          {note && <p className="text-[12.5px] text-ink-2">{note}</p>}
+          <p role="status" aria-live="polite" className={note ? 'text-[12.5px] text-ink-2' : 'sr-only'}>
+            {note}
+          </p>
         </div>
       </Card>
+
+      <ConfirmModal
+        open={confirmApply}
+        prompt={`Apply “${r.name}” to the last 12 months?`}
+        description="Re-check past transactions against this rule. Shares and categories you set by hand are kept."
+        confirmLabel="Apply"
+        onCancel={() => setConfirmApply(false)}
+        onConfirm={() => {
+          setConfirmApply(false)
+          // requestSubmit() routes through React 19's form-action wiring.
+          applyFormRef.current?.requestSubmit()
+        }}
+      />
 
       <Sheet open={confirmDelete} onClose={() => setConfirmDelete(false)} title={`Delete “${r.name}”?`}>
         <form action={action(deleteRule)} className="flex flex-col gap-4 pb-2" onSubmit={() => setConfirmDelete(false)}>

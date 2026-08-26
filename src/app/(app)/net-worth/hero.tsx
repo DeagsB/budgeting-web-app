@@ -34,7 +34,10 @@ export function NetWorthHero({
   const [scrubIdx, setScrubIdx] = useState<number | null>(null)
 
   const latest = trail[trail.length - 1]
-  const animatedNet = useCountUp(latest.net, { duration: 1100 })
+  // Count up from last month's figure rather than from zero, so the first
+  // frame is already a plausible number instead of "$0.00".
+  const previous = trail.length > 1 ? trail[trail.length - 2] : latest
+  const animatedNet = useCountUp(latest.net, { duration: 1100, from: previous.net })
 
   // Chart geometry. preserveAspectRatio="none" stretches the viewBox to the
   // container, so the taller mobile viewBox just gives the curve more vertical

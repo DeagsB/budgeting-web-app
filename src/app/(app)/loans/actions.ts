@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { parseMoneyToCents } from '@/lib/format'
+import { humanizeDbError } from '@/lib/errors'
 
 export type LoanState = { error: string } | { ok: true } | undefined
 export type RateChangeState = { error: string } | { ok: true } | undefined
@@ -43,7 +44,7 @@ export async function saveLoanDetails(_prev: LoanState, fd: FormData): Promise<L
     { onConflict: 'account_id' },
   )
 
-  if (error) return { error: error.message }
+  if (error) return { error: humanizeDbError(error) }
 
   revalidatePath('/loans')
   revalidatePath('/dashboard')
@@ -81,7 +82,7 @@ export async function addRateChange(
     },
     { onConflict: 'account_id,effective_month' },
   )
-  if (error) return { error: error.message }
+  if (error) return { error: humanizeDbError(error) }
 
   revalidatePath('/loans')
   return { ok: true }

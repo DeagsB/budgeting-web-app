@@ -4,7 +4,10 @@ import { getHouseholdContext } from '@/lib/household'
 import { PageHeader } from '@/components/ui/page-header'
 import { StatTile } from '@/components/ui/stat-tile'
 import { Amount } from '@/components/ui/amount'
+import { ResponsiveAmount } from '@/components/ui/responsive-amount'
 import { ContributionTable } from './table'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Button } from '@/components/ui/button'
 
 type RegisteredType = 'tfsa' | 'rrsp' | 'fhsa'
 const TYPES: RegisteredType[] = ['tfsa', 'rrsp', 'fhsa']
@@ -274,22 +277,33 @@ export default async function ContributionsPage({
         </Link>
       </nav>
 
-      <section className="grid gap-3 sm:grid-cols-4">
-        <StatTile label="Opening (Jan 1)" value={<Amount cents={totals.opening} />} />
-        <StatTile label={`${year} allowance`} value={<Amount cents={totals.allowance} />} />
-        <StatTile label={`Contributed ${year}`} value={<Amount cents={totals.contributed} />} />
+      {/* "Available" is the number people come here for, so it stays the
+          hero; the three inputs that produce it share one compact row. */}
+      <section className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
         <StatTile
           label="Available"
           value={<Amount cents={totals.available} tone={totals.available < 0 ? 'maple' : 'leaf'} />}
           tone={totals.available < 0 ? 'maple' : 'leaf'}
           foot={totals.available < 0 ? 'over contributed' : undefined}
+          className="col-span-3 sm:col-span-1"
         />
+        <StatTile compact label="Opening" value={<ResponsiveAmount cents={totals.opening} />} hint="Jan 1" className="sm:p-4" />
+        <StatTile compact label="Allowance" value={<ResponsiveAmount cents={totals.allowance} />} hint={String(year)} className="sm:p-4" />
+        <StatTile compact label="Contributed" value={<ResponsiveAmount cents={totals.contributed} />} hint={String(year)} className="sm:p-4" />
       </section>
 
       {memberRows.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-hair bg-paper-2 px-5 py-8 text-center text-[13.5px] text-ink-2">
-          Add members first.
-        </p>
+        <EmptyState
+          title="No members yet"
+          body="Contribution room is tracked per household member. Add at least one member to start tracking RRSP, TFSA and FHSA room."
+          action={
+            <Link href="/setup">
+              <Button variant="primary" size="md">
+                Manage members
+              </Button>
+            </Link>
+          }
+        />
       ) : (
         <ContributionTable
           year={year}

@@ -10,6 +10,7 @@ import { StatTile } from '@/components/ui/stat-tile'
 import { Card } from '@/components/ui/card'
 import { DataTable } from '@/components/ui/data-table'
 import { Amount } from '@/components/ui/amount'
+import { ResponsiveAmount } from '@/components/ui/responsive-amount'
 import { MapleLabel } from '@/components/ui/label'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
@@ -195,7 +196,7 @@ export default async function BalanceSheetPage({
           </div>
 
           {/* Summary bar */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
             <StatTile
               label={`Net worth · ${monthName}`}
               tone={netWorth >= 0 ? 'ink' : 'maple'}
@@ -204,15 +205,20 @@ export default async function BalanceSheetPage({
               className="col-span-2 sm:col-span-1"
             />
             <StatTile
-              label={`Assets · ${monthName}`}
+              compact
+              label="Assets"
               tone="leaf"
-              value={<Amount cents={totalAssets} tone="leaf" />}
+              value={<ResponsiveAmount cents={totalAssets} tone="leaf" />}
+              hint={monthName}
+              className="sm:p-4"
             />
             <StatTile
-              label={`Liabilities · ${monthName}`}
+              compact
+              label="Liabilities"
               tone="maple"
-              value={<Amount cents={totalLiab} tone="maple" />}
-              foot={totalLiab > 0 ? 'Owing' : undefined}
+              value={<ResponsiveAmount cents={totalLiab} tone="maple" />}
+              hint={totalLiab > 0 ? `Owing · ${monthName}` : monthName}
+              className="sm:p-4"
             />
           </div>
 
@@ -266,6 +272,7 @@ function Ledger({
         <p className="px-5 py-8 text-center text-[13.5px] text-ink-2">None as of {monthName}.</p>
       ) : (
         <DataTable minWidth={360}>
+          <caption className="sr-only">Balance sheet: account balances grouped by type, with subtotals</caption>
           <tbody>
             {groups.map((g) => (
               <GroupRows key={g.label} group={g} />

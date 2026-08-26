@@ -1,10 +1,13 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useState, useTransition, type ReactNode } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { Sheet } from '@/components/ui/sheet'
+import { Fab } from '@/components/ui/fab'
+import { FilterSheet, FilterSection, FilterRadioRow } from '@/components/ui/filter-sheet'
+import { SegmentedControl } from '@/components/ui/segmented-control'
 import { MapleLabel } from '@/components/ui/label'
 import { AddTransactionForm } from './add-form'
 import { monthStartISO } from '@/lib/format'
@@ -13,12 +16,16 @@ type Account = { id: string; name: string }
 type Category = { id: string; parent_id: string | null; name: string }
 type Member = { id: string; name: string }
 
+type Draft = { member: string; account: string; category: string }
+
 /**
- * Always-visible transactions controls: a live search box, a horizontal Chip
- * filter row (account / member, plus a category select for the long
- * hierarchical list), and an "Add transaction" primary button that opens the
- * add form in a bottom Sheet. Filters are URL-driven so the server component
- * can read them from `searchParams`; only the add-form Sheet needs local state.
+ * Transactions controls. Filters are URL-driven so the server component reads
+ * them from `searchParams`; only the sheets need local state.
+ *
+ * Mobile (<md): search + a "Filter" pill (opens a FilterSheet with member /
+ * account / category) + a "..." overflow for secondary actions; active filters
+ * render as removable chips under the search; the add form opens from the FAB.
+ * Desktop (md+): the inline chip rail + category select + "Add transaction".
  */
 export function TxControls({
   month,
@@ -30,6 +37,7 @@ export function TxControls({
   categories,
   members,
   defaultMemberId = null,
+  overflowActions,
 }: {
   month: string
   search: string
@@ -41,11 +49,15 @@ export function TxControls({
   members: Member[]
   /** The signed-in member, preselected as payer in the add form. */
   defaultMemberId?: string | null
+  /** Secondary actions (sync, import) shown in the mobile "..." sheet. */
+  overflowActions?: ReactNode
 }) {
   const router = useRouter()
   const pathname = usePathname()
   const [, startNav] = useTransition()
   const [addOpen, setAddOpen] = useState(false)
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [draft, setDraft] = useState<Draft>({ member: '', account: '', category: '' })
   const [searchValue, setSearchValue] = useState(search)
 
   // Keep the local input in sync if the URL search param changes elsewhere
@@ -81,13 +93,46 @@ export function TxControls({
     navigate({ [key]: current === value ? '' : value })
   }
 
+  function clearAll() {
+    setSearchValue('')
+    navigate({ search: '', account: '', category: '', member: '' })
+  }
+
+  function openFilters() {
+    setDraft({ member: memberId ?? '', account: accountId ?? '', category: categoryId ?? '' })
+    setFilterOpen(true)
+  }
+
+  function applyFilters() {
+    navigate({ member: draft.member, account: draft.account, category: draft.category })
+    setFilterOpen(false)
+  }
+
   const hasFilter = !!(searchValue.trim() || accountId || categoryId || memberId)
+
+  // Active (non-search) filters as removable chips - mobile only; desktop shows
+  // the full rail where the active chip is already highlighted.
+  const memberLabel =
+    memberId === 'shared' ? 'Shared' : members.find((m) => m.id === memberId)?.name
+  const accountLabel = accounts.find((a) => a.id === accountId)?.name
+  const categoryLabel = categories.find((c) => c.id === categoryId)?.name
+  const activeChips: { key: 'member' | 'account' | 'category'; label: string }[] = []
+  if (memberId && memberLabel) activeChips.push({ key: 'member', label: memberLabel })
+  if (accountId && accountLabel) activeChips.push({ key: 'account', label: accountLabel })
+  if (categoryId && categoryLabel) activeChips.push({ key: 'category', label: categoryLabel })
+  const filterCount = activeChips.length
+
+  const memberOptions = [
+    { value: '', label: 'All' },
+    { value: 'shared', label: 'Shared' },
+    ...members.map((m) => ({ value: m.id, label: m.name })),
+  ]
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Search + add row */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative flex-1 sm:max-w-[420px]">
+      {/* Search + (mobile) Filter / overflow + (desktop) Add */}
+      <div className="flex items-center gap-2">
+        <div className="relative min-w-0 flex-1 sm:max-w-[420px]">
           <span
             aria-hidden
             className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-3"
@@ -106,7 +151,7 @@ export function TxControls({
               if (e.key === 'Enter') navigate({ search: searchValue })
             }}
             onBlur={() => navigate({ search: searchValue })}
-            placeholder="Search descriptions…"
+            placeholder="Search…"
             aria-label="Search transactions"
             // `.maple-input` is unlayered CSS and sets `padding` shorthand, which
             // beats Tailwind's layered `pl-10` — so the left padding must be set
@@ -117,22 +162,79 @@ export function TxControls({
           />
         </div>
 
-        <Button
-          variant="primary"
-          size="md"
-          onClick={() => setAddOpen(true)}
-          className="w-full shrink-0 sm:w-auto"
-          disabled={accounts.length === 0}
+        {/* Mobile: Filter pill with a count badge when anything is set. */}
+        <button
+          type="button"
+          onClick={openFilters}
+          aria-haspopup="dialog"
+          aria-expanded={filterOpen}
+          aria-label={filterCount > 0 ? `Filters, ${filterCount} active` : 'Filters'}
+          className={
+            'inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-semibold transition-colors md:hidden ' +
+            (filterCount > 0
+              ? 'border-leaf bg-leaf-soft text-leaf-deep'
+              : 'border-hair bg-paper text-ink')
+          }
         >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden>
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          Add transaction
-        </Button>
+          <FilterIcon />
+          Filter
+          {filterCount > 0 && (
+            <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-leaf px-1.5 text-[11px] font-bold tabular-nums text-paper">
+              {filterCount}
+            </span>
+          )}
+        </button>
+
+        {overflowActions ? <OverflowMenu>{overflowActions}</OverflowMenu> : null}
+
+        {/* Wrapper carries the breakpoint: Button's own `inline-flex` would
+            otherwise beat a `hidden` passed via className. */}
+        <div className="hidden shrink-0 md:block">
+          <Button
+            variant="primary"
+            size="md"
+            onClick={() => setAddOpen(true)}
+            disabled={accounts.length === 0}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden>
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            Add transaction
+          </Button>
+        </div>
       </div>
 
-      {/* Chip filter row — always visible, horizontally scrollable on mobile */}
-      <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1">
+      {/* Mobile: active filters as removable chips (44px hit area, smaller pill). */}
+      {activeChips.length > 0 && (
+        <div className="hide-scroll -mx-1 -my-1 flex items-center gap-0.5 overflow-x-auto px-1 md:hidden">
+          {activeChips.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => navigate({ [c.key]: '' })}
+              aria-label={`Remove ${c.label} filter`}
+              className="flex min-h-[44px] shrink-0 items-center px-0.5"
+            >
+              <span className="inline-flex items-center gap-1 rounded-full bg-leaf px-2.5 py-1 text-[12px] font-semibold text-paper">
+                {c.label}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden>
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </span>
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={clearAll}
+            className="ml-1 flex min-h-[44px] shrink-0 items-center px-1 text-[12px] font-semibold text-ink-2"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
+      {/* Desktop: chip filter rail (scrollbar hidden). */}
+      <div className="hide-scroll -mx-1 hidden items-center gap-2 overflow-x-auto px-1 pb-1 md:flex">
         <Chip active={memberId === 'shared'} onClick={() => toggle('member', 'shared')} className="shrink-0">
           Shared
         </Chip>
@@ -159,10 +261,10 @@ export function TxControls({
         ))}
       </div>
 
-      {/* Category select + clear — category list is hierarchical and long, so a
-          select reads better than a chip-per-category row. */}
+      {/* Desktop: category select + clear — category list is hierarchical and
+          long, so a select reads better than a chip-per-category row. */}
       {categories.length > 0 && (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
+        <div className="hidden flex-row items-end gap-3 md:flex">
           <label className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-[280px]">
             <MapleLabel>Category</MapleLabel>
             <select
@@ -180,20 +282,79 @@ export function TxControls({
             </select>
           </label>
           {hasFilter && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setSearchValue('')
-                navigate({ search: '', account: '', category: '', member: '' })
-              }}
-              className="self-start sm:self-end"
-            >
+            <Button variant="ghost" size="sm" onClick={clearAll} className="self-end">
               Clear filters
             </Button>
           )}
         </div>
       )}
+
+      {/* Mobile FAB - opens the same add sheet as the desktop button. */}
+      {accounts.length > 0 && <Fab onClick={() => setAddOpen(true)} />}
+
+      <FilterSheet
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        onApply={applyFilters}
+        onClear={() => {
+          setFilterOpen(false)
+          navigate({ account: '', category: '', member: '' })
+        }}
+      >
+        <FilterSection label="Member">
+          <div className="hide-scroll -mx-1 overflow-x-auto px-1 py-0.5">
+            <SegmentedControl
+              ariaLabel="Filter by member"
+              className="whitespace-nowrap"
+              options={memberOptions}
+              value={draft.member}
+              onChange={(v) => setDraft((d) => ({ ...d, member: v }))}
+            />
+          </div>
+        </FilterSection>
+
+        <FilterSection label="Account">
+          <div className="-mx-1 flex flex-col">
+            <FilterRadioRow
+              name="account"
+              value=""
+              checked={draft.account === ''}
+              onSelect={() => setDraft((d) => ({ ...d, account: '' }))}
+            >
+              All accounts
+            </FilterRadioRow>
+            {accounts.map((a) => (
+              <FilterRadioRow
+                key={a.id}
+                name="account"
+                value={a.id}
+                checked={draft.account === a.id}
+                onSelect={(v) => setDraft((d) => ({ ...d, account: v }))}
+              >
+                {a.name}
+              </FilterRadioRow>
+            ))}
+          </div>
+        </FilterSection>
+
+        {categories.length > 0 && (
+          <FilterSection label="Category">
+            <select
+              value={draft.category}
+              onChange={(e) => setDraft((d) => ({ ...d, category: e.target.value }))}
+              aria-label="Filter by category"
+              className="maple-select"
+            >
+              <option value="">All categories</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.parent_id ? `↳ ${c.name}` : c.name}
+                </option>
+              ))}
+            </select>
+          </FilterSection>
+        )}
+      </FilterSheet>
 
       <Sheet open={addOpen} onClose={() => setAddOpen(false)} title="Add transaction">
         <AddTransactionForm
@@ -206,5 +367,45 @@ export function TxControls({
         />
       </Sheet>
     </div>
+  )
+}
+
+/**
+ * Mobile "..." button that opens a sheet of secondary actions. Children are
+ * rendered one per 44px row. Hidden on md+ where the actions sit inline in the
+ * page header.
+ */
+function OverflowMenu({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="More actions"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-hair bg-paper text-ink-2 md:hidden"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+          <circle cx="6" cy="12" r="1.7" />
+          <circle cx="12" cy="12" r="1.7" />
+          <circle cx="18" cy="12" r="1.7" />
+        </svg>
+      </button>
+      <Sheet open={open} onClose={() => setOpen(false)} title="More">
+        <div className="flex flex-col gap-1 pb-2" onClick={() => setOpen(false)}>
+          {children}
+        </div>
+      </Sheet>
+    </>
+  )
+}
+
+function FilterIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M4 6h16M7 12h10M10 18h4" />
+    </svg>
   )
 }

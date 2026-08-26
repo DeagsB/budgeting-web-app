@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { formatMoney } from '@/lib/format'
 import { Amount } from '@/components/ui/amount'
 import { Button } from '@/components/ui/button'
+import { MoneyInput } from '@/components/ui/money-input'
 import { toggleShared, saveShareOverride, clearShares } from './actions'
 import { RuleSheet, type RuleSheetMember } from '@/app/(app)/rules/rule-sheet'
 import { prefillRuleFromTransaction } from '@/lib/transaction-rules'
@@ -261,9 +262,11 @@ function SplitEditor({
     for (const m of nonPayerMembers) seed[m.id] = amountByMember.get(m.id) ?? 0
     return seed
   })
+  const [invalid, setInvalid] = useState<Record<string, boolean>>({})
   const [pending, startTransition] = useTransition()
   const [saveError, setSaveError] = useState<string | null>(null)
 
+  const hasInvalid = Object.values(invalid).some(Boolean)
   const sum = Object.values(amounts).reduce((s, v) => s + v, 0)
   const leftover = totalAbs - sum
   const overshoot = sum > totalAbs
@@ -276,6 +279,7 @@ function SplitEditor({
     const next: Record<string, number> = {}
     for (const m of nonPayerMembers) next[m.id] = base
     setAmounts(next)
+    setInvalid({})
   }
 
   return (
@@ -345,22 +349,19 @@ function SplitEditor({
               </span>
               <div className="flex items-center">
                 <span className="text-[12px] text-ink-3">$</span>
-                <input
-                  id={inputId}
-                  name={`share:${m.id}`}
-                  type="text"
-                  inputMode="decimal"
-                  value={cents === 0 ? '' : (cents / 100).toFixed(2)}
-                  placeholder="0.00"
-                  aria-label={`${m.name} owes`}
-                  onChange={(e) => {
-                    const cleaned = e.target.value.replace(/[^0-9.]/g, '')
-                    const n = Number(cleaned)
-                    const nextCents = Number.isFinite(n) ? Math.round(n * 100) : 0
-                    setAmounts((prev) => ({ ...prev, [m.id]: nextCents }))
-                  }}
-                  className="w-20 bg-transparent text-right font-serif text-[15px] tabular-nums text-ink outline-none placeholder:text-ink-3"
-                />
+                <div className="w-24">
+                  <MoneyInput
+                    id={inputId}
+                    cents={cents}
+                    aria-label={`${m.name} owes`}
+                    onCents={(next) => {
+                      setInvalid((prev) => ({ ...prev, [m.id]: next === null }))
+                      if (next !== null) setAmounts((prev) => ({ ...prev, [m.id]: next }))
+                    }}
+                  />
+                </div>
+                {/* Server parses dollars under `share:<member>`; post the committed cents as dollars. */}
+                <input type="hidden" name={`share:${m.id}`} value={(cents / 100).toFixed(2)} />
               </div>
             </label>
           )
@@ -374,10 +375,16 @@ function SplitEditor({
         </p>
       )}
 
+      {hasInvalid && (
+        <p className="rounded-md bg-maple-soft px-3 py-2 text-[12.5px] font-medium text-maple">
+          Enter each share as a dollar amount, e.g. 12.50.
+        </p>
+      )}
+
       {saveError && <p className="text-[12.5px] font-medium text-maple">{saveError}</p>}
 
       <div className="flex items-center gap-3 pt-1">
-        <Button type="submit" variant="primary" disabled={pending || overshoot}>
+        <Button type="submit" variant="primary" disabled={pending || overshoot || hasInvalid}>
           {pending ? 'Saving…' : 'Save split'}
         </Button>
         <Button type="button" variant="ghost" onClick={onClose}>

@@ -20,7 +20,7 @@ function SignInInner() {
 
   return (
     <main
-      className="flex min-h-screen items-center justify-center px-6"
+      className="flex min-h-dvh items-center justify-center px-6 pt-[calc(env(safe-area-inset-top)+24px)]"
       style={{ background: 'var(--color-cream, #F6F1E7)' }}
     >
       <div className="w-full max-w-[420px]">

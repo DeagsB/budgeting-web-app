@@ -9,6 +9,7 @@ import { StatTile } from '@/components/ui/stat-tile'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Card } from '@/components/ui/card'
 import { Amount } from '@/components/ui/amount'
+import { ResponsiveAmount } from '@/components/ui/responsive-amount'
 import { Button } from '@/components/ui/button'
 import { MapleLabel } from '@/components/ui/label'
 import { SharedRow } from './row'
@@ -233,21 +234,27 @@ export default async function SharedPage({
       </Card>
 
       {/* Stats */}
-      <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <section className="grid grid-cols-3 gap-2 sm:gap-3">
         <StatTile
+          compact
+          className="sm:p-4"
           label="Transactions"
           value={String(transactions.length)}
           foot={`in ${monthLabel(month)}`}
         />
         <StatTile
-          label="Flagged as shared"
+          compact
+          className="sm:p-4"
+          label="Shared"
           value={`${flaggedCount} / ${transactions.length || 0}`}
           progress={flaggedRatio}
         />
         <StatTile
+          compact
+          className="sm:p-4"
           label="Total shared"
-          value={<Amount cents={totalShared} />}
-          foot="across this account"
+          value={<ResponsiveAmount cents={totalShared} />}
+          foot="this account"
         />
       </section>
 

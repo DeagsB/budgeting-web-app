@@ -1,6 +1,12 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
+  experimental: {
+    // Lets React's <ViewTransition> (used in the app shell) animate route
+    // navigations via the browser View Transitions API. No-op in browsers
+    // without support.
+    viewTransition: true,
+  },
   async headers() {
     return [
       {

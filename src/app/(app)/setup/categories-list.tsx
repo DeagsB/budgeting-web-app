@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useTransition } from 'react'
+import { useMemo, useRef, useState, useTransition } from 'react'
 import {
   renameCategory,
   toggleRollover,
@@ -11,6 +11,7 @@ import { createCategoryReturning } from '@/app/(app)/categories/actions'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ConfirmButton } from '@/components/ui/confirm-button'
+import { Field } from '@/components/ui/field'
 
 type Cat = {
   id: string
@@ -18,9 +19,25 @@ type Cat = {
   name: string
   rollover: boolean
   archived: boolean
+  /** Report shorthand (e.g. GROC). Only rendered when `withCodes` is set. */
+  code?: string
 }
 
-export function CategoriesList({ categories }: { categories: Cat[] }) {
+const ADD_INPUT_ID = 'new-category'
+
+/**
+ * The one category list. Setup renders it bare; /categories renders it with
+ * `withCodes` so the report shorthand is visible and editable. Both go through
+ * the same server actions, so there is a single visual language and a single
+ * code path for every category mutation.
+ */
+export function CategoriesList({
+  categories,
+  withCodes = false,
+}: {
+  categories: Cat[]
+  withCodes?: boolean
+}) {
   const [show, setShow] = useState<'active' | 'archived'>('active')
 
   const { parents, childrenOf } = useMemo(() => {
@@ -43,18 +60,31 @@ export function CategoriesList({ categories }: { categories: Cat[] }) {
       : !p.archived,
   )
 
+  function focusAddForm() {
+    const el = document.getElementById(ADD_INPUT_ID)
+    if (el instanceof HTMLElement) {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      el.focus()
+    }
+  }
+
   return (
     <div className="mt-3 flex flex-col gap-3">
-      <AddCategory parents={parents.filter((p) => !p.archived)} />
+      <AddCategory parents={parents.filter((p) => !p.archived)} withCodes={withCodes} />
 
       {categories.length === 0 ? (
         <EmptyState
-          title="Start with a few categories"
-          body="Categories are how you slice spending — Groceries, Rent, Transport. Add a top-level one above, then nest sub-categories under it."
+          title="No categories yet"
+          body="Categories are how you slice spending - Groceries, Rent, Transport. Add a top-level one, then nest sub-categories under it."
+          action={
+            <Button type="button" variant="primary" size="md" onClick={focusAddForm}>
+              Add a category
+            </Button>
+          }
         />
       ) : (
         <>
-          <div className="mt-2 flex items-baseline justify-between">
+          <div className="mt-2 flex items-center justify-between gap-3">
             <span className="text-[12px] text-ink-3">
               {parents.filter((p) => (show === 'archived' ? p.archived : !p.archived)).length}{' '}
               top-level
@@ -63,76 +93,150 @@ export function CategoriesList({ categories }: { categories: Cat[] }) {
               <button
                 type="button"
                 onClick={() => setShow(show === 'archived' ? 'active' : 'archived')}
-                className="inline-flex min-h-[44px] items-center text-[12px] font-semibold text-ink-2 hover:text-ink hover:underline"
+                aria-pressed={show === 'archived'}
+                className="inline-flex min-h-[44px] items-center px-2 text-[12px] font-semibold text-ink-2 hover:text-ink hover:underline"
               >
-                {show === 'archived' ? '← Active' : `Archived (${archivedCount}) →`}
+                {show === 'archived' ? '← Back to active' : `Show archived (${archivedCount})`}
               </button>
             )}
           </div>
 
-          <ul className="divide-y divide-hair border-y border-hair">
-            {visibleParents.length === 0 && (
-              <li className="py-6 text-center text-[13.5px] text-ink-2">
-                {show === 'archived' ? 'Nothing archived.' : 'Add a category above.'}
-              </li>
-            )}
-            {visibleParents.map((p) => (
-              <CategoryBlock
-                key={p.id}
-                parent={p}
-                kids={(childrenOf.get(p.id) ?? []).filter((c) =>
-                  show === 'archived' ? c.archived : !c.archived,
-                )}
+          {visibleParents.length === 0 ? (
+            show === 'archived' ? (
+              <EmptyState
+                title="Nothing archived"
+                body="Archived categories land here. They stay out of budgets and the transaction picker until you bring them back."
               />
-            ))}
-          </ul>
+            ) : (
+              <EmptyState
+                title="No active categories"
+                body="Everything is archived. Restore one, or add a fresh category above."
+                action={
+                  <Button type="button" variant="primary" size="md" onClick={focusAddForm}>
+                    Add a category
+                  </Button>
+                }
+              />
+            )
+          ) : (
+            <ul className="divide-y divide-hair border-y border-hair">
+              {visibleParents.map((p) => (
+                <CategoryBlock
+                  key={p.id}
+                  parent={p}
+                  kids={(childrenOf.get(p.id) ?? []).filter((c) =>
+                    show === 'archived' ? c.archived : !c.archived,
+                  )}
+                  withCodes={withCodes}
+                />
+              ))}
+            </ul>
+          )}
         </>
       )}
     </div>
   )
 }
 
-function AddCategory({ parents }: { parents: Cat[] }) {
+function AddCategory({ parents, withCodes }: { parents: Cat[]; withCodes: boolean }) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const formRef = useRef<HTMLFormElement>(null)
   return (
     <div className="flex flex-col gap-1.5">
       <form
+        ref={formRef}
         action={(fd) => {
           const name = String(fd.get('name') ?? '').trim()
           const parentId = String(fd.get('parent_id') ?? '').trim() || null
+          const code = withCodes ? String(fd.get('code') ?? '').trim() || null : null
           if (!name) return
           setError(null)
           startTransition(async () => {
-            const res = await createCategoryReturning({ name, parentId })
+            const res = await createCategoryReturning({ name, parentId, code })
             if (res.ok) {
-              const el = document.getElementById('new-category') as HTMLInputElement | null
-              if (el) el.value = ''
+              formRef.current?.reset()
+              document.getElementById(ADD_INPUT_ID)?.focus()
             } else {
               setError(res.error)
             }
           })
         }}
-        className="grid gap-2 sm:grid-cols-[1fr_180px_auto]"
+        className={
+          withCodes
+            ? 'grid gap-3 sm:grid-cols-[1fr_140px_180px_auto] sm:items-end'
+            : 'grid gap-2 sm:grid-cols-[1fr_180px_auto] sm:items-end'
+        }
       >
-        <input
-          id="new-category"
-          name="name"
-          type="text"
-          required
-          maxLength={60}
-          aria-label="New category name"
-          placeholder="Category name — e.g. Groceries"
-          className="maple-input"
-        />
-        <select name="parent_id" aria-label="Parent category" className="maple-select" defaultValue="">
-          <option value="">— Top level —</option>
-          {parents.map((p) => (
-            <option key={p.id} value={p.id}>
-              under {p.name}
-            </option>
-          ))}
-        </select>
+        {withCodes ? (
+          <>
+            <Field label="Name" htmlFor={ADD_INPUT_ID} required>
+              <input
+                id={ADD_INPUT_ID}
+                name="name"
+                type="text"
+                required
+                maxLength={80}
+                placeholder="e.g. Groceries"
+                className="maple-input"
+              />
+            </Field>
+            <Field label="Code" htmlFor="new-category-code" hint="Optional, auto-filled">
+              <input
+                id="new-category-code"
+                name="code"
+                type="text"
+                maxLength={40}
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="GROC"
+                className="maple-input font-mono uppercase"
+              />
+            </Field>
+            <Field label="Parent" htmlFor="new-category-parent">
+              <select
+                id="new-category-parent"
+                name="parent_id"
+                className="maple-select"
+                defaultValue=""
+              >
+                <option value="">Top level</option>
+                {parents.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    under {p.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </>
+        ) : (
+          <>
+            <input
+              id={ADD_INPUT_ID}
+              name="name"
+              type="text"
+              required
+              maxLength={80}
+              aria-label="New category name"
+              placeholder="Category name, e.g. Groceries"
+              className="maple-input"
+            />
+            <select
+              name="parent_id"
+              aria-label="Parent category"
+              className="maple-select"
+              defaultValue=""
+            >
+              <option value="">Top level</option>
+              {parents.map((p) => (
+                <option key={p.id} value={p.id}>
+                  under {p.name}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
         <Button type="submit" variant="primary" size="md" disabled={pending} className="shrink-0">
           {pending ? 'Adding…' : 'Add'}
         </Button>
@@ -146,7 +250,15 @@ function AddCategory({ parents }: { parents: Cat[] }) {
   )
 }
 
-function CategoryBlock({ parent, kids }: { parent: Cat; kids: Cat[] }) {
+function CategoryBlock({
+  parent,
+  kids,
+  withCodes,
+}: {
+  parent: Cat
+  kids: Cat[]
+  withCodes: boolean
+}) {
   const [open, setOpen] = useState(false)
   return (
     <li className="py-1.5">
@@ -156,12 +268,13 @@ function CategoryBlock({ parent, kids }: { parent: Cat; kids: Cat[] }) {
         onToggle={() => setOpen(!open)}
         open={open}
         hasKids={kids.length > 0}
+        withCodes={withCodes}
       />
       {open && kids.length > 0 && (
         <ul className="ml-9 mt-1 border-l border-hair pl-3">
           {kids.map((k) => (
             <li key={k.id} className="py-1">
-              <CategoryRow cat={k} />
+              <CategoryRow cat={k} withCodes={withCodes} />
             </li>
           ))}
         </ul>
@@ -176,16 +289,26 @@ function CategoryRow({
   onToggle,
   open,
   hasKids,
+  withCodes,
 }: {
   cat: Cat
   top?: boolean
   onToggle?: () => void
   open?: boolean
   hasKids?: boolean
+  withCodes: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(cat.name)
+  const [code, setCode] = useState(cat.code ?? '')
   const [pending, startTransition] = useTransition()
+  const [rolloverPending, startRollover] = useTransition()
+
+  function cancelEdit() {
+    setValue(cat.name)
+    setCode(cat.code ?? '')
+    setEditing(false)
+  }
 
   if (editing) {
     return (
@@ -196,33 +319,58 @@ function CategoryRow({
             setEditing(false)
           })
         }}
-        className="flex items-center gap-2"
+        className="flex flex-col gap-2 py-1 sm:flex-row sm:items-end"
       >
         <input type="hidden" name="id" value={cat.id} />
-        <input
-          name="name"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          autoFocus
-          required
-          maxLength={60}
-          aria-label={`Rename category ${cat.name}`}
-          className="maple-input flex-1"
-        />
-        <Button type="submit" variant="primary" size="sm" disabled={pending}>
-          {pending ? 'Saving…' : 'Save'}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            setValue(cat.name)
-            setEditing(false)
-          }}
-        >
-          Cancel
-        </Button>
+        {withCodes ? (
+          <>
+            <Field label="Name" className="flex-1" required>
+              <input
+                name="name"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                autoFocus
+                required
+                maxLength={80}
+                className="maple-input"
+              />
+            </Field>
+            <Field label="Code" className="sm:w-[140px]" required>
+              <input
+                name="code"
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                required
+                maxLength={40}
+                pattern="[A-Za-z][A-Za-z0-9_.]{0,39}"
+                title="Start with a letter; letters, digits, _ and . only"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                className="maple-input font-mono uppercase"
+              />
+            </Field>
+          </>
+        ) : (
+          <input
+            name="name"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            autoFocus
+            required
+            maxLength={80}
+            aria-label={`Rename category ${cat.name}`}
+            className="maple-input flex-1"
+          />
+        )}
+        <div className="flex items-center gap-2">
+          <Button type="submit" variant="primary" size="md" disabled={pending}>
+            {pending ? 'Saving…' : 'Save'}
+          </Button>
+          <Button type="button" variant="ghost" size="md" onClick={cancelEdit} disabled={pending}>
+            Cancel
+          </Button>
+        </div>
       </form>
     )
   }
@@ -242,24 +390,27 @@ function CategoryRow({
           <button
             type="button"
             onClick={onToggle}
-            className="flex h-11 w-7 shrink-0 items-center justify-center rounded text-[11px] text-ink-3 hover:text-ink"
-            aria-label={open ? 'Collapse' : 'Expand'}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded text-[11px] text-ink-3 hover:text-ink"
+            aria-label={open ? `Collapse ${cat.name}` : `Expand ${cat.name}`}
             aria-expanded={open}
           >
             {open ? '▾' : '▸'}
           </button>
-        ) : top ? (
-          <span className="h-11 w-7 shrink-0" />
         ) : null}
         <span
           className={
             top
-              ? 'truncate font-serif text-[16px] text-ink'
-              : 'truncate text-[14px] text-ink-2'
+              ? 'min-w-0 truncate font-serif text-[16px] text-ink'
+              : 'min-w-0 truncate text-[14px] text-ink-2'
           }
         >
           {cat.name}
         </span>
+        {withCodes && cat.code && (
+          <span className="shrink-0 font-mono text-[11px] tracking-[0.02em] text-ink-3">
+            {cat.code}
+          </span>
+        )}
         {cat.rollover && (
           <span className="shrink-0 rounded-full bg-leaf-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-leaf">
             Rollover
@@ -269,19 +420,27 @@ function CategoryRow({
       <div
         className={
           '-ml-2 flex shrink-0 flex-wrap items-center gap-1 text-[12px] sm:ml-0 sm:justify-end sm:pl-0 ' +
-          (top ? 'pl-9' : 'pl-2')
+          (top && hasKids ? 'pl-11' : 'pl-2')
         }
       >
         {!cat.archived && (
           <>
-            <form action={toggleRollover}>
+            <form
+              action={(fd) => {
+                startRollover(async () => {
+                  await toggleRollover(fd)
+                })
+              }}
+            >
               <input type="hidden" name="id" value={cat.id} />
               <input type="hidden" name="rollover" value={cat.rollover ? 'false' : 'true'} />
               <button
                 type="submit"
-                className="inline-flex min-h-[44px] items-center px-2 font-semibold text-ink-2 hover:text-ink hover:underline"
+                disabled={rolloverPending}
+                aria-pressed={cat.rollover}
+                className="inline-flex min-h-[44px] items-center px-2 font-semibold text-ink-2 hover:text-ink hover:underline disabled:opacity-50"
               >
-                {cat.rollover ? 'Stop rollover' : 'Rollover'}
+                {rolloverPending ? 'Saving…' : cat.rollover ? 'Stop rollover' : 'Rollover'}
               </button>
             </form>
             <button
@@ -289,20 +448,12 @@ function CategoryRow({
               onClick={() => setEditing(true)}
               className="inline-flex min-h-[44px] items-center px-2 font-semibold text-ink-2 hover:text-ink hover:underline"
             >
-              Rename
+              {withCodes ? 'Edit' : 'Rename'}
             </button>
           </>
         )}
         {cat.archived ? (
-          <form action={unarchiveCategory}>
-            <input type="hidden" name="id" value={cat.id} />
-            <button
-              type="submit"
-              className="inline-flex min-h-[44px] items-center px-2 font-semibold text-ink-2 hover:text-ink hover:underline"
-            >
-              Unarchive
-            </button>
-          </form>
+          <UnarchiveButton id={cat.id} />
         ) : (
           <ConfirmButton
             action={archiveCategory}
@@ -318,5 +469,27 @@ function CategoryRow({
         )}
       </div>
     </div>
+  )
+}
+
+function UnarchiveButton({ id }: { id: string }) {
+  const [pending, start] = useTransition()
+  return (
+    <form
+      action={(fd) => {
+        start(async () => {
+          await unarchiveCategory(fd)
+        })
+      }}
+    >
+      <input type="hidden" name="id" value={id} />
+      <button
+        type="submit"
+        disabled={pending}
+        className="inline-flex min-h-[44px] items-center px-2 font-semibold text-ink-2 hover:text-ink hover:underline disabled:opacity-50"
+      >
+        {pending ? 'Restoring…' : 'Unarchive'}
+      </button>
+    </form>
   )
 }

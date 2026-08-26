@@ -67,6 +67,11 @@ export async function updateSession(request: NextRequest) {
     pathname === '/offline.html' ||
     pathname === '/icon' ||
     pathname === '/apple-icon' ||
+    pathname === '/app-icon-192.png' ||
+    pathname === '/app-icon-maskable.png' ||
+    // iOS splash screens (src/app/splash/[size]/route.tsx) are fetched by
+    // Safari at install time, again without cookies.
+    pathname.startsWith('/splash/') ||
     pathname === '/favicon.ico'
 
   // Unauthenticated users hitting a protected route → redirect to sign-in.

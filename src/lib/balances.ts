@@ -6,8 +6,10 @@
 // only transactions after it are applied on top.
 //
 // Money convention (matches the schema): amount_cents is signed, positive =
-// outflow (money leaving the account, lowers the balance); negative = inflow
-// (raises it). So a transaction's effect on the balance is `-amount_cents`.
+// outflow (money leaving the account); negative = inflow. On an asset account
+// an outflow lowers the balance (effect `-amount_cents`). On a liability
+// account balances are the amount owing, so an outflow (a purchase on the
+// card) raises it (effect `+amount_cents`).
 
 import { LIABILITY_TYPES, type AccountType } from '@/lib/domain'
 
@@ -90,11 +92,17 @@ export function accountBalanceAt(
     }
   }
 
+  // Asset accounts hold what you have: an outflow lowers the balance.
+  // Liability accounts hold what you owe (positive = owing, matching the
+  // "enter the balance owing as a positive number" rule on the add form and
+  // Plaid's reporting): a purchase (outflow) raises what you owe, a payment
+  // (inflow) lowers it. Same signed amount, opposite effect.
+  const effect = LIABILITY_TYPES.has(account.type) ? 1 : -1
   let delta = 0
   for (const tx of txByAccount.get(account.id) ?? []) {
     if (tx.occurred_on > monthEnd) break // list is sorted ascending
     if (afterExclusive && tx.occurred_on <= afterExclusive) continue
-    delta += -tx.amount_cents
+    delta += effect * tx.amount_cents
   }
   return base + delta
 }

@@ -339,3 +339,46 @@ Real households settle up on a rhythm ("end of month, e-transfer the difference"
 - *Membership by transaction date*: a Plaid transaction that posts three days late would silently rewrite a statement the partner already paid.
 - *Recompute closed-period balances live*: cheaper to store nothing, but the whole point is that a closed statement is immutable.
 - *Per-member close days*: a period is a household fact; two members with different close days would never agree on a statement.
+
+---
+
+## 2026-08-26 - iOS audit fixes: balances, money entry, service worker, app shell
+
+A full UI/UX/functionality audit against the "installed on an iPhone" bar found three correctness problems and a long tail of app-feel issues.
+The fixes landed in one pass; the decisions worth keeping are below.
+
+**Liability balances are the amount owing, positive (`src/lib/balances.ts`).**
+An outflow on a liability raises what you owe; an inflow (a payment) lowers it.
+Assets keep the old rule (outflow lowers the balance).
+Plaid reports credit and loan balances as positive owing, so no sign flip is needed anywhere.
+Before this, a credit-card purchase reduced the balance and the balance sheet showed liabilities negative.
+
+**Plaid-linked accounts get a balance snapshot on link and after every sync (`src/lib/plaid-balances.ts`, `plaid-sync.ts`).**
+A linked account starts with opening balance 0, so deriving its balance from synced transactions alone produced negative assets.
+The snapshot is written for the current month, rolled back to the 1st by undoing this month's transactions, so the derived figure today equals Plaid `current` exactly.
+`/transactions/sync` pages do not always carry `accounts` (sandbox never does), so a sync that yields no balances falls back to `/accounts/balance/get`.
+A Plaid-written snapshot overwrites a hand-entered one for the same month: bank truth wins.
+
+**Money is parsed in one place (`parseMoneyToCents`) and entered through one component (`MoneyInput`).**
+Comma-only input treats the last comma as the decimal mark (fr-CA keyboards emit a comma), strict two-decimal validation, no silent rounding, and the field holds a raw string until blur so decimals can actually be typed.
+The three forked parsers were deleted.
+
+**The service worker never touches Next router traffic.**
+Any request with an `RSC` header, `_rsc` query, prefetch or server-action header bypasses the worker; runtime caching is an explicit allowlist (icons, manifest, splash, fonts, images).
+Updates wait for the user ("Update ready - Reload") instead of `skipWaiting`, which was producing chunk 404s mid-session after deploys.
+
+**App shell: page title + back chevron in the header, one FAB for the primary verb, tab tint on the active tab.**
+The in-page serif headline is desktop-only; on mobile the shell owns the title and the subtitle stays.
+Filters on Transactions live behind one "Filter" pill (sheet) with removable chips, so the first row is above the fold.
+
+**Dates: `src/lib/dates.ts` `todayISO()` is the only "today".**
+Pinned to America/Toronto; the four raw-UTC call sites were rewritten.
+A household timezone column can replace the constant later without touching call sites.
+
+**Errors: `humanizeDbError` maps Postgres codes to sentences.**
+No raw PostgREST message reaches the UI; terse internal assertions were reworded or replaced with the generic "Couldn't save that. Refresh and try again."
+
+**Considered + rejected:**
+- *Negative liability balances with display-time negation*: matched Plaid's sign at the storage layer badly and made every consumer flip signs.
+- *Keeping `skipWaiting`*: the zero-friction update is not worth a white screen the first time a user taps a stale chunk.
+- *A shell-level add-transaction sheet*: each page already loads the accounts/categories it needs; a shared sheet would have duplicated the queries.

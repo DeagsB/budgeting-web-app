@@ -2,7 +2,6 @@
 
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
-import { createPortal } from 'react-dom'
 import { formatMoney, formatMoneySigned, formatDate, monthLabel } from '@/lib/format'
 import { smoothPath, seriesToPoints } from '@/lib/maple'
 import { accountTypeLabel, LIABILITY_TYPES, type AccountType } from '@/lib/domain'
@@ -10,11 +9,13 @@ import { MapleLabel } from '@/components/ui/label'
 import { Amount } from '@/components/ui/amount'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { useScrollLock } from '@/lib/use-scroll-lock'
+import { Sheet } from '@/components/ui/sheet'
 import { StatTile } from '@/components/ui/stat-tile'
 import { Reveal } from '@/components/ui/reveal'
 import { PrivacyBlur } from '@/components/ui/privacy-blur'
 import { useCountUp } from '@/components/ui/count-up'
+import { Fab } from '@/components/ui/fab'
+import { AddTransactionForm } from '@/app/(app)/transactions/add-form'
 import { colorForCategory } from '@/lib/category-colors'
 
 // Fixed brand gradient for the net-worth hero. Uses the light-mode leaf values
@@ -87,6 +88,7 @@ type RecentTxVM = {
   account_name: string
 }
 type PaceVM = { dailyPace: number; projectedMonth: number; daysElapsed: number; daysInMonth: number }
+type CategoryVM = { id: string; parent_id: string | null; name: string }
 
 const RANGES = [
   { id: '1M', months: 1 },
@@ -116,6 +118,7 @@ export function DashboardClient({
   recurringTotal,
   recentActivity,
   pace,
+  categories,
   hasError = false,
 }: {
   householdName: string
@@ -137,9 +140,12 @@ export function DashboardClient({
   recurringTotal: number
   recentActivity: RecentTxVM[]
   pace: PaceVM
+  /** Category list for the add-transaction sheet opened from the FAB. */
+  categories: CategoryVM[]
   hasError?: boolean
 }) {
   const [hidden, setHidden] = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
   const [range, setRange] = useState<RangeId>('1Y')
   const [scrubIdx, setScrubIdx] = useState<number | null>(null)
   const [flipped, setFlipped] = useState<Record<string, boolean>>({})
@@ -156,7 +162,11 @@ export function DashboardClient({
     try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(next)) } catch {}
   }
 
-  const animatedNet = useCountUp(netWorth, { duration: 1100 })
+  // Count up from last month's figure so the first frame is a real number,
+  // not "$0.00".
+  const previousNet =
+    netWorthTrail.length > 1 ? netWorthTrail[netWorthTrail.length - 2].value : netWorth
+  const animatedNet = useCountUp(netWorth, { duration: 1100, from: previousNet })
 
   const filteredTrail = useMemo(() => {
     if (range === 'ALL') return netWorthTrail
@@ -288,18 +298,27 @@ export function DashboardClient({
             {/* Range selector (desktop) — translucent pills on the green */}
             <div className="hidden gap-0.5 rounded-full bg-white/10 p-1 sm:flex">
               {RANGES.map((r) => (
+                // 44px hit area on a 28px pill: the button carries the target,
+                // the inner span carries the look. Negative margin keeps the
+                // track its original height.
                 <button
                   key={r.id}
                   type="button"
                   onClick={() => setRange(r.id)}
+                  aria-pressed={range === r.id}
                   className={
-                    'rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all ' +
-                    (range === r.id
-                      ? 'bg-white/20 text-white'
-                      : 'text-white/55 hover:text-white')
+                    '-my-2 inline-flex min-h-[44px] items-center justify-center rounded-full transition-colors ' +
+                    (range === r.id ? 'text-white' : 'text-white/55 hover:text-white')
                   }
                 >
-                  {r.id}
+                  <span
+                    className={
+                      'rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all ' +
+                      (range === r.id ? 'bg-white/20' : '')
+                    }
+                  >
+                    {r.id}
+                  </span>
                 </button>
               ))}
             </div>
@@ -356,18 +375,26 @@ export function DashboardClient({
           </div>
 
           {/* Mobile range selector */}
-          <div className="relative mt-3 flex gap-1 sm:hidden">
+          <div className="relative mt-1 flex gap-1 sm:hidden">
             {RANGES.map((r) => (
               <button
                 key={r.id}
                 type="button"
                 onClick={() => setRange(r.id)}
+                aria-pressed={range === r.id}
                 className={
-                  'flex-1 rounded-full py-1.5 text-[11px] font-semibold transition-all ' +
-                  (range === r.id ? 'bg-white/20 text-white' : 'text-white/55')
+                  'flex min-h-[44px] flex-1 items-center justify-center rounded-full transition-colors ' +
+                  (range === r.id ? 'text-white' : 'text-white/55')
                 }
               >
-                {r.id}
+                <span
+                  className={
+                    'w-full rounded-full py-1.5 text-center text-[11px] font-semibold transition-all ' +
+                    (range === r.id ? 'bg-white/20' : '')
+                  }
+                >
+                  {r.id}
+                </span>
               </button>
             ))}
           </div>
@@ -420,7 +447,7 @@ export function DashboardClient({
       <section key="accounts">
         <div className="mb-3 flex items-baseline justify-between">
           <MapleLabel>Accounts</MapleLabel>
-          <Link href="/accounts" className="text-[12px] font-semibold text-leaf hover:underline">
+          <Link href="/accounts" className="-my-3 inline-flex min-h-[44px] items-center py-3 text-[12px] font-semibold text-leaf hover:underline">
             See all →
           </Link>
         </div>
@@ -556,7 +583,7 @@ export function DashboardClient({
       <section key="spending">
         <div className="mb-3 flex items-baseline justify-between">
           <MapleLabel>Where it went</MapleLabel>
-          <Link href="/budgets" className="text-[12px] font-semibold text-leaf hover:underline">
+          <Link href="/budgets" className="-my-3 inline-flex min-h-[44px] items-center py-3 text-[12px] font-semibold text-leaf hover:underline">
             Budgets →
           </Link>
         </div>
@@ -607,7 +634,7 @@ export function DashboardClient({
             <MapleLabel>Budget</MapleLabel>
             <Link
               href="/budgets"
-              className="text-[12px] font-semibold text-leaf hover:underline"
+              className="-my-3 inline-flex min-h-[44px] items-center py-3 text-[12px] font-semibold text-leaf hover:underline"
             >
               See all →
             </Link>
@@ -745,7 +772,7 @@ export function DashboardClient({
       <section key="goals">
         <div className="mb-3 flex items-baseline justify-between">
           <MapleLabel>Goals</MapleLabel>
-          <Link href="/goals" className="text-[12px] font-semibold text-leaf hover:underline">
+          <Link href="/goals" className="-my-3 inline-flex min-h-[44px] items-center py-3 text-[12px] font-semibold text-leaf hover:underline">
             See all →
           </Link>
         </div>
@@ -802,7 +829,7 @@ export function DashboardClient({
       <section key="recent-activity">
         <div className="mb-3 flex items-baseline justify-between">
           <MapleLabel>Recent activity</MapleLabel>
-          <Link href="/transactions" className="text-[12px] font-semibold text-leaf hover:underline">
+          <Link href="/transactions" className="-my-3 inline-flex min-h-[44px] items-center py-3 text-[12px] font-semibold text-leaf hover:underline">
             See all →
           </Link>
         </div>
@@ -870,17 +897,31 @@ export function DashboardClient({
         </div>
       )}
 
-      {/* Primary action — obvious leaf button anchored top-right of the page so
-          it stays reachable even when the greeting widget is hidden. */}
-      <div className="flex items-center justify-end">
-        <Link
-          href="/transactions"
-          className="inline-flex h-[46px] items-center justify-center gap-2 rounded-full bg-leaf px-5 text-[14px] font-semibold tracking-[-0.01em] text-paper shadow-[var(--shadow-card)] transition-transform duration-150 active:scale-[0.97]"
-        >
-          <PlusIcon />
-          Add transaction
-        </Link>
-      </div>
+      {/* Primary action. Mobile: the floating leaf FAB (bottom-right, above
+          the tab bar). Desktop: an inline leaf button top-right of the page so
+          it stays reachable even when the greeting widget is hidden. Both open
+          the same add-transaction sheet. */}
+      {accounts.length > 0 && (
+        <>
+          <div className="hidden items-center justify-end md:flex">
+            <Button variant="primary" size="md" onClick={() => setAddOpen(true)}>
+              <PlusIcon />
+              Add transaction
+            </Button>
+          </div>
+          <Fab onClick={() => setAddOpen(true)} />
+          <Sheet open={addOpen} onClose={() => setAddOpen(false)} title="Add transaction">
+            <AddTransactionForm
+              defaultDate={currentMonthISO}
+              accounts={accounts.map((a) => ({ id: a.id, name: a.name }))}
+              categories={categories}
+              members={members.map((m) => ({ id: m.id, name: m.name }))}
+              defaultMemberId={myMemberId}
+              onSaved={() => setAddOpen(false)}
+            />
+          </Sheet>
+        </>
+      )}
 
       {layout.map((id) => (
         <Fragment key={id}>{widgets[id]}</Fragment>
@@ -902,8 +943,11 @@ export function DashboardClient({
 
 // ─── Editor modal ─────────────────────────────────────────────────────────
 
-const isBrowser = typeof window !== 'undefined'
-
+/**
+ * Built on the shared <Sheet> primitive so it gets aria-modal, Esc-to-close,
+ * focus trap, focus return and scroll lock for free. Mounted only while open
+ * (the parent gates on `editOpen`), which is what resets the draft.
+ */
 function DashboardEditor({
   current,
   onCancel,
@@ -914,9 +958,6 @@ function DashboardEditor({
   onSave: (next: WidgetId[]) => void
 }) {
   const [draft, setDraft] = useState<WidgetId[]>(current)
-
-  // Lock background scroll while the editor is mounted (iOS-safe).
-  useScrollLock(true)
 
   function move(id: WidgetId, dir: -1 | 1) {
     setDraft((prev) => {
@@ -941,45 +982,33 @@ function DashboardEditor({
     .filter((w): w is (typeof WIDGETS)[number] => !!w)
   const hiddenWidgets = WIDGETS.filter((w) => !draft.includes(w.id))
 
-  if (!isBrowser) return null
-
-  return createPortal(
-    <>
+  const footer = (
+    <div className="flex items-center justify-between gap-3">
       <button
         type="button"
-        aria-hidden="true"
-        onClick={onCancel}
-        className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px]"
-      />
-      <div
-        role="dialog"
-        aria-label="Edit dashboard"
-        className="fixed inset-x-0 bottom-0 z-[60] flex max-h-[88vh] flex-col rounded-t-xl border-t border-hair bg-cream shadow-[var(--shadow-float)] sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:max-h-[80vh] sm:w-[460px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }}
+        onClick={() => setDraft(DEFAULT_LAYOUT)}
+        className="-mx-2 inline-flex min-h-[44px] items-center px-2 text-[12.5px] font-semibold text-ink-2 transition-colors hover:text-ink"
       >
-        <div className="flex justify-center pb-1 pt-2 sm:hidden">
-          <div className="h-1 w-10 rounded-full bg-hair" aria-hidden />
-        </div>
-        <header className="flex items-baseline justify-between border-b border-hair px-5 py-3.5 sm:py-5">
-          <div>
-            <div className="font-serif text-[20px] tracking-[-0.02em] text-ink">
-              Edit dashboard
-            </div>
-            <div className="mt-0.5 text-[12px] text-ink-2">
-              Pick the widgets you want, drag-rank with the arrows.
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onCancel}
-            aria-label="Close edit dashboard"
-            className="flex h-11 w-11 items-center justify-center rounded-full border border-hair bg-paper text-ink-2"
-          >
-            <CloseGlyph />
-          </button>
-        </header>
+        Reset to default
+      </button>
+      <div className="flex gap-2">
+        <Button type="button" variant="secondary" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="button" variant="primary" size="sm" onClick={() => onSave(draft)}>
+          Save
+        </Button>
+      </div>
+    </div>
+  )
 
-        <div className="flex-1 overflow-y-auto px-3 py-3">
+  return (
+    <Sheet open onClose={onCancel} title="Edit dashboard" footer={footer}>
+      <p className="-mt-2 mb-3 text-[12px] text-ink-2">
+        Choose your cards and use the arrows to reorder them.
+      </p>
+
+      <div className="-mx-2">
           <div className="px-2 pb-1.5 text-[10.5px] font-bold uppercase tracking-[0.10em] text-ink-3">
             On the dashboard ({visible.length})
           </div>
@@ -1064,28 +1093,8 @@ function DashboardEditor({
               </ul>
             </>
           )}
-        </div>
-
-        <footer className="flex items-center justify-between gap-3 border-t border-hair px-5 py-3.5 sm:px-6 sm:py-4">
-          <button
-            type="button"
-            onClick={() => setDraft(DEFAULT_LAYOUT)}
-            className="inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-ink-2 underline-offset-2 hover:text-ink hover:underline"
-          >
-            Reset to default
-          </button>
-          <div className="flex gap-2">
-            <Button type="button" variant="secondary" size="sm" onClick={onCancel}>
-              Cancel
-            </Button>
-            <Button type="button" variant="primary" size="sm" onClick={() => onSave(draft)}>
-              Save
-            </Button>
-          </div>
-        </footer>
       </div>
-    </>,
-    document.body,
+    </Sheet>
   )
 }
 

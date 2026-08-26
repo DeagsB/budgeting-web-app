@@ -124,7 +124,7 @@ export default async function TimeOffPage({
       {memberRows.length === 0 ? (
         <EmptyState
           title="No members yet"
-          body="Time off is tracked per household member. Add at least one member to start logging vacation and FLEX hours."
+          body="Time off is tracked per household member. Add at least one member to start logging vacation and flex-time (banked overtime) hours."
           action={
             <Link href="/setup">
               <Button variant="primary" size="md">
@@ -135,17 +135,19 @@ export default async function TimeOffPage({
         />
       ) : (
         <>
-          <section aria-label="Balances by member" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <section aria-label="Balances by member" className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3">
             {rows.map((r) => {
               const vacOver = r.vacation_balance < 0
               const flexOver = r.flex_balance < 0
               return (
                 <StatTile
                   key={r.member_id}
+                  compact
+                  className="sm:p-4"
                   label={r.memberName}
                   tone={vacOver ? 'maple' : 'leaf'}
                   value={fmtHours(r.vacation_balance)}
-                  hint="Vacation balance"
+                  hint="Vacation"
                   foot={
                     <span className={flexOver ? 'text-maple' : 'text-ink-2'}>
                       FLEX {fmtHours(r.flex_balance)}

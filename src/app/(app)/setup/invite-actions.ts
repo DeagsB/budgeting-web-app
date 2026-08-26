@@ -11,6 +11,7 @@ import {
   inviteExpiry,
   inviteUrl,
 } from '@/lib/invitations'
+import { humanizeDbError } from '@/lib/errors'
 
 export type InviteState =
   | { ok: true; inviteUrl: string; emailSent: boolean; emailError?: string }
@@ -126,7 +127,7 @@ export async function revokeInvitation(fd: FormData): Promise<SimpleState> {
     .eq('id', id)
     .eq('household_id', ctx.householdId)
     .is('accepted_at', null)
-  if (error) return { error: error.message }
+  if (error) return { error: humanizeDbError(error) }
   revalidatePath('/setup')
   return { ok: true }
 }
@@ -140,7 +141,7 @@ export async function removeMemberLogin(fd: FormData): Promise<SimpleState> {
   if (!memberId) return { error: 'Missing member.' }
   const supabase = await createClient()
   const { error } = await supabase.rpc('unlink_member', { target_member_id: memberId })
-  if (error) return { error: error.message.includes('cannot_unlink_self') ? 'You cannot remove your own login.' : error.message }
+  if (error) return { error: error.message.includes('cannot_unlink_self') ? 'You cannot remove your own login.' : humanizeDbError(error) }
   revalidatePath('/setup')
   revalidatePath('/', 'layout')
   return { ok: true }
@@ -154,7 +155,7 @@ export async function claimMember(fd: FormData): Promise<SimpleState> {
   if (!memberId) return { error: 'Pick a member.' }
   const supabase = await createClient()
   const { error } = await supabase.rpc('claim_member', { target_member_id: memberId })
-  if (error) return { error: error.message }
+  if (error) return { error: humanizeDbError(error) }
   revalidatePath('/', 'layout')
   return { ok: true }
 }

@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { parseMoneyToCents } from '@/lib/format'
 import { ACCOUNT_TYPES, ACCOUNT_OWNERSHIP, type AccountType, type AccountOwnership } from '@/lib/domain'
+import { humanizeDbError } from '@/lib/errors'
 
 export type AccountState = { error: string } | undefined
 
@@ -41,7 +42,7 @@ function parseForm(fd: FormData): ParseResult {
 
   if (!name) return { error: 'Name is required.' }
   if (!TYPES.has(type)) return { error: 'Invalid account type.' }
-  if (!OWNERSHIPS.has(ownership)) return { error: 'Invalid ownership.' }
+  if (!OWNERSHIPS.has(ownership)) return { error: "Couldn't save that. Refresh and try again." }
   if (ownership === 'member' && !member_id) {
     return { error: 'Pick a member for a member-owned account.' }
   }
@@ -61,7 +62,7 @@ export async function createAccount(_prev: AccountState, fd: FormData): Promise<
     household_id: ctx.householdId,
     ...parsed.ok,
   })
-  if (error) return { error: error.message }
+  if (error) return { error: humanizeDbError(error, { entity: 'account name' }) }
 
   revalidatePath('/accounts')
   revalidatePath('/dashboard')

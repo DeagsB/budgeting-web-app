@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { parseMoneyToCents } from '@/lib/format'
 import { splitByWeights, type WeightedMember } from '@/lib/share-split'
+import { humanizeDbError } from '@/lib/errors'
 
 export type ShareActionState = { error: string } | undefined
 
@@ -36,7 +37,7 @@ export async function loadActiveWeightedMembers(db: Db, householdId: string): Pr
  */
 export async function toggleShared(fd: FormData): Promise<ShareActionState> {
   const transaction_id = String(fd.get('transaction_id') ?? '')
-  if (!transaction_id) return { error: 'Missing transaction.' }
+  if (!transaction_id) return { error: "Couldn't save that. Refresh and try again." }
 
   const ctx = await getHouseholdContext()
   if (!ctx) return { error: 'Not authorized.' }
@@ -58,7 +59,7 @@ export async function toggleShared(fd: FormData): Promise<ShareActionState> {
 
   if ((existing ?? []).length > 0) {
     const { error } = await supabase.from('transaction_shares').delete().eq('transaction_id', transaction_id)
-    if (error) return { error: error.message }
+    if (error) return { error: humanizeDbError(error) }
     revalidate()
     return undefined
   }
@@ -81,7 +82,7 @@ export async function toggleShared(fd: FormData): Promise<ShareActionState> {
       rule_id: null,
     })),
   )
-  if (error) return { error: error.message }
+  if (error) return { error: humanizeDbError(error) }
   revalidate()
   return undefined
 }
@@ -93,7 +94,7 @@ export async function toggleShared(fd: FormData): Promise<ShareActionState> {
  */
 export async function saveShareOverride(fd: FormData): Promise<ShareActionState> {
   const transaction_id = String(fd.get('transaction_id') ?? '')
-  if (!transaction_id) return { error: 'Missing transaction.' }
+  if (!transaction_id) return { error: "Couldn't save that. Refresh and try again." }
 
   const ctx = await getHouseholdContext()
   if (!ctx) return { error: 'Not authorized.' }
@@ -126,10 +127,10 @@ export async function saveShareOverride(fd: FormData): Promise<ShareActionState>
   if (sum > totalAbs) return { error: 'Shares exceed the transaction total.' }
 
   const { error: delErr } = await supabase.from('transaction_shares').delete().eq('transaction_id', transaction_id)
-  if (delErr) return { error: delErr.message }
+  if (delErr) return { error: humanizeDbError(delErr) }
   if (rows.length > 0) {
     const { error } = await supabase.from('transaction_shares').insert(rows)
-    if (error) return { error: error.message }
+    if (error) return { error: humanizeDbError(error) }
   }
   revalidate()
   return undefined
@@ -137,14 +138,14 @@ export async function saveShareOverride(fd: FormData): Promise<ShareActionState>
 
 export async function clearShares(fd: FormData): Promise<ShareActionState> {
   const transaction_id = String(fd.get('transaction_id') ?? '')
-  if (!transaction_id) return { error: 'Missing transaction.' }
+  if (!transaction_id) return { error: "Couldn't save that. Refresh and try again." }
 
   const ctx = await getHouseholdContext()
   if (!ctx) return { error: 'Not authorized.' }
 
   const supabase = await createClient()
   const { error } = await supabase.from('transaction_shares').delete().eq('transaction_id', transaction_id)
-  if (error) return { error: error.message }
+  if (error) return { error: humanizeDbError(error) }
   revalidate()
   return undefined
 }
@@ -201,7 +202,7 @@ export async function shareAllUnflagged(fd: FormData): Promise<ShareActionState>
 
   if (rowsToInsert.length === 0) return { error: 'Everything here is already shared.' }
   const { error } = await supabase.from('transaction_shares').insert(rowsToInsert)
-  if (error) return { error: error.message }
+  if (error) return { error: humanizeDbError(error) }
   revalidate()
   return undefined
 }
@@ -236,7 +237,7 @@ export async function unshareAll(fd: FormData): Promise<ShareActionState> {
       'transaction_id',
       txs.map((t) => t.id),
     )
-  if (error) return { error: error.message }
+  if (error) return { error: humanizeDbError(error) }
   revalidate()
   return undefined
 }

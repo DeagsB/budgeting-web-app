@@ -1,12 +1,18 @@
+// <ViewTransition> ships in the React canary that Next bundles for the App
+// Router; its typings live behind the "react/canary" entry of @types/react.
+/// <reference types="react/canary" />
 'use client'
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, ViewTransition } from 'react'
 import { signOut } from '../(auth)/actions'
 import { Button } from '@/components/ui/button'
+import { ShellTitleContext } from '@/components/ui/page-header'
+import { ToastProvider } from '@/components/ui/toast'
 import { PullToSync } from '@/components/pull-to-sync'
 import { useScrollLock } from '@/lib/use-scroll-lock'
+import { useOnline } from '@/lib/run-action'
 
 /**
  * Maple shell. Light + dark are driven by the `.dark` class on <html>
@@ -56,6 +62,44 @@ const MAX_TABS = 4
 
 function findDest(href: string): Dest | undefined {
   return DESTS.find((d) => d.href === href)
+}
+
+// ─── Mobile header titles ─────────────────────────────────────────────────
+// Route -> { title, parent }. On phones the top bar shows the current page's
+// title (and a back chevron when the route has a parent) instead of the
+// wordmark, which the dashboard keeps. Longest-prefix match, so nested routes
+// that aren't listed inherit their nearest ancestor's entry.
+
+const ROUTE_TITLES: Record<string, { title: string; parent?: string }> = {
+  '/dashboard':                          { title: 'Home' },
+  '/transactions':                       { title: 'Transactions' },
+  '/transactions/import':                { title: 'Import', parent: '/transactions' },
+  '/transactions/import/auto-setup':     { title: 'Auto-import', parent: '/transactions/import' },
+  '/transactions/import/plaid-setup':    { title: 'Bank sync', parent: '/transactions/import' },
+  '/budgets':                            { title: 'Budgets' },
+  '/accounts':                           { title: 'Accounts' },
+  '/shared':                             { title: 'Shared expenses' },
+  '/settlements':                        { title: 'Settle up' },
+  '/rules':                              { title: 'Rules' },
+  '/pnl':                                { title: 'Profit & Loss' },
+  '/balance-sheet':                      { title: 'Balance sheet' },
+  '/net-worth':                          { title: 'Net worth' },
+  '/goals':                              { title: 'Goals' },
+  '/contributions':                      { title: 'Contributions' },
+  '/loans':                              { title: 'Loans' },
+  '/time-off':                           { title: 'Time off' },
+  '/setup':                              { title: 'Setup' },
+  '/categories':                         { title: 'Categories', parent: '/setup' },
+}
+
+function resolveRoute(pathname: string): { title: string; parent?: string } | null {
+  let best: string | null = null
+  for (const key of Object.keys(ROUTE_TITLES)) {
+    if (pathname === key || pathname.startsWith(key + '/')) {
+      if (best === null || key.length > best.length) best = key
+    }
+  }
+  return best ? ROUTE_TITLES[best] : null
 }
 
 function isActive(pathname: string, href: string) {
@@ -158,6 +202,23 @@ export function AppShell({
   const router = useRouter()
   const [moreOpen, setMoreOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  const online = useOnline()
+
+  // Mobile top-bar title for this route. The dashboard keeps the wordmark.
+  const route = useMemo(() => resolveRoute(pathname), [pathname])
+  const isHome = pathname === '/dashboard'
+  const parentRoute = route?.parent ? ROUTE_TITLES[route.parent] : null
+  const shellTitle = useMemo(
+    () => (route && !isHome ? { title: route.title, hasBack: !!route.parent } : null),
+    [route, isHome],
+  )
+
+  function goBack() {
+    const parent = route?.parent
+    if (!parent) return
+    if (window.history.length > 1) router.back()
+    else router.push(parent)
+  }
 
   // ─── Single-tap bottom-nav during momentum scroll ───
   // iOS Safari consumes the first tap that lands while the page is still
@@ -244,7 +305,9 @@ export function AppShell({
   }, [])
 
   return (
-    <div className="min-h-screen bg-[var(--color-cream)] text-[var(--color-ink)]">
+    <ShellTitleContext.Provider value={shellTitle}>
+    <ToastProvider raised={!online}>
+    <div className="min-h-dvh bg-[var(--color-cream)] text-[var(--color-ink)]">
       {/* ───────── Desktop sidebar ───────── */}
       <aside className="maple-chrome fixed inset-y-0 left-0 z-20 hidden w-[240px] flex-col border-r border-[var(--color-hair)] bg-[var(--color-cream-2)] px-5 py-6 md:flex">
         <Link href="/dashboard" className="block">
@@ -293,10 +356,10 @@ export function AppShell({
             <div className="truncate font-serif text-[15px] text-[var(--color-ink)]">{memberName}</div>
           )}
           <div className="truncate text-[12px] text-[var(--color-ink-2)]">{userEmail}</div>
-          <form action={signOut} className="mt-2">
+          <form action={signOut} className="mt-1">
             <button
               type="submit"
-              className="text-[12px] font-semibold text-[var(--color-ink-2)] underline-offset-2 transition-colors hover:text-[var(--color-ink)] hover:underline"
+              className="-mx-2 inline-flex min-h-[44px] items-center px-2 text-[12px] font-semibold text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
             >
               Sign out
             </button>
@@ -304,19 +367,42 @@ export function AppShell({
         </div>
       </aside>
 
-      {/* ───────── Mobile top bar ───────── */}
+      {/* ───────── Mobile top bar ─────────
+          The status-bar inset above this header is painted by the fixed
+          `.status-bar-band` in the root layout (dark surface for the white
+          black-translucent glyphs); the header's top padding sits under it. */}
       <header className="maple-chrome sticky top-0 z-20 border-b border-[var(--color-hair)] bg-[var(--color-cream)]/85 backdrop-blur md:hidden">
-        <div className="flex items-center justify-between px-4 pb-3 pt-[calc(env(safe-area-inset-top)+10px)]">
-          <Link href="/dashboard" className="min-w-0">
-            <div className="font-serif text-[22px] leading-none tracking-[-0.02em]">Maple</div>
-            <div className="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
-              {householdName}
-            </div>
-          </Link>
+        <div className="grid grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-2 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+10px)]">
+          {shellTitle ? (
+            <>
+              {route?.parent ? (
+                <button
+                  type="button"
+                  onClick={goBack}
+                  aria-label={`Back to ${parentRoute?.title ?? 'previous page'}`}
+                  className="-ml-2 flex h-11 w-11 items-center justify-center rounded-full text-[var(--color-ink)] transition-colors active:bg-[var(--color-paper-2)]"
+                >
+                  <ChevronLeftIcon />
+                </button>
+              ) : (
+                <span aria-hidden />
+              )}
+              <div className="truncate text-center font-serif text-[17px] leading-none tracking-[-0.01em] text-[var(--color-ink)]">
+                {shellTitle.title}
+              </div>
+            </>
+          ) : (
+            <Link href="/dashboard" className="col-span-2 min-w-0">
+              <div className="font-serif text-[22px] leading-none tracking-[-0.02em]">Maple</div>
+              <div className="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
+                {householdName}
+              </div>
+            </Link>
+          )}
           <Link
             href="/setup"
             aria-label="Settings"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] text-[var(--color-ink-2)]"
+            className="flex h-11 w-11 items-center justify-center justify-self-end rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] text-[var(--color-ink-2)]"
           >
             <SettingsIcon />
           </Link>
@@ -330,8 +416,12 @@ export function AppShell({
           style={{ paddingBottom: 'calc(72px + env(safe-area-inset-bottom) + 16px)' }}
         >
           {/* Pull-to-sync wraps every screen so the gesture is universal — a
-              pull-down at the top of any page triggers a Gmail sync + refresh. */}
-          <PullToSync>{children}</PullToSync>
+              pull-down at the top of any page triggers a Gmail sync + refresh.
+              <ViewTransition> cross-fades the page body on route changes
+              (duration lives in globals.css under .maple-fade). */}
+          <PullToSync>
+            <ViewTransition default="maple-fade">{children}</ViewTransition>
+          </PullToSync>
         </div>
       </main>
 
@@ -388,6 +478,7 @@ export function AppShell({
           <button
             type="button"
             aria-hidden="true"
+            tabIndex={-1}
             onClick={closeMore}
             className="fixed inset-0 z-40 bg-black/40 md:hidden"
           />
@@ -397,7 +488,7 @@ export function AppShell({
             aria-modal="true"
             aria-label="More navigation"
             tabIndex={-1}
-            className="fixed inset-x-0 bottom-0 z-50 max-h-[86vh] overflow-y-auto rounded-t-xl border-t border-[var(--color-hair)] bg-[var(--color-cream)] shadow-[var(--shadow-float)] outline-none md:hidden"
+            className="maple-chrome fixed inset-x-0 bottom-0 z-50 max-h-[86dvh] overflow-y-auto overscroll-contain rounded-t-xl border-t border-[var(--color-hair)] bg-[var(--color-cream)] shadow-[var(--shadow-float)] outline-none md:hidden"
             style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }}
           >
             <div className="flex justify-center pb-1 pt-2">
@@ -416,7 +507,7 @@ export function AppShell({
                   type="button"
                   onClick={closeMore}
                   aria-label="Close"
-                  className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)]"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)]"
                 >
                   <CloseIcon />
                 </button>
@@ -486,8 +577,11 @@ export function AppShell({
                   </span>
                   <span className="text-[18px] text-[var(--color-ink-3)]">›</span>
                 </button>
-                <form action={signOut} className="mt-2 px-3 pt-2">
-                  <button type="submit" className="text-[14px] font-semibold text-[var(--color-ink-2)]">
+                <form action={signOut} className="mt-1 px-3">
+                  <button
+                    type="submit"
+                    className="-mx-2 inline-flex min-h-[44px] items-center px-2 text-[14px] font-semibold text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
+                  >
                     Sign out
                   </button>
                 </form>
@@ -508,6 +602,32 @@ export function AppShell({
           }}
         />
       )}
+
+      {!online && <OfflineBanner />}
+    </div>
+    </ToastProvider>
+    </ShellTitleContext.Provider>
+  )
+}
+
+// ─── Offline banner ───────────────────────────────────────────────────────
+
+/**
+ * Slim ink pill shown while `navigator.onLine` is false. Sits just above the
+ * mobile tab bar, leaving the right edge clear for the FAB; bottom-right on
+ * desktop. Server-rendered pages keep showing whatever loaded last.
+ */
+function OfflineBanner() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="maple-chrome pointer-events-none fixed left-3 right-[84px] z-30 bottom-[calc(72px+env(safe-area-inset-bottom)+12px)] md:left-auto md:right-6 md:bottom-4 md:w-auto"
+    >
+      <div className="flex min-h-[40px] items-center gap-2 rounded-full bg-[var(--color-ink)] px-4 text-[13px] font-medium tracking-[-0.01em] text-[var(--color-paper)] shadow-[var(--shadow-float)]">
+        <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--color-maple)]" aria-hidden />
+        <span className="truncate">Offline - showing what was last loaded</span>
+      </div>
     </div>
   )
 }
@@ -558,6 +678,7 @@ function TabBarEditor({
       <button
         type="button"
         aria-hidden="true"
+        tabIndex={-1}
         onClick={onCancel}
         className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px]"
       />
@@ -567,7 +688,7 @@ function TabBarEditor({
         aria-modal="true"
         aria-label="Customize tab bar"
         tabIndex={-1}
-        className="fixed inset-x-0 bottom-0 z-[60] flex max-h-[88vh] flex-col rounded-t-xl border-t border-[var(--color-hair)] bg-[var(--color-cream)] shadow-[var(--shadow-float)] outline-none sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:max-h-[80vh] sm:w-[440px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg"
+        className="fixed inset-x-0 bottom-0 z-[60] flex max-h-[88dvh] flex-col rounded-t-xl border-t border-[var(--color-hair)] bg-[var(--color-cream)] shadow-[var(--shadow-float)] outline-none sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:max-h-[80dvh] sm:w-[440px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }}
       >
         <div className="flex justify-center pb-1 pt-2 sm:hidden">
@@ -586,13 +707,13 @@ function TabBarEditor({
             type="button"
             onClick={onCancel}
             aria-label="Close"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)]"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)]"
           >
             <CloseIcon />
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-3 py-3">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-3">
           <div className="px-2 pb-1.5 text-[10.5px] font-bold uppercase tracking-[0.10em] text-[var(--color-ink-3)]">
             On the tab bar ({onBar.length} of {MAX_TABS})
           </div>
@@ -680,7 +801,7 @@ function TabBarEditor({
           <button
             type="button"
             onClick={() => setDraft(DEFAULT_TABS)}
-            className="text-[12.5px] font-semibold text-[var(--color-ink-2)] underline-offset-2 hover:text-[var(--color-ink)] hover:underline"
+            className="-mx-2 inline-flex min-h-[44px] items-center px-2 text-[12.5px] font-semibold text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
           >
             Reset to default
           </button>
@@ -702,8 +823,8 @@ function TabBarEditor({
 
 function tabClass(active: boolean) {
   return [
-    'flex h-[58px] w-full touch-manipulation select-none flex-col items-center justify-center gap-0 transition-colors',
-    active ? 'text-[var(--color-ink)]' : 'text-[var(--color-ink-3)]',
+    'flex h-[58px] w-full touch-manipulation select-none flex-col items-center justify-center gap-0 transition-[color,opacity] active:opacity-60',
+    active ? 'text-[var(--color-leaf)]' : 'text-[var(--color-ink-3)]',
   ].join(' ')
 }
 
@@ -956,6 +1077,13 @@ function CloseIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
       <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  )
+}
+function ChevronLeftIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M15 5l-7 7 7 7" />
     </svg>
   )
 }

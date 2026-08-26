@@ -107,12 +107,12 @@ export function Sheet({
         aria-label={labelledById ? undefined : title}
         aria-labelledby={labelledById}
         tabIndex={-1}
-        className={`fixed inset-x-0 bottom-0 z-50 max-h-[88vh] overflow-y-auto rounded-t-[24px] border-t border-hair bg-cream shadow-[var(--shadow-float)] outline-none sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:max-h-[85vh] sm:w-[440px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[20px] ${className}`}
+        className={`fixed inset-x-0 bottom-0 z-50 max-h-[88dvh] overflow-y-auto overscroll-contain rounded-t-[24px] border-t border-hair bg-cream shadow-[var(--shadow-float)] outline-none sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:max-h-[85dvh] sm:w-[440px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[20px] ${className}`}
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }}
       >
         <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-hair sm:hidden" aria-hidden />
         {title ? (
-          <div className="flex items-center justify-between gap-3 px-5 py-3.5">
+          <div className="maple-chrome flex items-center justify-between gap-3 px-5 py-3.5">
             <h2 className="font-serif text-[20px] tracking-[-0.02em] text-ink">{title}</h2>
             <button
               type="button"

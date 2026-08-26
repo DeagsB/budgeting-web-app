@@ -61,7 +61,7 @@ export function SyncNowButton({ hasSyncUrl }: { hasSyncUrl: boolean }) {
           </span>
         )}
         {state && 'error' in state && (
-          <span className="max-w-[180px] truncate text-[11.5px] text-maple" title={state.error}>
+          <span className="line-clamp-2 max-w-[240px] text-[11.5px] leading-snug text-maple">
             {state.error}
           </span>
         )}

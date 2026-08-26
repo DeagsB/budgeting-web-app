@@ -1,6 +1,9 @@
+import { todayISO as torontoTodayISO } from './dates'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { PlaidApi, RemovedTransaction, Transaction } from 'plaid'
+import type { AccountBase, PlaidApi, RemovedTransaction, Transaction } from 'plaid'
 import { decryptToken, plaidAmountToCents } from '@/lib/plaid'
+import { monthOfISO, snapshotsFromPlaidBalances, type PlaidBalanceAccount } from '@/lib/plaid-balances'
+import type { AccountType } from '@/lib/domain'
 import {
   reconcileRows,
   buildCategoryIndex,
@@ -164,6 +167,9 @@ export async function syncPlaidItem(
   const added: Transaction[] = []
   const modified: Transaction[] = []
   const removed: RemovedTransaction[] = []
+  // Every page carries the item's accounts with their balances; keep the
+  // last page's copy so the balance snapshot reflects the fully-drained state.
+  let plaidAccounts: AccountBase[] = []
   let nextCursor: string | null = originalCursor
   try {
     let attempt = 0
@@ -176,6 +182,7 @@ export async function syncPlaidItem(
           added.push(...resp.data.added)
           modified.push(...resp.data.modified)
           removed.push(...resp.data.removed)
+          if (resp.data.accounts?.length) plaidAccounts = resp.data.accounts
           cursor = resp.data.next_cursor
           hasMore = resp.data.has_more
         }
@@ -479,6 +486,14 @@ export async function syncPlaidItem(
       .in('external_id', plan.deletes)
   }
 
+  // 7b. Balances: every transaction from this batch is now written, so the
+  //     bank's reported balance can be anchored against them. Best-effort:
+  //     a failure here must never cost us the batch or the cursor.
+  //     Sandbox (and some institutions) omit `accounts` from /transactions/sync
+  //     pages, so fall back to /accounts/balance/get when nothing came back.
+  const written = await upsertPlaidBalanceSnapshots(db, item, plaidAccounts)
+  if (written === 0) await refreshPlaidBalances(db, plaid, item)
+
   // 8. Cursor: compare-and-set against the cursor this run started from. A
   //    miss means another run moved it; our rows are already deduped, so the
   //    next run simply continues from the newer cursor.
@@ -521,6 +536,116 @@ export async function syncPlaidItem(
     status: cursorError ? 'error' : 'ok',
     error: cursorError,
   })
+}
+
+/**
+ * Write one account_balance_snapshots row per mapped account for the current
+ * month from Plaid's reported balances (see src/lib/plaid-balances.ts for the
+ * exact anchoring semantics). Idempotent: upserts on (account_id, as_of_month),
+ * so repeated syncs in a month just refresh the anchor. For a Plaid-linked
+ * account the bank's figure is the truth, so it overwrites a hand-entered
+ * snapshot for the same month. Never throws; logs and returns the row count.
+ */
+export async function upsertPlaidBalanceSnapshots(
+  db: Db,
+  item: Pick<PlaidItemRow, 'id' | 'household_id'>,
+  plaidAccounts: AccountBase[],
+  todayISO: string = torontoTodayISO(),
+): Promise<number> {
+  if (plaidAccounts.length === 0) return 0
+  try {
+    const { data: acctRows, error: acctErr } = await db
+      .from('accounts')
+      .select('id, plaid_account_id, type')
+      .eq('household_id', item.household_id)
+      .eq('plaid_item_id', item.id)
+      .is('archived_at', null)
+    if (acctErr) throw acctErr
+    const byPlaidId = new Map<string, { id: string; type: AccountType }>()
+    for (const a of acctRows ?? []) {
+      if (a.plaid_account_id) byPlaidId.set(a.plaid_account_id as string, { id: a.id as string, type: a.type as AccountType })
+    }
+    const accounts: PlaidBalanceAccount[] = []
+    for (const pa of plaidAccounts) {
+      const local = byPlaidId.get(pa.account_id)
+      if (!local) continue
+      accounts.push({
+        plaidAccountId: pa.account_id,
+        localAccountId: local.id,
+        type: local.type,
+        balances: { current: pa.balances?.current ?? null, available: pa.balances?.available ?? null },
+      })
+    }
+    if (accounts.length === 0) return 0
+
+    // This month's rows for the mapped accounts, so the balance can be rolled
+    // back to the 1st. The window filter itself lives in the pure function.
+    const { data: txRows, error: txErr } = await db
+      .from('transactions')
+      .select('account_id, occurred_on, amount_cents')
+      .eq('household_id', item.household_id)
+      .in(
+        'account_id',
+        accounts.map((a) => a.localAccountId),
+      )
+      .gte('occurred_on', monthOfISO(todayISO))
+      .lte('occurred_on', todayISO)
+      .limit(10000)
+    if (txErr) throw txErr
+    const txByAccount = new Map<string, { occurred_on: string; amount_cents: number }[]>()
+    for (const t of txRows ?? []) {
+      const id = t.account_id as string
+      const list = txByAccount.get(id) ?? []
+      list.push({ occurred_on: t.occurred_on as string, amount_cents: Number(t.amount_cents) })
+      txByAccount.set(id, list)
+    }
+
+    const rows = snapshotsFromPlaidBalances(accounts, todayISO, txByAccount)
+    if (rows.length === 0) return 0
+    const { error } = await db.from('account_balance_snapshots').upsert(
+      rows.map((r) => ({ ...r, household_id: item.household_id })),
+      { onConflict: 'account_id,as_of_month' },
+    )
+    if (error) throw error
+    return rows.length
+  } catch (err) {
+    console.error('[plaid-sync] balance snapshot write failed', {
+      item: item.id,
+      msg: err instanceof Error ? err.message : String(err),
+    })
+    return 0
+  }
+}
+
+/**
+ * Real-time balances via /accounts/balance/get (the sync response's balances
+ * may be cached) for every account of an item, written as snapshots. Used
+ * right after linking so the balance sheet is right before the first
+ * transaction ever lands. Best-effort; never throws.
+ */
+export async function refreshPlaidBalances(
+  db: Db,
+  plaid: PlaidApi,
+  item: Pick<PlaidItemRow, 'id' | 'household_id'>,
+): Promise<number> {
+  try {
+    const { data: secret } = await db
+      .from('plaid_item_secrets')
+      .select('access_token_encrypted')
+      .eq('item_id', item.id)
+      .maybeSingle()
+    if (!secret?.access_token_encrypted) return 0
+    const accessToken = decryptToken(secret.access_token_encrypted as string)
+    const resp = await plaid.accountsBalanceGet({ access_token: accessToken })
+    return await upsertPlaidBalanceSnapshots(db, item, resp.data.accounts)
+  } catch (err) {
+    console.error('[plaid-sync] balance refresh failed', {
+      item: item.id,
+      code: plaidErrorCode(err),
+      msg: err instanceof Error ? err.message : String(err),
+    })
+    return 0
+  }
 }
 
 /**

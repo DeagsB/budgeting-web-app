@@ -1,9 +1,15 @@
 'use client'
 
 import { useActionState, useRef, useState, useEffect } from 'react'
-import { createTransaction, type TransactionState } from './actions'
+import { createTransaction } from './actions'
 import { CategorySelect } from './category-select'
 import { Button } from '@/components/ui/button'
+import { useRunAction } from '@/lib/run-action'
+
+// Local form state. The server action returns `{ error }` on failure and
+// `undefined` on success; we map success to an explicit `{ ok: true }` so the
+// post-submit effect can tell "saved" apart from "never submitted".
+type FormState = { error: string } | { ok: true } | undefined
 
 /**
  * Maple "add transaction" inline form.
@@ -27,8 +33,24 @@ export function AddTransactionForm({
   defaultMemberId?: string | null
   onSaved?: () => void
 }) {
-  const [state, formAction, pending] = useActionState<TransactionState, FormData>(
-    createTransaction,
+  const run = useRunAction()
+  const [state, formAction, pending] = useActionState<FormState, FormData>(
+    async (prev, fd) => {
+      // Offline-aware: a network failure keeps the form filled and shows a
+      // toast; the save is retried once when the connection returns.
+      let deferred = false
+      const res = await run(() => createTransaction(undefined, fd), {
+        onError: () => {
+          deferred = true
+        },
+        retrySuccessMessage: 'Back online - transaction added.',
+        onRetrySuccess: (r) => {
+          if (!r?.error) onSaved?.()
+        },
+      })
+      if (deferred) return prev
+      return res?.error ? { error: res.error } : { ok: true }
+    },
     undefined,
   )
   const formRef = useRef<HTMLFormElement>(null)
@@ -39,7 +61,7 @@ export function AddTransactionForm({
   const [amount, setAmount] = useState('')
 
   useEffect(() => {
-    if (!pending && !state?.error && state !== undefined) {
+    if (!pending && state && 'ok' in state) {
       formRef.current?.reset()
       // Resetting local state after a successful server action is the
       // canonical post-submit flow; the alternative (keying the inputs) is
@@ -125,7 +147,7 @@ export function AddTransactionForm({
       </div>
 
       <div aria-live="polite">
-        {state?.error && (
+        {state && 'error' in state && state.error && (
           <div
             role="alert"
             className="rounded-md bg-maple-soft px-3 py-2 text-[13px] font-medium text-maple"

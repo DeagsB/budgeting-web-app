@@ -37,13 +37,13 @@ export function BulkActions({ accountId, month }: { accountId: string; month: st
           setNote(res && 'error' in res ? res.error : null)
         }}
         formData={{ account_id: accountId, month }}
-        prompt="Unshare every transaction on this account this month?"
-        description="Each transaction reverts to single-member ownership. The original transactions are not deleted."
-        confirmLabel="Unshare all"
+        prompt="Mark every transaction as not shared?"
+        description="Remove the shared flag from every transaction in this account for this month? Each one goes back to a single owner. Nothing is deleted."
+        confirmLabel="Mark as not shared"
         destructive
-        className="inline-flex min-h-[44px] items-center rounded-full px-4 text-[12.5px] font-semibold text-maple transition-colors hover:bg-maple-soft"
+        className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-paper px-4 text-[13px] font-semibold tracking-[-0.01em] text-maple ring-1 ring-inset ring-hair transition-transform duration-150 hover:bg-maple-soft active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50"
       >
-        Unshare all
+        Mark all as not shared
       </ConfirmButton>
       {note && <p className="w-full text-[12px] font-medium text-maple">{note}</p>}
     </div>

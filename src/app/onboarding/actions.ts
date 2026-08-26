@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { acceptErrorMessage } from '@/lib/invitations'
+import { humanizeDbError } from '@/lib/errors'
 
 export type OnboardingState = { error: string } | undefined
 
@@ -32,10 +33,12 @@ export async function createHousehold(
     household_name: householdName,
     member_name: memberName,
   })
-  if (error) return { error: error.message }
+  if (error) return { error: humanizeDbError(error, { entity: 'household name' }) }
 
   revalidatePath('/', 'layout')
-  redirect('/dashboard')
+  // Step 2: the first account. A dashboard with no accounts is an empty
+  // screen, so we don't land there yet.
+  redirect('/onboarding/account')
 }
 
 /** Accept an invitation addressed to the signed-in email (no token needed). */

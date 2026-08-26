@@ -226,35 +226,63 @@ export default async function TransactionsPage({
     return `/transactions?${qs.toString()}`
   }
 
+  const importLink = (
+    <Link
+      href="/transactions/import"
+      className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-hair bg-paper px-3.5 text-[12.5px] font-semibold text-ink transition-colors hover:bg-cream-2"
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <polyline points="7 10 12 15 17 10" />
+        <line x1="12" y1="15" x2="12" y2="3" />
+      </svg>
+      Import CSV
+    </Link>
+  )
+
   return (
-    <div className="flex flex-col gap-6 pb-10">
+    <div className="flex flex-col gap-5 pb-10 md:gap-6">
+      {/* Desktop-only: the shell's top bar carries the title on mobile, and
+          MonthNav below already shows the month; sync + import move into the
+          "..." overflow next to the search box. */}
       <PageHeader
         eyebrow="Transactions"
         title="Transactions"
         subtitle={monthLabel(month)}
+        className="max-md:hidden"
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <SyncNowButton hasSyncUrl={hasSyncUrl} />
-            <Link
-              href="/transactions/import"
-              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-hair bg-paper px-3.5 text-[12.5px] font-semibold text-ink transition-colors hover:bg-cream-2"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              Import CSV
-            </Link>
+            {importLink}
           </div>
         }
       />
 
       {/* Month nav — link-based; "This month" pill only shows off the current month. */}
-      <MonthNav monthISO={month} makeHref={monthHref} />
+      <MonthNav monthISO={month} makeHref={monthHref} className="-ml-2" />
 
-      {/* Stats — reflect the active filter set. */}
-      <section className="grid grid-cols-3 gap-3">
+      {/* Triage — slim pill (mobile) / banner (md+) + step-through queue for
+          transactions that need a category and/or a real title. */}
+      <UncategorizedReview
+        transactions={attentionVMs}
+        categories={categoryOptions}
+        members={memberOptions}
+        topCategoryIds={topCategoryIds}
+      />
+
+      {/* Stats — reflect the active filter set. Compact three-up on mobile
+          (whole dollars so three fit a 375px screen), full tiles on md+. */}
+      <section className="grid grid-cols-3 gap-2 md:hidden">
+        <StatTile compact label="Outflow" value={<Amount cents={outflow} tone="maple" compact />} tone="maple" />
+        <StatTile compact label="Inflow" value={<Amount cents={inflow} tone="leaf" compact />} tone="leaf" />
+        <StatTile
+          compact
+          label="Net"
+          value={<Amount cents={net} tone={net >= 0 ? 'leaf' : 'maple'} compact />}
+          tone={net >= 0 ? 'leaf' : 'maple'}
+        />
+      </section>
+      <section className="hidden grid-cols-3 gap-3 md:grid">
         <StatTile label="Outflow" value={<Amount cents={outflow} tone="maple" />} tone="maple" />
         <StatTile label="Inflow" value={<Amount cents={inflow} tone="leaf" />} tone="leaf" />
         <StatTile
@@ -292,17 +320,16 @@ export default async function TransactionsPage({
           categories={categoryOptions}
           members={memberOptions}
           defaultMemberId={ctx.memberId}
+          overflowActions={
+            <>
+              <div className="flex min-h-[44px] items-center">
+                <SyncNowButton hasSyncUrl={hasSyncUrl} />
+              </div>
+              <div className="flex min-h-[44px] items-center">{importLink}</div>
+            </>
+          }
         />
       )}
-
-      {/* Triage — banner + step-through queue for transactions that need a
-          category and/or a real title. */}
-      <UncategorizedReview
-        transactions={attentionVMs}
-        categories={categoryOptions}
-        members={memberOptions}
-        topCategoryIds={topCategoryIds}
-      />
 
       {/* Transactions list */}
       <section className="overflow-hidden rounded-lg border border-hair bg-paper">

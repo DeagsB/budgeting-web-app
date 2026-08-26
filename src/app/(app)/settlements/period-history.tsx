@@ -21,7 +21,7 @@ export type PeriodVM = {
 
 export function PeriodHistory({ periods, highlightId }: { periods: PeriodVM[]; highlightId: string | null }) {
   const [openId, setOpenId] = useState<string | null>(highlightId ?? periods[0]?.id ?? null)
-  if (periods.length === 0) return null
+  if (periods.length === 0) return <p className="px-1 text-[12.5px] text-ink-3">No closed periods yet.</p>
   return (
     <Card padding="none" className="overflow-hidden">
       <header className="border-b border-hair px-5 py-3.5">

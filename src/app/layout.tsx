@@ -3,6 +3,7 @@ import { Inter_Tight, Instrument_Serif, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { ServiceWorkerRegistrar } from '@/components/pwa/sw-registrar'
 import { IOSInstallHint } from '@/components/pwa/ios-install-hint'
+import { SPLASH_DEVICES, splashFileName, splashMedia } from './splash/brand'
 
 const interTight = Inter_Tight({
   subsets: ['latin'],
@@ -30,8 +31,16 @@ export const metadata: Metadata = {
     capable: true,
     title: 'Maple',
     // black-translucent lets our cream/dark backgrounds bleed under the
-    // iOS status bar instead of getting a solid bar of system chrome.
+    // iOS status bar instead of getting a solid bar of system chrome. The
+    // glyphs are white, so a fixed `.status-bar-band` below paints a dark
+    // strip behind them.
     statusBarStyle: 'black-translucent',
+    // One launch image per iPhone class; iOS picks by the media query.
+    // Served by src/app/splash/[size]/route.tsx.
+    startupImage: SPLASH_DEVICES.map((d) => ({
+      url: `/splash/${splashFileName(d)}`,
+      media: splashMedia(d),
+    })),
   },
   formatDetection: {
     telephone: false,
@@ -77,6 +86,9 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
       </head>
       <body className="min-h-full flex flex-col">
+        {/* Dark strip under the iOS status bar (height = top safe-area inset,
+            so it is invisible wherever there is no inset). */}
+        <div className="status-bar-band" aria-hidden="true" />
         {children}
         <ServiceWorkerRegistrar />
         <IOSInstallHint />

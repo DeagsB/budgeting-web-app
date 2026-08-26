@@ -55,7 +55,7 @@ export default async function GoalsPage() {
         eyebrow="Goals"
         title="What you're saving toward."
         subtitle="A trip, a down payment, an emergency fund — anything you're working toward. Add a target and watch the leaf bar climb."
-        actions={<GoalControls accounts={accountList} />}
+        actions={active.length > 0 ? <GoalControls accounts={accountList} /> : undefined}
       />
 
       {active.length > 0 && (

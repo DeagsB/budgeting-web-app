@@ -3,6 +3,9 @@ import { verifyCronAuth } from '@/lib/cron/auth'
 import { createServiceClient } from '@/lib/supabase/service'
 import { runPlaidSweep } from '@/lib/cron/plaid-sweep'
 import { runSettlementAutoClose } from '@/lib/cron/settlement-close'
+// Household close days are civil dates; todayISO() is America/Toronto so "the
+// 28th" means the 28th for a Canadian household, not UTC's version of it.
+import { todayISO } from '@/lib/dates'
 
 // GET /api/cron/daily
 //
@@ -14,12 +17,6 @@ import { runSettlementAutoClose } from '@/lib/cron/settlement-close'
 
 export const maxDuration = 300
 export const dynamic = 'force-dynamic'
-
-function todayISO(): string {
-  // Household close days are civil dates; use America/Toronto so "the 28th"
-  // means the 28th for a Canadian household, not UTC's version of it.
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Toronto', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
-}
 
 export async function GET(request: NextRequest) {
   if (!verifyCronAuth(request)) {

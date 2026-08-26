@@ -1,6 +1,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
+import { humanizeDbError } from '@/lib/errors'
 
 /**
  * Single source of truth for creating spending categories.
@@ -147,7 +148,7 @@ export async function createCategoryCore(
     if (error.code === '23505') {
       return { ok: false, error: 'A category with that code already exists.' }
     }
-    return { ok: false, error: error.message }
+    return { ok: false, error: humanizeDbError(error, { entity: 'category code' }) }
   }
   if (!inserted?.id) {
     return { ok: false, error: 'Category was created but could not be loaded.' }

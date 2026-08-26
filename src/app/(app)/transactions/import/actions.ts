@@ -148,7 +148,7 @@ export async function commitImport(
   try {
     rows = JSON.parse(payload)
   } catch {
-    return { error: 'Failed to parse rows.' }
+    return { error: "Couldn't save that. Refresh and try again." }
   }
   if (!Array.isArray(rows) || rows.length === 0) return { error: 'No rows to import.' }
 

@@ -49,7 +49,30 @@ export function UncategorizedReview({
           in-progress queue can finish on its success screen even after the last
           transaction's save revalidates this list down to zero. */}
       {count > 0 && (
-        <div className="flex flex-col gap-3 rounded-lg border border-butter bg-butter/40 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+        <>
+          {/* Mobile: slim single-line pill. */}
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="flex min-h-[44px] w-full items-center gap-2.5 rounded-full border border-butter bg-butter/40 pl-4 pr-3 text-left transition-colors active:bg-butter/60 md:hidden"
+          >
+            <span aria-hidden className="shrink-0 text-ink">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z" />
+                <circle cx="7" cy="7" r="1.2" fill="currentColor" />
+              </svg>
+            </span>
+            <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-ink">
+              {count} need{count === 1 ? 's' : ''} a category or title
+            </span>
+            <span className="shrink-0 text-[11.5px] font-semibold text-ink-2">Review</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="shrink-0 text-ink-3">
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+          </button>
+
+          {/* md+: full banner. */}
+          <div className="hidden flex-row items-center justify-between gap-3 rounded-lg border border-butter bg-butter/40 px-4 py-3.5 md:flex">
           <div className="flex items-start gap-3">
             <span
               aria-hidden
@@ -73,14 +96,15 @@ export function UncategorizedReview({
             variant="primary"
             size="sm"
             onClick={() => setOpen(true)}
-            className="w-full shrink-0 sm:w-auto"
+            className="shrink-0"
           >
             Review
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
               <path d="M5 12h14M13 6l6 6-6 6" />
             </svg>
           </Button>
-        </div>
+          </div>
+        </>
       )}
 
       <Sheet open={open} onClose={() => setOpen(false)} title="Categorize transactions">

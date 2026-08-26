@@ -99,19 +99,20 @@ export function ContributionTable({ year, rows }: { year: number; rows: Row[] })
       <div className="hidden overflow-hidden rounded-lg border border-hair bg-paper shadow-[var(--shadow-card)] sm:block">
         <header className="flex items-baseline justify-between border-b border-hair px-5 py-3.5">
           <MapleLabel>Registered room</MapleLabel>
-          <span className="text-[11px] text-ink-3">Edit opening / allowance, then save</span>
+          <span className="text-[11px] text-ink-3">Edit opening / room this year, then save</span>
         </header>
         <DataTable minWidth={820}>
+          <caption className="sr-only">Registered contribution room by member and account type for {year}</caption>
           <thead>
             <tr className="border-b border-hair text-left text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
-              <th className="px-5 py-3">Member</th>
-              <th className="px-4 py-3">Type</th>
-              <th className="px-4 py-3 text-right">Opening</th>
-              <th className="px-4 py-3 text-right">Allowance</th>
-              <th className="px-4 py-3 text-right">CRA limit</th>
-              <th className="px-4 py-3 text-right">Contributed</th>
-              <th className="px-4 py-3 text-right">Withdrawn</th>
-              <th className="px-4 py-3 text-right">Available</th>
+              <th scope="col" className="px-5 py-3">Member</th>
+              <th scope="col" className="px-4 py-3">Type</th>
+              <th scope="col" className="px-4 py-3 text-right">Opening</th>
+              <th scope="col" className="px-4 py-3 text-right">Room this year</th>
+              <th scope="col" className="px-4 py-3 text-right">CRA limit</th>
+              <th scope="col" className="px-4 py-3 text-right">Contributed</th>
+              <th scope="col" className="px-4 py-3 text-right">Withdrawn</th>
+              <th scope="col" className="px-4 py-3 text-right">Available</th>
             </tr>
           </thead>
           <tbody>
@@ -184,7 +185,7 @@ function AllowanceInput({ memberId, row }: { memberId: string; row: Row }) {
       name={`allowance:${memberId}:${row.type}`}
       type="text"
       inputMode="decimal"
-      aria-label={`${row.typeLabel} allowance override for ${row.memberName}`}
+      aria-label={`${row.typeLabel} room this year for ${row.memberName} - your Notice of Assessment figure`}
       defaultValue={row.allowanceOverride !== null ? (row.allowanceOverride / 100).toFixed(2) : ''}
       placeholder={(row.craAllowance / 100).toFixed(2)}
       className="maple-input sm w-full text-right tabular-nums"
@@ -250,7 +251,7 @@ function RoomCard({ memberId, row }: { memberId: string; row: Row }) {
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
-            Allowance
+            Room this year
           </span>
           <AllowanceInput memberId={memberId} row={row} />
         </label>
