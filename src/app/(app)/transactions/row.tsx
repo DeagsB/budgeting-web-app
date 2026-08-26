@@ -1,7 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { updateTransaction, deleteTransaction } from './actions'
+import { toggleShared } from '@/app/(app)/shared/actions'
+import { useToast } from '@/components/ui/toast'
 import { CategorySelect } from './category-select'
 import { QuickCategorize } from './quick-categorize'
 import { SplitEditor } from './split-editor'
@@ -57,7 +59,22 @@ export function TransactionRow({
   const [showSplits, setShowSplits] = useState(false)
   const [categorizing, setCategorizing] = useState(false)
   const [ruleOpen, setRuleOpen] = useState(false)
+  const [sharePending, startShare] = useTransition()
+  const { toast } = useToast()
   const canEdit = t.canEdit ?? true
+
+  // One-tap share / unshare by the household ratio (same action as the
+  // checkbox on the Shared page). The page revalidates, so the badge and
+  // the button label flip once the server confirms.
+  function onToggleShare() {
+    startShare(async () => {
+      const fd = new FormData()
+      fd.set('transaction_id', t.id)
+      const res = await toggleShared(fd)
+      if (res && 'error' in res) toast({ title: res.error, tone: 'ink' })
+      else toast({ title: t.isShared ? 'No longer shared.' : 'Shared with the household.', tone: 'leaf' })
+    })
+  }
 
   // ───────── EDIT MODE ─────────
   if (editing && canEdit) {
@@ -261,6 +278,24 @@ export function TransactionRow({
               className="inline-flex min-h-[44px] items-center rounded-md px-2 font-semibold text-ink-2 transition-colors hover:bg-cream-2 hover:text-ink"
             >
               Edit
+            </button>
+            <button
+              type="button"
+              onClick={onToggleShare}
+              disabled={sharePending}
+              aria-pressed={t.isShared}
+              className={
+                'inline-flex min-h-[44px] items-center gap-1.5 rounded-md px-2 font-semibold transition-colors disabled:opacity-50 ' +
+                (t.isShared ? 'text-ink-2 hover:bg-cream-2 hover:text-ink' : 'text-leaf-deep hover:bg-leaf-soft')
+              }
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <circle cx="9" cy="8" r="3" />
+                <circle cx="17" cy="9" r="2.4" />
+                <path d="M3 19c0-3.3 2.7-6 6-6s6 2.7 6 6" />
+                <path d="M15 19c0-2 1.5-4 4-4" />
+              </svg>
+              {sharePending ? (t.isShared ? 'Unsharing…' : 'Sharing…') : t.isShared ? 'Unshare' : 'Share'}
             </button>
             <button
               type="button"
