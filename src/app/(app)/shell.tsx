@@ -410,7 +410,10 @@ function AppShellInner({
     <ToastProvider raised={!online}>
     <div className="min-h-dvh bg-[var(--color-cream)] text-[var(--color-ink)]">
       {/* ───────── Desktop sidebar ───────── */}
-      <aside className="maple-chrome fixed inset-y-0 left-0 z-20 hidden w-[240px] flex-col border-r border-[var(--color-hair)] bg-[var(--color-cream-2)] px-5 py-6 md:flex">
+      <aside
+        className="maple-chrome fixed inset-y-0 left-0 z-20 hidden w-[240px] flex-col border-r border-[var(--color-hair)] bg-[var(--color-cream-2)] px-5 py-6 md:flex"
+        style={{ viewTransitionName: 'maple-sidebar' }}
+      >
         <Link href="/dashboard" className="block">
           <div className="font-serif text-[26px] leading-none tracking-[-0.02em] text-[var(--color-ink)]">
             Maple
@@ -472,7 +475,10 @@ function AppShellInner({
           The status-bar inset above this header is painted by the fixed
           `.status-bar-band` in the root layout (dark surface for the white
           black-translucent glyphs); the header's top padding sits under it. */}
-      <header className="maple-chrome sticky top-0 z-20 border-b border-[var(--color-hair)] bg-[var(--color-cream)]/85 backdrop-blur md:hidden">
+      <header
+        className="maple-chrome vt-solid sticky top-0 z-20 border-b border-[var(--color-hair)] bg-[var(--color-cream)]/85 backdrop-blur md:hidden"
+        style={{ viewTransitionName: 'maple-topbar' }}
+      >
         <div className="grid grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-2 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+10px)]">
           {shellTitle ? (
             <>
@@ -519,7 +525,10 @@ function AppShellInner({
           {/* Pull-to-sync wraps every screen so the gesture is universal - a
               pull-down at the top of any page triggers a Gmail sync + refresh.
               <ViewTransition> cross-fades the page body on route changes
-              (duration lives in globals.css under .maple-fade). */}
+              (duration lives in globals.css under .maple-fade). The shell
+              chrome (sidebar, top bar, tab bar, status band) carries its own
+              view-transition-name so it is snapshotted apart from the page
+              and held still - see "Shell chrome" in globals.css. */}
           <PullToSync>
             <ViewTransition default="maple-fade">{children}</ViewTransition>
           </PullToSync>
@@ -529,8 +538,8 @@ function AppShellInner({
       {/* ───────── Mobile bottom tab bar ───────── */}
       <nav
         aria-label="Primary"
-        className="maple-chrome fixed inset-x-0 bottom-0 z-30 border-t border-[var(--color-hair)] bg-[var(--color-cream)]/95 backdrop-blur md:hidden"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        className="maple-chrome vt-solid fixed inset-x-0 bottom-0 z-30 border-t border-[var(--color-hair)] bg-[var(--color-cream)]/95 backdrop-blur md:hidden"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)', viewTransitionName: 'maple-tabbar' }}
       >
         <ul className="mx-auto grid max-w-[520px] grid-cols-[1fr_1fr_76px_1fr_1fr] items-stretch px-1">
           {tabs.map((d, i) => (

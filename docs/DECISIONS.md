@@ -459,3 +459,19 @@ The "Record payment" form survives only as a collapsed by-hand fallback.
 - *Candidate table filled by a keyword heuristic*: second matching path beside rules, more state, and the household could not tune it.
 - *One-tap only, no detection*: the point was to stop asking for something the bank already said.
 - *Deleting a settlement when its ledger row is deleted*: the money still moved; the row was probably a duplicate cleanup. The FK sets the column null instead.
+
+## 2026-08-26 - Shell chrome held still during route view transitions
+
+**Context:** on iOS, tapping a bottom tab made the tab bar flicker and old page content flashed in the bottom-left corner.
+Reproduced in Playwright WebKit and Chromium with the transition slowed to 4s.
+Two mechanisms: the root cross-fade blended the old and new tab bars (active states ghosting into each other), and the page's own `.maple-fade` snapshot, taller than the viewport, painted above the fixed bar (csswg-drafts#8941).
+
+**Decision:**
+- The sidebar, mobile top bar, tab bar and status band each carry a `view-transition-name`, so they are captured apart from the page and held still: no group motion, no fade, no plus-lighter blend, z-index above the page group.
+- Both the old and the new chrome snapshots stay visible and opaque instead of the "hide old, show new" recipe from the Next docs.
+  WebKit builds without the fix for bugs.webkit.org/299578 render the live "new" snapshot of a fixed element blank; keeping the old bitmap underneath degrades that to "highlight lands a beat late" rather than a bar that vanishes for the transition.
+- `html:active-view-transition .vt-solid` makes the translucent bars opaque only while a transition runs, so neither snapshot can ghost through the other.
+
+**Considered + rejected:**
+- *Painting a cream background on the new pseudo*: on the broken WebKit builds the background paints but the image does not, leaving a blank bar.
+- *Dropping the route transition*: the fade is fine; only the chrome needed pulling out of it.
