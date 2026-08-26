@@ -54,6 +54,26 @@ function isOAuthReturn() {
   return typeof window !== 'undefined' && window.location.search.includes('oauth_state_id')
 }
 
+/**
+ * Read the persisted OAuth resume state once, synchronously, so the wizard can
+ * initialise its token/mode from it without a post-mount setState. Returns
+ * null unless the URL carries oauth_state_id (i.e. we're back from the bank).
+ */
+function readOAuthResume(): { token: string; mode: 'connect' | 'update'; itemId: string | null } | null {
+  if (!isOAuthReturn()) return null
+  try {
+    const token = localStorage.getItem(OAUTH_TOKEN_KEY)
+    if (!token) return null
+    return {
+      token,
+      mode: localStorage.getItem(OAUTH_MODE_KEY) === 'update' ? 'update' : 'connect',
+      itemId: localStorage.getItem(OAUTH_ITEM_KEY),
+    }
+  } catch {
+    return null /* storage unavailable */
+  }
+}
+
 function clearOAuthArtifacts() {
   try {
     localStorage.removeItem(OAUTH_TOKEN_KEY)
@@ -97,10 +117,13 @@ export function PlaidWizard({
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
-  const [linkToken, setLinkToken] = useState<string | null>(null)
-  const modeRef = useRef<'connect' | 'update'>('connect')
-  const updateItemRef = useRef<string | null>(null)
-  const wantOpenRef = useRef(false)
+  // Resume an OAuth flow after the bank redirects back: the persisted token +
+  // mode seed the initial state so Link re-opens as soon as the SDK is ready.
+  const [resume] = useState(readOAuthResume)
+  const [linkToken, setLinkToken] = useState<string | null>(resume?.token ?? null)
+  const modeRef = useRef<'connect' | 'update'>(resume?.mode ?? 'connect')
+  const updateItemRef = useRef<string | null>(resume?.itemId ?? null)
+  const wantOpenRef = useRef(resume !== null)
 
   // After a successful connect, hold the accounts to map.
   const [mapping, setMapping] = useState<{ itemRowId: string; drafts: DraftMapping[] } | null>(null)
@@ -148,24 +171,6 @@ export function PlaidWizard({
     // back off the URL to resume the in-flight session.
     ...(isOAuthReturn() ? { receivedRedirectUri: window.location.href } : {}),
   })
-
-  // Resume an OAuth flow after the bank redirects back: restore the persisted
-  // token + mode and re-open Link to complete the handshake.
-  useEffect(() => {
-    if (!isOAuthReturn()) return
-    let savedToken: string | null = null
-    try {
-      savedToken = localStorage.getItem(OAUTH_TOKEN_KEY)
-      modeRef.current = localStorage.getItem(OAUTH_MODE_KEY) === 'update' ? 'update' : 'connect'
-      updateItemRef.current = localStorage.getItem(OAUTH_ITEM_KEY)
-    } catch {
-      /* storage unavailable */
-    }
-    if (savedToken) {
-      wantOpenRef.current = true
-      setLinkToken(savedToken)
-    }
-  }, [])
 
   // Open Link once the token is set and the SDK is ready.
   useEffect(() => {

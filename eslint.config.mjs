@@ -16,6 +16,8 @@ const eslintConfig = defineConfig([
     "design_handoff_maple/**",
     // Drop-in replacement files; the copies under src/ are what runs.
     "fixes/**",
+    // Local Playwright screenshot helper, never committed.
+    ".pw-shot.cjs",
   ]),
   {
     // Allow leading-underscore to signal "received but intentionally unused"
