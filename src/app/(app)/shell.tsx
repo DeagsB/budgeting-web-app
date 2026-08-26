@@ -5,14 +5,14 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useMemo, useRef, useState, ViewTransition } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, ViewTransition } from 'react'
 import { signOut } from '../(auth)/actions'
-import { Button } from '@/components/ui/button'
 import { ShellTitleContext } from '@/components/ui/page-header'
 import { ToastProvider } from '@/components/ui/toast'
 import { PullToSync } from '@/components/pull-to-sync'
 import { useScrollLock } from '@/lib/use-scroll-lock'
 import { useOnline } from '@/lib/run-action'
+import { QuickAddProvider, useQuickAdd } from '@/lib/quick-add'
 
 /**
  * Maple shell. Light + dark are driven by the `.dark` class on <html>
@@ -21,9 +21,10 @@ import { useOnline } from '@/lib/run-action'
  * Layout:
  *   - Desktop (md+): fixed left sidebar (240px) with household + nav + user.
  *   - Mobile (<md): top bar (wordmark + household), main content, fixed
- *     bottom tab bar with up to 4 user-customizable destinations + More.
- *     Tab bar config persists in localStorage so the user's choices stick
- *     across sessions on the same device.
+ *     bottom tab bar: three user-customizable slots, a raised "+" quick-add
+ *     button in the centre, and More. Press-and-hold a tile in the More sheet
+ *     to place it on a slot. Slot config persists in localStorage so the
+ *     user's choices stick across sessions on the same device.
  */
 
 // ─── Destination registry ────────────────────────────────────────────────
@@ -56,9 +57,14 @@ const DESTS = [
 
 type Dest = (typeof DESTS)[number]
 
+// Exactly three nav slots flank the centre "+" and the fixed More button.
+const TAB_SLOT_COUNT = 3
 const DEFAULT_TABS = ['/dashboard', '/transactions', '/budgets']
-const TAB_STORAGE_KEY = 'maple.tabBar.v1'
-const MAX_TABS = 4
+const TAB_STORAGE_KEY = 'maple.tabBar.v2'
+// Hold a More-sheet tile this long to start placing it on the bar.
+const PLACE_HOLD_MS = 350
+// Finger travel beyond this cancels the hold (it was a scroll, not a press).
+const PLACE_MOVE_CANCEL = 10
 
 function findDest(href: string): Dest | undefined {
   return DESTS.find((d) => d.href === href)
@@ -172,6 +178,23 @@ function useOverlay(open: boolean, panelRef: React.RefObject<HTMLDivElement | nu
   }, [open, onClose, panelRef])
 }
 
+/**
+ * Normalise any stored/derived list into exactly TAB_SLOT_COUNT distinct,
+ * known routes. Gaps are filled with the first defaults not already present.
+ */
+function normalizeTabs(input: readonly string[]): string[] {
+  const out: string[] = []
+  for (const h of input) {
+    if (out.length >= TAB_SLOT_COUNT) break
+    if (findDest(h) && !out.includes(h)) out.push(h)
+  }
+  for (const h of DEFAULT_TABS) {
+    if (out.length >= TAB_SLOT_COUNT) break
+    if (!out.includes(h)) out.push(h)
+  }
+  return out
+}
+
 function loadTabs(): string[] {
   if (typeof window === 'undefined') return DEFAULT_TABS
   try {
@@ -179,15 +202,28 @@ function loadTabs(): string[] {
     if (!raw) return DEFAULT_TABS
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) return DEFAULT_TABS
-    const valid = parsed.filter((h): h is string => typeof h === 'string' && !!findDest(h))
-    if (valid.length === 0) return DEFAULT_TABS
-    return valid.slice(0, MAX_TABS)
+    return normalizeTabs(parsed.filter((h): h is string => typeof h === 'string'))
   } catch {
     return DEFAULT_TABS
   }
 }
 
-export function AppShell({
+type Placing = { href: string; label: string }
+
+export function AppShell(props: {
+  householdName: string
+  userEmail: string
+  memberName?: string | null
+  children: React.ReactNode
+}) {
+  return (
+    <QuickAddProvider>
+      <AppShellInner {...props} />
+    </QuickAddProvider>
+  )
+}
+
+function AppShellInner({
   householdName,
   userEmail,
   memberName = null,
@@ -201,8 +237,11 @@ export function AppShell({
   const pathname = usePathname()
   const router = useRouter()
   const [moreOpen, setMoreOpen] = useState(false)
-  const [editOpen, setEditOpen] = useState(false)
+  // Destination picked up by press-and-hold in the More sheet, waiting for
+  // the user to tap the slot it should occupy.
+  const [placing, setPlacing] = useState<Placing | null>(null)
   const online = useOnline()
+  const quickAdd = useQuickAdd()
 
   // Mobile top-bar title for this route. The dashboard keeps the wordmark.
   const route = useMemo(() => resolveRoute(pathname), [pathname])
@@ -266,22 +305,50 @@ export function AppShell({
   }, [])
 
   function saveTabs(next: string[]) {
-    setTabHrefs(next)
-    try { localStorage.setItem(TAB_STORAGE_KEY, JSON.stringify(next)) } catch {}
+    const clean = normalizeTabs(next)
+    setTabHrefs(clean)
+    try { localStorage.setItem(TAB_STORAGE_KEY, JSON.stringify(clean)) } catch {}
   }
 
   const closeMore = () => setMoreOpen(false)
-  const closeEdit = () => setEditOpen(false)
 
   const morePanelRef = useRef<HTMLDivElement>(null)
   useOverlay(moreOpen, morePanelRef, closeMore)
+
+  // ─── Slot placement ───
+  // While placing, selection is locked document-wide (the user is holding /
+  // tapping app chrome; iOS would otherwise start selecting page text) and
+  // the three slots turn into drop targets.
+  useEffect(() => {
+    const root = document.documentElement
+    if (placing) root.classList.add('maple-place-lock')
+    else root.classList.remove('maple-place-lock')
+    return () => root.classList.remove('maple-place-lock')
+  }, [placing])
+
+  const cancelPlacing = () => setPlacing(null)
+  function placeIntoSlot(index: number) {
+    if (!placing) return
+    const next = tabHrefs.slice()
+    // If the route already sits in another slot, swap so nothing duplicates.
+    const existing = next.indexOf(placing.href)
+    if (existing >= 0) next[existing] = next[index]
+    next[index] = placing.href
+    saveTabs(next)
+    setPlacing(null)
+    try { navigator.vibrate?.(15) } catch {}
+  }
+  function startPlacing(item: Placing) {
+    setPlacing(item)
+    setMoreOpen(false)
+  }
 
   const tabs = useMemo(
     () =>
       tabHrefs
         .map((h) => findDest(h))
         .filter((d): d is Dest => !!d)
-        .slice(0, MAX_TABS),
+        .slice(0, TAB_SLOT_COUNT),
     [tabHrefs],
   )
   // Anything not on the tab bar drops into the More sheet, grouped.
@@ -303,6 +370,42 @@ export function AppShell({
     document.body.classList.add(cls)
     return () => document.body.classList.remove(cls)
   }, [])
+
+  // One nav slot on the bar. While placing, the slot becomes a drop target
+  // (a plain button, so no navigation can sneak through).
+  function renderSlot(d: Dest, index: number) {
+    const active = isActive(pathname, d.href)
+    const Icon = d.icon
+    const label = (
+      <span className="mt-0.5 text-[10.5px] font-semibold tracking-[-0.01em]">{d.tabLabel}</span>
+    )
+    if (placing) {
+      return (
+        <button
+          type="button"
+          onClick={() => placeIntoSlot(index)}
+          aria-label={`Place ${placing.label} in slot ${index + 1}, replacing ${d.label}`}
+          className={tabClass(false) + ' maple-slot-target text-[var(--color-leaf)]'}
+        >
+          <span className="maple-slot-ring">
+            <Icon active={false} />
+          </span>
+          {label}
+        </button>
+      )
+    }
+    return (
+      <Link
+        href={d.href}
+        className={tabClass(active)}
+        aria-current={active ? 'page' : undefined}
+        {...tabTap(() => router.push(d.href), { nativeClick: true })}
+      >
+        <Icon active={active} />
+        {label}
+      </Link>
+    )
+  }
 
   return (
     <ShellTitleContext.Provider value={shellTitle}>
@@ -431,37 +534,40 @@ export function AppShell({
         className="maple-chrome fixed inset-x-0 bottom-0 z-30 border-t border-[var(--color-hair)] bg-[var(--color-cream)]/95 backdrop-blur md:hidden"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        <ul className="mx-auto flex max-w-[520px] items-stretch justify-around px-1">
-          {tabs.map((d) => {
-            const active = isActive(pathname, d.href)
-            const Icon = d.icon
-            return (
-              <li key={d.href} className="flex-1">
-                <Link
-                  href={d.href}
-                  className={tabClass(active)}
-                  aria-current={active ? 'page' : undefined}
-                  {...tabTap(() => router.push(d.href), { nativeClick: true })}
-                >
-                  <Icon active={active} />
-                  <span className="mt-0.5 text-[10.5px] font-semibold tracking-[-0.01em]">
-                    {d.tabLabel}
-                  </span>
-                </Link>
-              </li>
-            )
-          })}
+        <ul className="mx-auto grid max-w-[520px] grid-cols-[1fr_1fr_76px_1fr_1fr] items-stretch px-1">
+          {tabs.map((d, i) => (
+            <Fragment key={d.href}>
+              {i === 2 && (
+                <li key="quick-add" className="flex items-center justify-center">
+                  <button
+                    type="button"
+                    aria-label="Add transaction"
+                    disabled={!!placing}
+                    {...(placing ? {} : tabTap(() => quickAdd.trigger()))}
+                    className={
+                      'flex h-[54px] w-[54px] items-center justify-center rounded-full bg-[var(--color-leaf)] text-[var(--color-paper)] shadow-[0_6px_16px_-6px_rgba(31,86,65,0.55),var(--shadow-card)] transition-[transform,opacity] duration-150 active:scale-[0.94] ' +
+                      (placing ? 'opacity-40' : '')
+                    }
+                  >
+                    <PlusIcon />
+                  </button>
+                </li>
+              )}
+              <li>{renderSlot(d, i)}</li>
+            </Fragment>
+          ))}
           {(() => {
             const moreActive =
               !tabs.some((d) => isActive(pathname, d.href)) && pathname !== '/'
             return (
-              <li key="more" className="flex-1">
+              <li key="more">
                 <button
                   type="button"
-                  {...tabTap(() => setMoreOpen(true))}
+                  disabled={!!placing}
+                  {...(placing ? {} : tabTap(() => setMoreOpen(true)))}
                   aria-haspopup="dialog"
                   aria-expanded={moreOpen}
-                  className={tabClass(moreActive)}
+                  className={tabClass(moreActive) + (placing ? ' opacity-40' : '')}
                 >
                   <MoreIcon active={moreActive} />
                   <span className="mt-0.5 text-[10.5px] font-semibold tracking-[-0.01em]">More</span>
@@ -471,6 +577,36 @@ export function AppShell({
           })()}
         </ul>
       </nav>
+
+      {/* ───────── Slot placement overlay ─────────
+          Catch layer cancels on a tap anywhere above the bar; the pill names
+          what is being placed. Slots pulse as drop targets (see tabClass). */}
+      {placing && (
+        <>
+          <div
+            aria-hidden="true"
+            onClick={cancelPlacing}
+            className="fixed inset-x-0 top-0 z-[29] md:hidden"
+            style={{ bottom: 'calc(58px + env(safe-area-inset-bottom))' }}
+          />
+          <div
+            role="status"
+            className="maple-chrome fixed left-1/2 z-[31] flex -translate-x-1/2 items-center gap-3 whitespace-nowrap rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] py-2.5 pl-4 pr-2 text-[13px] font-semibold text-[var(--color-ink)] shadow-[var(--shadow-float)] md:hidden"
+            style={{ bottom: 'calc(58px + env(safe-area-inset-bottom) + 12px)' }}
+          >
+            <span>
+              Tap a slot to place <strong className="text-[var(--color-leaf)]">{placing.label}</strong>
+            </span>
+            <button
+              type="button"
+              onClick={cancelPlacing}
+              className="min-h-[36px] rounded-full px-3 text-[13px] font-bold text-[var(--color-ink-3)]"
+            >
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
 
       {/* ───────── More sheet ───────── */}
       {moreOpen && (
@@ -513,71 +649,38 @@ export function AppShell({
                 </button>
               </div>
             </div>
-            <div className="px-3 pb-3">
-              {moreItems.main.length > 0 && (
-                <SheetGroup
-                  label="Spending"
-                  items={moreItems.main.map((d) => ({ href: d.href, label: d.label }))}
-                  pathname={pathname}
-                  onNav={closeMore}
-                />
+            <div className="px-4 pb-3">
+              <div className="mb-1 flex items-center gap-3 rounded-[12px] border border-[var(--color-leaf-soft)] bg-[var(--color-leaf-tint)] px-3 py-2.5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-paper)] text-[var(--color-leaf)]">
+                  <HoldIcon />
+                </span>
+                <span className="min-w-0 flex-1 text-[12.5px] leading-snug text-[var(--color-ink-2)]">
+                  <span className="block font-semibold text-[var(--color-ink)]">Make it yours</span>
+                  Press and hold any tile to put it on your bottom bar.
+                </span>
+              </div>
+              {(
+                [
+                  ['Spending', moreItems.main],
+                  ['Split & settle', moreItems.split],
+                  ['Reports', moreItems.reports],
+                  ['Plans & savings', moreItems.plans],
+                  ['Setup', moreItems.setup],
+                ] as const
+              ).map(([label, items]) =>
+                items.length > 0 ? (
+                  <TileGroup
+                    key={label}
+                    label={label}
+                    items={items}
+                    pathname={pathname}
+                    onNav={(href) => { closeMore(); router.push(href) }}
+                    onHold={startPlacing}
+                  />
+                ) : null,
               )}
-              {moreItems.split.length > 0 && (
-                <SheetGroup
-                  label="Split & settle"
-                  items={moreItems.split.map((d) => ({ href: d.href, label: d.label }))}
-                  pathname={pathname}
-                  onNav={closeMore}
-                />
-              )}
-              {moreItems.reports.length > 0 && (
-                <SheetGroup
-                  label="Reports"
-                  items={moreItems.reports.map((d) => ({ href: d.href, label: d.label }))}
-                  pathname={pathname}
-                  onNav={closeMore}
-                />
-              )}
-              {moreItems.plans.length > 0 && (
-                <SheetGroup
-                  label="Plans & savings"
-                  items={moreItems.plans.map((d) => ({ href: d.href, label: d.label }))}
-                  pathname={pathname}
-                  onNav={closeMore}
-                />
-              )}
-              {moreItems.setup.length > 0 && (
-                <SheetGroup
-                  label="Setup"
-                  items={moreItems.setup.map((d) => ({ href: d.href, label: d.label }))}
-                  pathname={pathname}
-                  onNav={closeMore}
-                />
-              )}
-              <div className="mt-4 border-t border-[var(--color-hair)] pt-3">
-                <div className="mb-1.5 px-3 text-[10.5px] font-bold uppercase tracking-[0.10em] text-[var(--color-ink-3)]">
-                  Customize
-                </div>
-                <button
-                  type="button"
-                  onClick={() => { closeMore(); setEditOpen(true) }}
-                  className="flex w-full items-center gap-3 rounded-[12px] px-3 py-3 text-[15px] font-medium text-[var(--color-ink)] transition-colors hover:bg-[var(--color-paper-2)]"
-                >
-                  <span
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
-                    style={{ background: 'var(--color-leaf-soft)', color: 'var(--color-leaf-deep)' }}
-                  >
-                    <GridIcon />
-                  </span>
-                  <span className="flex-1 text-left">
-                    <span className="block">Customize tabs</span>
-                    <span className="block text-[11.5px] font-normal text-[var(--color-ink-3)]">
-                      Pick which destinations live on the bottom bar
-                    </span>
-                  </span>
-                  <span className="text-[18px] text-[var(--color-ink-3)]">›</span>
-                </button>
-                <form action={signOut} className="mt-1 px-3">
+              <div className="mt-4 flex items-center justify-between border-t border-[var(--color-hair)] pt-2">
+                <form action={signOut}>
                   <button
                     type="submit"
                     className="-mx-2 inline-flex min-h-[44px] items-center px-2 text-[14px] font-semibold text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
@@ -585,22 +688,17 @@ export function AppShell({
                     Sign out
                   </button>
                 </form>
+                <button
+                  type="button"
+                  onClick={() => saveTabs(DEFAULT_TABS)}
+                  className="-mx-2 inline-flex min-h-[44px] items-center px-2 text-[12.5px] font-semibold text-[var(--color-ink-3)] transition-colors hover:text-[var(--color-ink)]"
+                >
+                  Reset tabs
+                </button>
               </div>
             </div>
           </div>
         </>
-      )}
-
-      {/* ───────── Tab editor sheet ───────── */}
-      {editOpen && (
-        <TabBarEditor
-          current={tabHrefs}
-          onCancel={closeEdit}
-          onSave={(next) => {
-            saveTabs(next)
-            closeEdit()
-          }}
-        />
       )}
 
       {!online && <OfflineBanner />}
@@ -629,193 +727,6 @@ function OfflineBanner() {
         <span className="truncate">Offline - showing what was last loaded</span>
       </div>
     </div>
-  )
-}
-
-// ─── Tab bar editor ───────────────────────────────────────────────────────
-
-function TabBarEditor({
-  current,
-  onCancel,
-  onSave,
-}: {
-  current: string[]
-  onCancel: () => void
-  onSave: (next: string[]) => void
-}) {
-  const [draft, setDraft] = useState<string[]>(current)
-  // This editor is mounted only while open, so the overlay is always "open"
-  // for the lifetime of the component.
-  const panelRef = useRef<HTMLDivElement>(null)
-  useOverlay(true, panelRef, onCancel)
-
-  function move(href: string, dir: -1 | 1) {
-    setDraft((prev) => {
-      const i = prev.indexOf(href)
-      if (i < 0) return prev
-      const j = i + dir
-      if (j < 0 || j >= prev.length) return prev
-      const next = prev.slice()
-      ;[next[i], next[j]] = [next[j], next[i]]
-      return next
-    })
-  }
-  function remove(href: string) {
-    setDraft((prev) => prev.filter((h) => h !== href))
-  }
-  function add(href: string) {
-    setDraft((prev) => (prev.length >= MAX_TABS || prev.includes(href) ? prev : [...prev, href]))
-  }
-
-  const onBar = draft
-    .map((h) => findDest(h))
-    .filter((d): d is Dest => !!d)
-  const offBar = DESTS.filter((d) => !draft.includes(d.href))
-  const full = draft.length >= MAX_TABS
-
-  return (
-    <>
-      <button
-        type="button"
-        aria-hidden="true"
-        tabIndex={-1}
-        onClick={onCancel}
-        className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px]"
-      />
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Customize tab bar"
-        tabIndex={-1}
-        className="fixed inset-x-0 bottom-0 z-[60] flex max-h-[88dvh] flex-col rounded-t-xl border-t border-[var(--color-hair)] bg-[var(--color-cream)] shadow-[var(--shadow-float)] outline-none sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:max-h-[80dvh] sm:w-[440px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }}
-      >
-        <div className="flex justify-center pb-1 pt-2 sm:hidden">
-          <div className="h-1 w-10 rounded-full bg-[var(--color-hair)]" aria-hidden />
-        </div>
-        <header className="flex items-baseline justify-between border-b border-[var(--color-hair)] px-5 py-3.5 sm:py-5">
-          <div>
-            <div className="font-serif text-[20px] tracking-[-0.02em] text-[var(--color-ink)]">
-              Customize tabs
-            </div>
-            <div className="mt-0.5 text-[12px] text-[var(--color-ink-2)]">
-              Pick up to {MAX_TABS}. The 5th slot is always “More”.
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onCancel}
-            aria-label="Close"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)]"
-          >
-            <CloseIcon />
-          </button>
-        </header>
-
-        <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-3">
-          <div className="px-2 pb-1.5 text-[10.5px] font-bold uppercase tracking-[0.10em] text-[var(--color-ink-3)]">
-            On the tab bar ({onBar.length} of {MAX_TABS})
-          </div>
-          <ul className="flex flex-col gap-1.5">
-            {onBar.length === 0 && (
-              <li className="rounded-[12px] border border-dashed border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-3 text-center text-[12.5px] text-[var(--color-ink-2)]">
-                Add a destination below to put it on the tab bar.
-              </li>
-            )}
-            {onBar.map((d, i) => (
-              <li
-                key={d.href}
-                className="flex items-center gap-2 rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-2.5"
-              >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--color-paper-2)] text-[var(--color-ink-2)]">
-                  <d.icon active />
-                </span>
-                <span className="flex-1 truncate text-[14px] font-medium text-[var(--color-ink)]">
-                  {d.label}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => move(d.href, -1)}
-                  disabled={i === 0}
-                  aria-label={`Move ${d.label} up`}
-                  className="flex h-11 w-11 -mr-1.5 items-center justify-center rounded-full text-[var(--color-ink-2)] disabled:opacity-30"
-                >
-                  <ArrowUpIcon />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => move(d.href, 1)}
-                  disabled={i === onBar.length - 1}
-                  aria-label={`Move ${d.label} down`}
-                  className="flex h-11 w-11 -mr-1.5 items-center justify-center rounded-full text-[var(--color-ink-2)] disabled:opacity-30"
-                >
-                  <ArrowDownIcon />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => remove(d.href)}
-                  aria-label={`Remove ${d.label} from tab bar`}
-                  className="flex h-11 w-11 -mr-1.5 items-center justify-center rounded-full text-[var(--color-maple)]"
-                >
-                  <CloseIcon />
-                </button>
-              </li>
-            ))}
-          </ul>
-
-          {offBar.length > 0 && (
-            <>
-              <div className="mt-4 px-2 pb-1.5 text-[10.5px] font-bold uppercase tracking-[0.10em] text-[var(--color-ink-3)]">
-                Available destinations
-              </div>
-              <ul className="flex flex-col gap-1.5">
-                {offBar.map((d) => (
-                  <li
-                    key={d.href}
-                    className="flex items-center gap-2 rounded-[12px] border border-[var(--color-hair)] bg-[var(--color-paper-2)] px-3 py-2.5"
-                  >
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--color-paper)] text-[var(--color-ink-3)]">
-                      <d.icon active={false} />
-                    </span>
-                    <span className="flex-1 truncate text-[14px] font-medium text-[var(--color-ink-2)]">
-                      {d.label}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => add(d.href)}
-                      disabled={full}
-                      title={full ? `Tab bar is full (max ${MAX_TABS}). Remove one first.` : 'Add to tab bar'}
-                      className="rounded-full border border-[var(--color-hair)] bg-[var(--color-paper)] px-3 py-1 text-[12px] font-semibold text-[var(--color-ink)] disabled:opacity-40"
-                    >
-                      + Add
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </div>
-
-        <footer className="flex items-center justify-between gap-3 border-t border-[var(--color-hair)] px-5 py-3.5 sm:px-6 sm:py-4">
-          <button
-            type="button"
-            onClick={() => setDraft(DEFAULT_TABS)}
-            className="-mx-2 inline-flex min-h-[44px] items-center px-2 text-[12.5px] font-semibold text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
-          >
-            Reset to default
-          </button>
-          <div className="flex gap-2">
-            <Button type="button" variant="secondary" size="sm" onClick={onCancel}>
-              Cancel
-            </Button>
-            <Button type="button" variant="primary" size="sm" onClick={() => onSave(draft)}>
-              Save
-            </Button>
-          </div>
-        </footer>
-      </div>
-    </>
   )
 }
 
@@ -859,48 +770,6 @@ function NavGroup({
                   (active
                     ? 'bg-[var(--color-paper)] font-semibold text-[var(--color-ink)] shadow-[var(--shadow-card)]'
                     : 'font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-paper-2)] hover:text-[var(--color-ink)]')
-                }
-              >
-                <span>{item.label}</span>
-                {active && <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-leaf)]" />}
-              </Link>
-            </li>
-          )
-        })}
-      </ul>
-    </div>
-  )
-}
-
-function SheetGroup({
-  label,
-  items,
-  pathname,
-  onNav,
-}: {
-  label: string
-  items: ReadonlyArray<{ href: string; label: string }>
-  pathname: string
-  onNav: () => void
-}) {
-  return (
-    <div className="mt-3">
-      <div className="mb-1.5 px-3 text-[10.5px] font-bold uppercase tracking-[0.10em] text-[var(--color-ink-3)]">
-        {label}
-      </div>
-      <ul className="flex flex-col gap-0.5">
-        {items.map((item) => {
-          const active = isActive(pathname, item.href)
-          return (
-            <li key={item.href}>
-              <Link
-                href={item.href}
-                onClick={onNav}
-                className={
-                  'flex items-center justify-between rounded-[12px] px-3 py-3 text-[15px] transition-colors ' +
-                  (active
-                    ? 'bg-[var(--color-paper)] font-semibold text-[var(--color-ink)] shadow-[var(--shadow-card)]'
-                    : 'font-medium text-[var(--color-ink-2)]')
                 }
               >
                 <span>{item.label}</span>
@@ -985,9 +854,9 @@ function SharedIcon({ active }: { active: boolean }) {
     </svg>
   )
 }
-function RulesIcon(props: React.SVGProps<SVGSVGElement>) {
+function RulesIcon({ active }: { active: boolean }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <svg {...iconProps(false)} strokeWidth={active ? 2.2 : 1.7} aria-hidden>
       <path d="M4 6h16M4 12h10M4 18h7" />
       <path d="M17 15l2 2 4-4" />
     </svg>
@@ -1087,27 +956,119 @@ function ChevronLeftIcon() {
     </svg>
   )
 }
-function ArrowUpIcon() {
+function PlusIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M12 19V5M5 12l7-7 7 7" />
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden>
+      <path d="M12 5v14M5 12h14" />
     </svg>
   )
 }
-function ArrowDownIcon() {
+function HoldIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M12 5v14M5 12l7 7 7-7" />
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M9 11V5a1.5 1.5 0 0 1 3 0v6" />
+      <path d="M12 10a1.5 1.5 0 0 1 3 0v2" />
+      <path d="M15 11a1.5 1.5 0 0 1 3 0v4a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-2.7L3.6 14a1.4 1.4 0 0 1 2.3-1.6L9 15" />
+      <circle cx="10.5" cy="6" r="6.5" strokeDasharray="2 3" opacity="0.5" />
     </svg>
   )
 }
-function GridIcon() {
+
+// ─── More sheet tile grid ─────────────────────────────────────────────────
+
+/**
+ * Icon tiles for one nav group in the More sheet. Tap navigates; press-and-
+ * hold (PLACE_HOLD_MS, cancelled by PLACE_MOVE_CANCEL px of travel) hands the
+ * tile to the shell to place on a bottom-bar slot. Tiles are <button>s, not
+ * links: iOS Safari long-pressing a real link opens a page preview that the
+ * hold gesture cannot suppress.
+ */
+function TileGroup({
+  label,
+  items,
+  pathname,
+  onNav,
+  onHold,
+}: {
+  label: string
+  items: ReadonlyArray<Dest>
+  pathname: string
+  onNav: (href: string) => void
+  onHold: (item: Placing) => void
+}) {
+  const holdRef = useRef<{ timer: number; x: number; y: number } | null>(null)
+  // Set once a hold fires so the trailing click is swallowed instead of navigating.
+  const heldRef = useRef(false)
+
+  const clearHold = () => {
+    if (holdRef.current) {
+      window.clearTimeout(holdRef.current.timer)
+      holdRef.current = null
+    }
+  }
+
+  const handlers = (d: Dest) => ({
+    onPointerDown: (e: React.PointerEvent) => {
+      if (e.button !== 0) return
+      heldRef.current = false
+      clearHold()
+      const timer = window.setTimeout(() => {
+        holdRef.current = null
+        heldRef.current = true
+        try { navigator.vibrate?.(10) } catch {}
+        onHold({ href: d.href, label: d.label })
+      }, PLACE_HOLD_MS)
+      holdRef.current = { timer, x: e.clientX, y: e.clientY }
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      const h = holdRef.current
+      if (h && Math.hypot(e.clientX - h.x, e.clientY - h.y) > PLACE_MOVE_CANCEL) clearHold()
+    },
+    onPointerUp: clearHold,
+    onPointerCancel: clearHold,
+    onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+    onClick: (e: React.MouseEvent) => {
+      if (heldRef.current) {
+        heldRef.current = false
+        e.preventDefault()
+        return
+      }
+      onNav(d.href)
+    },
+  })
+
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <rect x="3" y="3" width="7" height="7" rx="1.5" />
-      <rect x="14" y="3" width="7" height="7" rx="1.5" />
-      <rect x="3" y="14" width="7" height="7" rx="1.5" />
-      <rect x="14" y="14" width="7" height="7" rx="1.5" />
-    </svg>
+    <div className="mt-4">
+      <div className="mb-2 px-1 text-[10.5px] font-bold uppercase tracking-[0.10em] text-[var(--color-ink-3)]">
+        {label}
+      </div>
+      <ul className="grid grid-cols-3 gap-2">
+        {items.map((d) => {
+          const active = isActive(pathname, d.href)
+          const Icon = d.icon
+          return (
+            <li key={d.href}>
+              <button
+                type="button"
+                draggable={false}
+                aria-current={active ? 'page' : undefined}
+                className={
+                  'maple-tile flex min-h-[84px] w-full touch-manipulation select-none flex-col items-center justify-center gap-2 rounded-[14px] border px-1.5 py-3 text-center transition-[transform,background-color] duration-150 active:scale-[0.97] ' +
+                  (active
+                    ? 'border-[var(--color-leaf-soft)] bg-[var(--color-leaf-tint)] text-[var(--color-leaf)]'
+                    : 'border-[var(--color-hair)] bg-[var(--color-paper)] text-[var(--color-ink)]')
+                }
+                {...handlers(d)}
+              >
+                <span className={active ? 'text-[var(--color-leaf)]' : 'text-[var(--color-ink-2)]'}>
+                  <Icon active={active} />
+                </span>
+                <span className="text-[12px] font-medium leading-tight">{d.label}</span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
   )
 }

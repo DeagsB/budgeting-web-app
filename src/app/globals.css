@@ -467,3 +467,33 @@ body {
     min-height: 34px;
   }
 }
+
+/* ─── Bottom bar slot placement ───
+   While a More-sheet tile is being placed, lock selection document-wide (the
+   finger is on app chrome; iOS would otherwise start selecting page text) and
+   pulse the three slots so they read as drop targets. */
+html.maple-place-lock,
+html.maple-place-lock * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+.maple-slot-ring {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--color-leaf-tint);
+  animation: maple-place-pulse 1.1s ease-in-out infinite;
+}
+@keyframes maple-place-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-leaf) 50%, transparent); }
+  50%      { box-shadow: 0 0 0 7px color-mix(in srgb, var(--color-leaf) 0%, transparent); }
+}
+/* More-sheet tiles: never a drag image, never an iOS callout. */
+.maple-tile {
+  -webkit-user-drag: none;
+  -webkit-tap-highlight-color: transparent;
+}

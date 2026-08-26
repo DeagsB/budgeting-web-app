@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useState, useTransition, type ReactNode } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { Sheet } from '@/components/ui/sheet'
-import { Fab } from '@/components/ui/fab'
+import { useQuickAddTarget } from '@/lib/quick-add'
 import { FilterSheet, FilterSection, FilterRadioRow } from '@/components/ui/filter-sheet'
 import { SegmentedControl } from '@/components/ui/segmented-control'
 import { MapleLabel } from '@/components/ui/label'
@@ -24,7 +24,9 @@ type Draft = { member: string; account: string; category: string }
  *
  * Mobile (<md): search + a "Filter" pill (opens a FilterSheet with member /
  * account / category) + a "..." overflow for secondary actions; active filters
- * render as removable chips under the search; the add form opens from the FAB.
+ * render as removable chips under the search; the add form opens from the tab
+ * bar's centre "+" (or `?add=1`, which the "+" uses when arriving from another
+ * screen).
  * Desktop (md+): the inline chip rail + category select + "Add transaction".
  */
 export function TxControls({
@@ -55,8 +57,25 @@ export function TxControls({
   const router = useRouter()
   const pathname = usePathname()
   const [, startNav] = useTransition()
+  const searchParams = useSearchParams()
   const [addOpen, setAddOpen] = useState(false)
   const [filterOpen, setFilterOpen] = useState(false)
+  const canAdd = accounts.length > 0
+
+  // The tab bar's centre "+" opens the add sheet in place while this screen
+  // is mounted; from elsewhere it lands here with `?add=1`.
+  useQuickAddTarget(canAdd ? () => setAddOpen(true) : null)
+  const addParam = searchParams.get('add')
+  useEffect(() => {
+    if (addParam !== '1') return
+    if (canAdd) setAddOpen(true) // eslint-disable-line react-hooks/set-state-in-effect
+    // Strip the one-shot flag so a refresh / back doesn't reopen the sheet.
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('add')
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addParam])
   const [draft, setDraft] = useState<Draft>({ member: '', account: '', category: '' })
   const [searchValue, setSearchValue] = useState(search)
 
@@ -288,9 +307,6 @@ export function TxControls({
           )}
         </div>
       )}
-
-      {/* Mobile FAB - opens the same add sheet as the desktop button. */}
-      {accounts.length > 0 && <Fab onClick={() => setAddOpen(true)} />}
 
       <FilterSheet
         open={filterOpen}

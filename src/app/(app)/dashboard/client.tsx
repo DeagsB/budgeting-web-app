@@ -14,7 +14,7 @@ import { StatTile } from '@/components/ui/stat-tile'
 import { Reveal } from '@/components/ui/reveal'
 import { PrivacyBlur } from '@/components/ui/privacy-blur'
 import { useCountUp } from '@/components/ui/count-up'
-import { Fab } from '@/components/ui/fab'
+import { useQuickAddTarget } from '@/lib/quick-add'
 import { AddTransactionForm } from '@/app/(app)/transactions/add-form'
 import { colorForCategory } from '@/lib/category-colors'
 
@@ -146,6 +146,8 @@ export function DashboardClient({
 }) {
   const [hidden, setHidden] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
+  // The tab bar's centre "+" opens this sheet while the dashboard is mounted.
+  useQuickAddTarget(accounts.length > 0 ? () => setAddOpen(true) : null)
   const [range, setRange] = useState<RangeId>('1Y')
   const [scrubIdx, setScrubIdx] = useState<number | null>(null)
   const [flipped, setFlipped] = useState<Record<string, boolean>>({})
@@ -897,10 +899,10 @@ export function DashboardClient({
         </div>
       )}
 
-      {/* Primary action. Mobile: the floating leaf FAB (bottom-right, above
-          the tab bar). Desktop: an inline leaf button top-right of the page so
-          it stays reachable even when the greeting widget is hidden. Both open
-          the same add-transaction sheet. */}
+      {/* Primary action. Mobile: the tab bar's centre "+" (registered above).
+          Desktop: an inline leaf button top-right of the page so it stays
+          reachable even when the greeting widget is hidden. Both open the
+          same add-transaction sheet. */}
       {accounts.length > 0 && (
         <>
           <div className="hidden items-center justify-end md:flex">
@@ -909,7 +911,6 @@ export function DashboardClient({
               Add transaction
             </Button>
           </div>
-          <Fab onClick={() => setAddOpen(true)} />
           <Sheet open={addOpen} onClose={() => setAddOpen(false)} title="Add transaction">
             <AddTransactionForm
               defaultDate={currentMonthISO}

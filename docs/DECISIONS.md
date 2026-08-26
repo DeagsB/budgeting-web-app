@@ -382,3 +382,24 @@ No raw PostgREST message reaches the UI; terse internal assertions were reworded
 - *Negative liability balances with display-time negation*: matched Plaid's sign at the storage layer badly and made every consumer flip signs.
 - *Keeping `skipWaiting`*: the zero-friction update is not worth a white screen the first time a user taps a stale chunk.
 - *A shell-level add-transaction sheet*: each page already loads the accounts/categories it needs; a shared sheet would have duplicated the queries.
+
+## 2026-08-26 - Tab bar: centre "+", icon-grid More sheet, press-and-hold to place
+
+**Bottom bar is three slots + a centre "+" + More.**
+The per-page floating FAB is gone; the "+" lives in the bar's centre column (76px) where a thumb rests.
+Slot count is fixed at three so the bar never crowds and the "+" always has the same neighbours.
+Storage key bumped to `maple.tabBar.v2`; `normalizeTabs` pads or trims any stored list to exactly three known routes.
+
+**"+" is wired through `QuickAddProvider` (`src/lib/quick-add.tsx`).**
+Screens that host an add-transaction sheet (dashboard, transactions) register a handler with `useQuickAddTarget`, so the "+" opens the sheet in place.
+Anywhere else it routes to `/transactions?add=1`; the transactions controls open the sheet on arrival and strip the flag with `router.replace` so back/refresh do not reopen it.
+This keeps the earlier decision that the sheet is page-owned (each page already loads the accounts and categories it needs).
+
+**More sheet is an icon tile grid; press-and-hold a tile to place it.**
+Mirrors the Personal Time Tracker pattern: hold 350ms (10px of travel cancels) -> sheet closes, the three slots pulse as drop targets, a pill names the item, and a tap on a slot replaces it.
+Tiles are `<button>`s rather than links because iOS Safari long-pressing a real link opens a page preview the gesture cannot suppress.
+The list-based "Customize tabs" editor was removed; "Reset tabs" in the sheet footer restores the defaults.
+
+**Considered + rejected:**
+- *Drag-and-drop from the sheet onto the bar*: the sheet covers the bar, so the drag would have to cross a dismissing overlay; tap-to-place is one fewer thing to hold.
+- *Keeping the FAB bottom-right as well as the centre "+"*: two entry points for one action.
