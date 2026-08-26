@@ -7,6 +7,7 @@ export type NotificationPrefs = {
   large_threshold_cents: number
   budget_overspend: boolean
   unmatched_alert: boolean
+  settlement_period: boolean
 }
 
 export const DEFAULT_PREFS: NotificationPrefs = {
@@ -15,6 +16,7 @@ export const DEFAULT_PREFS: NotificationPrefs = {
   large_threshold_cents: 20000,
   budget_overspend: true,
   unmatched_alert: false,
+  settlement_period: true,
 }
 
 export type SavePrefsState = { ok: true } | { error: string } | undefined

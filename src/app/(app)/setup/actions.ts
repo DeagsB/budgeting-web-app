@@ -168,3 +168,17 @@ export async function saveSplitWeights(fd: FormData): Promise<{ ok: true } | { e
   revalidatePath('/rules')
   return { ok: true }
 }
+
+// ───────── settlement close day ─────────
+
+export async function updateCloseDay(fd: FormData): Promise<{ ok: true } | { error: string }> {
+  const h = await hh()
+  if (!h) return { error: 'Not authorized.' }
+  const day = Math.floor(Number(String(fd.get('close_day') ?? '')))
+  if (!Number.isFinite(day) || day < 1 || day > 28) return { error: 'Pick a day between 1 and 28.' }
+  const { error } = await h.supabase.from('households').update({ settlement_close_day: day }).eq('id', h.ctx.householdId)
+  if (error) return { error: error.message }
+  revalidatePath('/setup')
+  revalidatePath('/settlements')
+  return { ok: true }
+}

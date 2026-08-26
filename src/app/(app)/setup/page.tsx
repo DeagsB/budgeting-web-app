@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Card } from '@/components/ui/card'
 import { MapleLabel } from '@/components/ui/label'
 import { HouseholdForm } from './household-form'
+import { CloseDayForm } from './close-day-form'
 import { MembersList } from './members-list'
 import { SplitWeightsForm } from './split-weights-form'
 import { CategoriesList } from './categories-list'
@@ -20,7 +21,7 @@ export default async function SetupPage() {
   const supabase = await createClient()
 
   const [{ data: household }, { data: members }, { data: categories }, { data: invites }] = await Promise.all([
-    supabase.from('households').select('id, name, notification_prefs').eq('id', ctx.householdId).single(),
+    supabase.from('households').select('id, name, notification_prefs, settlement_close_day').eq('id', ctx.householdId).single(),
     supabase
       .from('members')
       .select('id, display_name, sort_order, archived_at, user_id, split_weight')
@@ -54,6 +55,9 @@ export default async function SetupPage() {
       <Card padding="lg">
         <MapleLabel>Household</MapleLabel>
         <HouseholdForm id={household?.id ?? ''} name={household?.name ?? ''} />
+        <div className="mt-4 border-t border-hair pt-4">
+          <CloseDayForm closeDay={Number(household?.settlement_close_day ?? 28)} />
+        </div>
       </Card>
 
       <Card padding="lg">

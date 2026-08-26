@@ -177,6 +177,12 @@ export function NotificationSettings({ prefs }: { prefs: NotificationPrefs }) {
           hint="No rule matched — so you can add one."
           defaultChecked={prefs.unmatched_alert}
         />
+        <Toggle
+          name="settlement_period"
+          label="Shared expenses closed — time to settle"
+          hint="Each member gets their own “you owe” on the close day."
+          defaultChecked={prefs.settlement_period}
+        />
 
         <div className="mt-1 flex items-center gap-3" aria-live="polite">
           <Button type="submit" variant="secondary" size="sm" disabled={prefPending}>

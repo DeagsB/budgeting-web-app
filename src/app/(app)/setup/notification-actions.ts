@@ -22,6 +22,7 @@ export async function saveNotificationPrefs(
         : DEFAULT_PREFS.large_threshold_cents,
     budget_overspend: fd.get('budget_overspend') === 'on',
     unmatched_alert: fd.get('unmatched_alert') === 'on',
+    settlement_period: fd.get('settlement_period') === 'on',
   }
 
   const supabase = await createClient()

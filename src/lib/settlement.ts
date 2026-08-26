@@ -15,6 +15,11 @@
 //
 // Settlements are straightforward: from_member paid to_member; subtract
 // that from the running "from owes to" balance.
+//
+// Periods (see 20260826000006_settlement_periods.sql): every share and every
+// settlement belongs to exactly one bucket - the period it was stamped with,
+// or the open period. The open period's statement adds the carry-forward:
+// whatever each closed period still nets to after its own settlements.
 
 export type TxnLite = {
   id: string
@@ -149,4 +154,159 @@ export function totalSharedByTransaction(shares: ShareLite[]): Map<string, numbe
   const m = new Map<string, number>()
   for (const s of shares) m.set(s.transaction_id, (m.get(s.transaction_id) ?? 0) + s.amount_cents)
   return m
+}
+
+// ─── Periods ───────────────────────────────────────────────────────────────
+
+export type PeriodStatus = 'open' | 'closed' | 'settled'
+
+export type PeriodLite = {
+  id: string
+  period_start: string // YYYY-MM-DD
+  period_end: string | null // null while open
+  status: PeriodStatus
+}
+
+export type ShareWithPeriod = ShareLite & { settlement_period_id: string | null }
+export type SettlementWithPeriod = SettlementLite & { period_id: string | null; settled_on: string }
+
+/** Bucket for a share: its stamp, else the open period. */
+export function shareBucket(s: ShareWithPeriod, openId: string): string {
+  return s.settlement_period_id ?? openId
+}
+
+/**
+ * Bucket for a settlement: its period, else (legacy rows) the closed period
+ * whose date range contains settled_on, else the open period.
+ */
+export function settlementBucket(st: SettlementWithPeriod, periods: PeriodLite[], openId: string): string {
+  if (st.period_id) return st.period_id
+  for (const p of periods) {
+    if (p.status === 'open' || !p.period_end) continue
+    if (st.settled_on >= p.period_start && st.settled_on <= p.period_end) return p.id
+  }
+  return openId
+}
+
+/** One pass over all rows → per-period pair balances. */
+export function computeBalancesByPeriod(input: {
+  periods: PeriodLite[]
+  transactions: TxnLite[]
+  shares: ShareWithPeriod[]
+  settlements: SettlementWithPeriod[]
+}): Map<string, Map<string, PairBalance>> {
+  const open = input.periods.find((p) => p.status === 'open')
+  const openId = open?.id ?? '__open__'
+  const sharesBy = new Map<string, ShareWithPeriod[]>()
+  const settsBy = new Map<string, SettlementWithPeriod[]>()
+  for (const s of input.shares) {
+    const k = shareBucket(s, openId)
+    ;(sharesBy.get(k) ?? sharesBy.set(k, []).get(k)!).push(s)
+  }
+  for (const st of input.settlements) {
+    const k = settlementBucket(st, input.periods, openId)
+    ;(settsBy.get(k) ?? settsBy.set(k, []).get(k)!).push(st)
+  }
+  const out = new Map<string, Map<string, PairBalance>>()
+  const ids = new Set<string>([...input.periods.map((p) => p.id), ...sharesBy.keys(), ...settsBy.keys()])
+  for (const id of ids) {
+    out.set(
+      id,
+      computePairBalances({
+        transactions: input.transactions,
+        shares: sharesBy.get(id) ?? [],
+        settlements: settsBy.get(id) ?? [],
+      }),
+    )
+  }
+  return out
+}
+
+export type PeriodStatement = {
+  period: PeriodLite
+  /** Net lines for this period. For the open period this INCLUDES carry-forward. */
+  lines: NetBalance[]
+  /** Only for the open period: what closed periods still net to. */
+  carryForward: NetBalance[]
+  totalOwedCents: number
+  totalSettledCents: number
+  totalNetCents: number
+}
+
+function mergePairs(into: Map<string, PairBalance>, from: Map<string, PairBalance>): void {
+  for (const [k, p] of from) {
+    const cur = into.get(k)
+    if (cur) {
+      cur.owed_cents += p.owed_cents
+      cur.settled_cents += p.settled_cents
+      cur.net_cents = cur.owed_cents - cur.settled_cents
+    } else {
+      into.set(k, { ...p })
+    }
+  }
+}
+
+/**
+ * Statement for one period. Closed/settled periods show their own live net
+ * (edits after close still count, and flow into the open period's
+ * carry-forward). The open period shows its own shares plus everything closed
+ * periods still owe after their settlements, so nothing is ever lost.
+ */
+export function computePeriodStatement(
+  periodId: string,
+  byPeriod: Map<string, Map<string, PairBalance>>,
+  periods: PeriodLite[],
+): PeriodStatement {
+  const period = periods.find((p) => p.id === periodId)
+  if (!period) throw new Error(`Unknown period ${periodId}`)
+  const own = byPeriod.get(periodId) ?? new Map<string, PairBalance>()
+
+  let carryForward: NetBalance[] = []
+  let merged = own
+  if (period.status === 'open') {
+    const carry = new Map<string, PairBalance>()
+    for (const p of periods) {
+      if (p.id === periodId || p.status === 'open') continue
+      mergePairs(carry, byPeriod.get(p.id) ?? new Map())
+    }
+    carryForward = netUnorderedPairs(carry)
+    merged = new Map<string, PairBalance>()
+    mergePairs(merged, own)
+    mergePairs(merged, carry)
+  }
+
+  const lines = netUnorderedPairs(merged)
+  const totalOwedCents = Array.from(own.values()).reduce((s, p) => s + Math.max(0, p.owed_cents), 0)
+  const totalSettledCents = Array.from(own.values()).reduce((s, p) => s + p.settled_cents, 0)
+  const totalNetCents = lines.reduce((s, l) => s + l.net_cents, 0)
+  return { period, lines, carryForward, totalOwedCents, totalSettledCents, totalNetCents }
+}
+
+// ─── Close-day math (cron) ─────────────────────────────────────────────────
+
+/** The auto-close date for the month containing `todayISO`. closeDay is 1..28. */
+export function closeDateForMonth(todayISO: string, closeDay: number): string {
+  const day = Math.min(28, Math.max(1, Math.floor(closeDay)))
+  return `${todayISO.slice(0, 7)}-${String(day).padStart(2, '0')}`
+}
+
+/**
+ * Close automatically when today is on/after the month's close date and no
+ * period was already closed this calendar month (a manual "close now" earlier
+ * in the month counts). Idempotent across repeated cron runs.
+ */
+export function shouldAutoClose(args: { todayISO: string; closeDay: number; lastClosedAtISO: string | null }): boolean {
+  const closeDate = closeDateForMonth(args.todayISO, args.closeDay)
+  if (args.todayISO < closeDate) return false
+  if (args.lastClosedAtISO && args.lastClosedAtISO.slice(0, 7) === args.todayISO.slice(0, 7)) return false
+  return true
+}
+
+export function nextAutoCloseDate(todayISO: string, closeDay: number, lastClosedAtISO: string | null): string {
+  if (shouldAutoClose({ todayISO, closeDay, lastClosedAtISO })) return closeDateForMonth(todayISO, closeDay)
+  const thisMonth = closeDateForMonth(todayISO, closeDay)
+  if (todayISO < thisMonth && !(lastClosedAtISO && lastClosedAtISO.slice(0, 7) === todayISO.slice(0, 7))) return thisMonth
+  const d = new Date(todayISO.slice(0, 7) + '-01T00:00:00Z')
+  d.setUTCMonth(d.getUTCMonth() + 1)
+  return closeDateForMonth(d.toISOString().slice(0, 10), closeDay)
 }

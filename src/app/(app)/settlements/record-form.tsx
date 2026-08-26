@@ -16,10 +16,13 @@ export function RecordSettlementForm({
   members,
   defaultDate,
   suggestion,
+  periodId = null,
 }: {
   members: Member[]
   defaultDate: string
   suggestion: Suggestion
+  /** Open period the payment attaches to. */
+  periodId?: string | null
 }) {
   const [state, formAction, pending] = useActionState<SettlementState, FormData>(
     recordSettlement,
@@ -34,6 +37,7 @@ export function RecordSettlementForm({
 
   return (
     <form action={formAction} className="mt-4 flex flex-col gap-4">
+      {periodId && <input type="hidden" name="period_id" value={periodId} />}
       <div className="grid gap-3 sm:grid-cols-6">
         <Field label="From" span={2}>
           <select name="from_member_id" defaultValue={defaultFrom} className="maple-select">
