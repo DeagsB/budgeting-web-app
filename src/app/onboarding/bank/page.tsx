@@ -1,19 +1,26 @@
 import { createClient } from '@/lib/supabase/server'
 import { PLAID_MAX_ITEMS } from '@/lib/plaid'
 import { MapleLabel } from '@/components/ui/label'
+import { PlaidConnect } from '@/components/plaid/plaid-connect'
 import { OnboardingShell } from '../shell'
 import { StepFooter } from '../step-footer'
 import { requireOnboardingStep } from '../guard'
-import { BankConnect } from './bank-connect'
 import { FirstAccountForm } from './form'
 
 export const dynamic = 'force-dynamic'
 
+/** "A, B, C and 12 more" - keeps the summary line one or two lines long. */
+function nameList(names: string[], max = 4): string {
+  if (names.length <= max) return names.join(', ')
+  return `${names.slice(0, max).join(', ')} and ${names.length - max} more`
+}
+
 /**
  * Onboarding step 2 - where the money lives. Connect a bank through Plaid
  * (accounts are created from the mapping, transactions sync in) or add one
- * account by hand. Revisitable until the flow is finished, so a second bank
- * can be added; "Skip for now" ends the guided flow.
+ * account by hand. Linking or adding an account never navigates away: the
+ * step re-renders so a second bank can be connected, and the reader moves on
+ * with Continue. Revisitable from later steps; "Skip for now" ends the flow.
  */
 export default async function OnboardingBankPage() {
   const { ctx, state } = await requireOnboardingStep('bank')
@@ -40,6 +47,8 @@ export default async function OnboardingBankPage() {
     !!process.env.PLAID_TOKEN_KEY
   const linkedCount = (items ?? []).length
   const hasAccounts = state.accountCount > 0
+  const hasBank = linkedCount > 0
+  const connectLabel = hasBank ? 'Connect another bank' : 'Connect a bank'
 
   return (
     <OnboardingShell
@@ -66,7 +75,7 @@ export default async function OnboardingBankPage() {
           <MapleLabel>Connect a bank</MapleLabel>
           <div className="mt-3">
             {plaidConfigured ? (
-              <BankConnect
+              <PlaidConnect
                 plaidConfigured={plaidConfigured}
                 atCap={linkedCount >= PLAID_MAX_ITEMS}
                 maxItems={PLAID_MAX_ITEMS}
@@ -79,6 +88,9 @@ export default async function OnboardingBankPage() {
                   plaid_item_id: a.plaid_item_id ?? null,
                 }))}
                 canOwn={ctx!.memberId !== null}
+                variant="plain"
+                returnTo="/onboarding/bank"
+                connectLabel={connectLabel}
               />
             ) : (
               <p className="rounded-[12px] bg-cream-2 px-3 py-2 text-[13px] leading-relaxed text-ink-2">
@@ -89,13 +101,30 @@ export default async function OnboardingBankPage() {
           </div>
         </div>
 
-        {hasAccounts && (
-          <div className="rounded-[16px] border border-hair bg-cream-2 px-4 py-3 text-[13px] leading-relaxed text-ink-2">
-            {state.accountCount === 1 ? '1 account' : `${state.accountCount} accounts`} so far:{' '}
-            <span className="font-semibold text-ink">
-              {(accounts ?? []).map((a) => a.name).join(', ')}
-            </span>
-            . Connect another bank, add one by hand, or continue.
+        {(hasBank || hasAccounts) && (
+          <div
+            aria-live="polite"
+            className="rounded-[16px] border border-hair bg-cream-2 px-4 py-3 text-[13px] leading-relaxed text-ink-2"
+          >
+            {hasBank && (
+              <>
+                {linkedCount === 1 ? '1 bank' : `${linkedCount} banks`} connected:{' '}
+                <span className="font-semibold text-ink">
+                  {nameList((items ?? []).map((i) => i.institution_name ?? 'Bank'))}
+                </span>
+                .{' '}
+              </>
+            )}
+            {hasAccounts && (
+              <>
+                {state.accountCount === 1 ? '1 account' : `${state.accountCount} accounts`} so far:{' '}
+                <span className="font-semibold text-ink">
+                  {nameList((accounts ?? []).map((a) => a.name))}
+                </span>
+                .{' '}
+              </>
+            )}
+            Connect another bank, add one by hand, or continue.
           </div>
         )}
 

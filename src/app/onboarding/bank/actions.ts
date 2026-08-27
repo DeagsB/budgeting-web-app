@@ -1,21 +1,21 @@
 'use server'
 
-import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { ACCOUNT_TYPES, type AccountType } from '@/lib/domain'
 import { humanizeDbError } from '@/lib/errors'
 
-export type FirstAccountState = { error: string } | undefined
+export type FirstAccountState = { error: string } | { ok: true } | undefined
 
 const TYPES = new Set<AccountType>(ACCOUNT_TYPES.map((t) => t.value))
 
 /**
- * Onboarding step 2: create the household's first account. Same insert shape
- * as accounts/actions.ts `createAccount`, with the ownership defaulted to
+ * Onboarding step 2: create an account by hand. Same insert shape as
+ * accounts/actions.ts `createAccount`, with the ownership defaulted to
  * `shared` (a one-member household has nobody else to assign it to yet) and
- * no last-four routing hint. Moves on to step 3 (invite) on success.
+ * no last-four routing hint. Stays on the step on success so another account
+ * - or another bank - can be added; the reader moves on with Continue.
  */
 export async function createFirstAccount(
   _prev: FirstAccountState,
@@ -50,5 +50,5 @@ export async function createFirstAccount(
   if (error) return { error: humanizeDbError(error, { entity: 'account name' }) }
 
   revalidatePath('/', 'layout')
-  redirect('/onboarding/invite')
+  return { ok: true }
 }

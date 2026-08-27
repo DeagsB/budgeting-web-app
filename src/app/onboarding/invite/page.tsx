@@ -47,7 +47,14 @@ export default async function OnboardingInvitePage() {
       }
       intro="Invite a partner, roommate or family member. Each gets their own login and sees only their accounts plus anything marked shared."
       eyebrow="Optional - you can invite people any time from Setup."
-      footer={<StepFooter continueHref="/onboarding/budget" skip={{ href: '/onboarding/budget' }} />}
+      footer={
+        <StepFooter
+          continueHref="/onboarding/budget"
+          backHref="/onboarding/bank"
+          backLabel="Back to accounts"
+          skip={{ href: '/onboarding/budget' }}
+        />
+      }
       footnote="Invites are one-time links that expire in 7 days. Nobody sees your accounts until they accept."
     >
       <div className="flex flex-col gap-6">

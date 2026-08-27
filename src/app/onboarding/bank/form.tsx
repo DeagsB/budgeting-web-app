@@ -15,6 +15,20 @@ export function FirstAccountForm() {
   const [name, setName] = useState('')
   const [cents, setCents] = useState<number | null>(0)
 
+  // The action stays on the step so another account - or another bank - can be
+  // added. Clear the fields when a save lands, by adjusting state during the
+  // render that first sees the new action result (the type select keeps its
+  // value on purpose - the next account is usually the same kind).
+  const saved = !!state && 'ok' in state
+  const [seen, setSeen] = useState(state)
+  if (state !== seen) {
+    setSeen(state)
+    if (saved) {
+      setName('')
+      setCents(0)
+    }
+  }
+
   const ready = name.trim().length > 0 && cents !== null
 
   return (
@@ -60,7 +74,7 @@ export function FirstAccountForm() {
         </div>
       </Field>
 
-      {state?.error && (
+      {state && 'error' in state && (
         <div
           role="alert"
           className="rounded-[12px] bg-maple-soft px-3 py-2 text-[13px] font-medium text-maple"
