@@ -20,10 +20,10 @@ function siteUrl(): string {
 }
 
 /**
- * Owner/admin invites an email to take over an unlinked member. The row is
- * inserted through the RLS client (policy enforces role + member state); the
- * email goes out through Supabase Auth. Whatever happens with email, the raw
- * link is returned once so it can be shared by hand.
+ * Owner/admin invites an email address. Nothing is created for the invitee
+ * here: the member row appears when they accept, and they name it themselves
+ * during their own onboarding. Whatever happens with email, the raw link is
+ * returned once so it can be shared by hand.
  */
 export async function inviteMember(_prev: InviteState, fd: FormData): Promise<InviteState> {
   const ctx = await getHouseholdContext()
@@ -33,21 +33,19 @@ export async function inviteMember(_prev: InviteState, fd: FormData): Promise<In
   const email = String(fd.get('email') ?? '')
     .trim()
     .toLowerCase()
-  const memberId = String(fd.get('member_id') ?? '')
   const role = String(fd.get('role') ?? 'member') === 'admin' ? 'admin' : 'member'
   if (!email.includes('@')) return { error: 'Enter a valid email address.' }
-  if (!memberId) return { error: 'Pick which member this person is.' }
 
-  return createInvitation(ctx, { memberId, email, role })
+  return createInvitation(ctx, { email, role })
 }
 
 /**
- * Core of inviteMember, shared with onboarding (which creates the member slot
- * first). Caller has already authorised `ctx` and normalised the inputs.
+ * Core of inviteMember, shared with onboarding step 3. Caller has already
+ * authorised `ctx` and normalised the inputs.
  */
 export async function createInvitation(
   ctx: HouseholdContext,
-  { memberId, email, role }: { memberId: string; email: string; role: 'member' | 'admin' },
+  { email, role }: { email: string; role: 'member' | 'admin' },
 ): Promise<InviteState> {
   const supabase = await createClient()
   const { data: me } = await supabase.auth.getUser()
@@ -55,28 +53,18 @@ export async function createInvitation(
     return { error: 'That is your own email address.' }
   }
 
-  const { data: member } = await supabase
-    .from('members')
-    .select('id, display_name, user_id, archived_at')
-    .eq('id', memberId)
-    .eq('household_id', ctx.householdId)
-    .maybeSingle()
-  if (!member) return { error: 'Member not found.' }
-  if (member.user_id) return { error: 'That member already has a login.' }
-  if (member.archived_at) return { error: 'Unarchive the member first.' }
-
-  // Replace any live invite for this slot so "Resend" is just "invite again".
+  // Replace any live invite for this address so "Resend" is just "invite again".
   await supabase
     .from('household_invitations')
     .update({ revoked_at: new Date().toISOString() })
-    .eq('member_id', memberId)
+    .eq('household_id', ctx.householdId)
+    .eq('email', email)
     .is('accepted_at', null)
     .is('revoked_at', null)
 
   const raw = generateInviteToken()
   const { error: insErr } = await supabase.from('household_invitations').insert({
     household_id: ctx.householdId,
-    member_id: memberId,
     email,
     role,
     token_hash: hashInviteToken(raw),
@@ -99,7 +87,6 @@ export async function createInvitation(
   ])
   const mail = householdInviteEmail({
     householdName: (hh?.name as string | undefined) ?? 'your household',
-    memberName: member.display_name as string,
     inviterName: ((me_?.display_name as string | null | undefined) ?? null) || null,
     inviteUrl: link,
   })

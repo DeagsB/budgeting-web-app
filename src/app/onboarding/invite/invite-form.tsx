@@ -9,8 +9,9 @@ import type { InviteState } from '@/app/(app)/setup/invite-actions'
 import { inviteNewMember } from './actions'
 
 /**
- * Name + email in one row. After a successful send the one-time link shows
- * (email delivery is best-effort); "Invite someone else" resets the form.
+ * An email address, nothing else - whoever accepts picks their own name when
+ * they join. After a successful send the one-time link shows (email delivery
+ * is best-effort); "Invite someone else" resets the form.
  */
 export function InviteForm() {
   const router = useRouter()
@@ -41,30 +42,18 @@ export function InviteForm() {
 
   return (
     <form key={round} action={formAction} className="flex flex-col gap-5">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Their name" hint="How they show up in splits and reports.">
-          <input
-            name="member_name"
-            type="text"
-            required
-            maxLength={80}
-            placeholder="Sam"
-            className="maple-input"
-            autoComplete="off"
-          />
-        </Field>
-        <Field label="Email">
-          <input
-            name="email"
-            type="email"
-            inputMode="email"
-            autoComplete="email"
-            required
-            placeholder="them@domain.ca"
-            className="maple-input"
-          />
-        </Field>
-      </div>
+      <Field label="Email" hint="They pick the name the household sees when they join.">
+        <input
+          name="email"
+          type="email"
+          inputMode="email"
+          autoComplete="off"
+          required
+          placeholder="them@domain.ca"
+          className="maple-input"
+          autoFocus
+        />
+      </Field>
 
       {state && 'error' in state && (
         <div role="alert" className="rounded-[12px] bg-maple-soft px-3 py-2 text-[13px] font-medium text-maple">

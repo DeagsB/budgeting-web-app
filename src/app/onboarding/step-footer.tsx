@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useTransition } from 'react'
 import { Button } from '@/components/ui/button'
 import { completeOnboarding } from './complete-actions'
+import { finishMemberOnboarding } from './member-actions'
 
 /**
  * Row under a step card: an optional Continue link on the right, an optional
@@ -11,6 +12,9 @@ import { completeOnboarding } from './complete-actions'
  * (sets the completion flag, lands on the dashboard); `skip: { href }` just
  * moves on. Back exists so an earlier step stays reachable - notably step 2,
  * to connect another bank after moving past it.
+ *
+ * `skip: 'finish'` ends the owner's flow, `skip: 'finish-member'` ends the
+ * shorter one an invited member walks.
  */
 export function StepFooter({
   continueHref,
@@ -25,17 +29,17 @@ export function StepFooter({
   /** Earlier step to return to, e.g. /onboarding/bank to connect another bank. */
   backHref?: string
   backLabel?: string
-  skip: 'finish' | { href: string }
+  skip: 'finish' | 'finish-member' | { href: string }
   skipLabel?: string
 }) {
   const [pending, start] = useTransition()
 
   const skipEl =
-    skip === 'finish' ? (
+    typeof skip === 'string' ? (
       <button
         type="button"
         disabled={pending}
-        onClick={() => start(() => completeOnboarding())}
+        onClick={() => start(() => (skip === 'finish' ? completeOnboarding() : finishMemberOnboarding()))}
         className="inline-flex min-h-[44px] items-center justify-center px-2 text-[13.5px] font-semibold text-ink-2 transition-colors hover:text-ink disabled:opacity-50"
       >
         {pending ? 'One moment…' : skipLabel}

@@ -4,11 +4,16 @@ import { AcceptForm } from './accept-form'
 
 export const dynamic = 'force-dynamic'
 
-type Preview = { household_name: string; member_name: string; email_hint: string; status: string }
+type Preview = { household_name: string; inviter_name: string | null; email_hint: string; status: string }
 
 /**
- * Landing page for an invitation link. Works signed-out (preview only) and
- * signed-in (explicit Accept). Never mutates on GET.
+ * Landing page for an invitation link. Never mutates on GET.
+ *
+ * Signed out, it previews the household and hands off to sign-up (or sign-in)
+ * carrying `?next=/invite/<token>`; those actions join the household as soon
+ * as the session exists, so the reader goes straight from creating an account
+ * into their own onboarding. The Accept button below is only for someone who
+ * opened the link while already signed in.
  */
 export default async function InvitePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
@@ -53,9 +58,16 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
                 Join <span className="whitespace-nowrap">{preview.household_name}</span>
               </h1>
               <p className="mt-3 text-[14.5px] leading-relaxed text-[var(--color-ink-2)]">
-                You have been invited to track your money as{' '}
-                <strong className="font-semibold text-[var(--color-ink)]">{preview.member_name}</strong>. Your own
-                accounts stay private; the household sees only joint accounts and the transactions you share.
+                {preview.inviter_name ? (
+                  <>
+                    <strong className="font-semibold text-[var(--color-ink)]">{preview.inviter_name}</strong> has
+                    invited you to track your money together.{' '}
+                  </>
+                ) : (
+                  <>You have been invited to track your money together. </>
+                )}
+                Your own accounts stay private; the household sees only joint accounts and the
+                transactions you share.
               </p>
               <p className="mt-2 text-[12.5px] text-[var(--color-ink-3)]">Sent to {preview.email_hint}</p>
 

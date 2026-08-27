@@ -538,3 +538,21 @@ Per-category rollover sat next to Rename / Archive as an unexplained word during
 - *Auto-copying last month's amounts into a new month*: still per-month storage, so a change to a standing figure means editing every month that was already seeded.
 - *A nullable `month` on `monthly_budgets` to mean "standing"*: one table with two meanings, and the unique constraint stops enforcing anything useful.
 - *Keeping rollover behind an explanation*: the household's budget does not change month to month, so a carried surplus has nothing to attach to.
+
+## 2026-08-27 - Invite by email; the invitee names themselves and onboards
+
+**Context:** invitations pointed at a member row the owner had already created and named, so joining a household meant taking over a slot someone else had labelled for you.
+Accepting then dropped the new person straight onto a dashboard full of the household's existing accounts, with no explanation of what the others could see and nothing of their own in it: `nextOnboardingStep` treated every non-owner as finished.
+
+**Decision:**
+- An invitation carries an email address and a role, nothing else. `household_invitations.member_id` is nullable; the member row is created by `accept_invitation_row` when the invite is accepted, named from the email's local part (de-duplicated, since `members.display_name` is unique per household) until the invitee renames it.
+- Setup > Members is invite-only: no more "add a member by hand". The section lists people who have joined plus invitations still outstanding. Onboarding step 3 lost its name field the same way.
+- Accepting is automatic. `?next=/invite/<token>` survives sign-up, sign-in and the email-confirmation bounce; the household is joined as soon as a session exists and the reader lands on their own onboarding. The invite card's Accept button remains only for someone who opens the link while already signed in, so a GET still never mutates.
+- Onboarding has two tracks (`src/lib/onboarding.ts`). The owner keeps household → bank → invite → budget, finished by `households.onboarding_completed_at`. Someone who joins walks welcome → name → accounts, finished per member by `members.onboarded_at`, and the `(app)` gate holds them there until it is stamped.
+- Accounts created during the member track are `ownership: 'member'` stamped to the invitee; the owner's first accounts stay `shared`, because a brand-new household has nobody else to assign anything to.
+- `/invite/[token]/password` is gone. It only ran for logins created by `inviteUserByEmail`, which invitations stopped using when they moved to Resend.
+
+**Considered + rejected:**
+- *Keeping the explicit "Accept and join" click after sign-up*: the invitee already clicked the invitation and then proved the email; a second confirmation adds a step without adding a decision.
+- *Onboarding invitees with the owner's four steps*: household, invite and budget are all household-level, and an invitee editing the household budget on their first screen is not what joining should mean.
+- *Letting the owner name people and having the invitee correct it later*: the correction never happens, and the wrong name is the one the household sees in every split.

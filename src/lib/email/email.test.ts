@@ -39,22 +39,20 @@ describe('layout', () => {
 })
 
 describe('householdInviteEmail', () => {
-  it('names the household, member and inviter, and escapes them', () => {
+  it('names the household and inviter, and escapes them', () => {
     const r = householdInviteEmail({
       householdName: 'Smith & Co',
-      memberName: '<Sam>',
-      inviterName: 'Robin',
+      inviterName: '<Robin>',
       inviteUrl: 'https://app.test/invite/tok',
     })
     expect(r.subject).toBe('Join Smith & Co on Maple')
     expect(r.html).toContain('Smith &amp; Co')
-    expect(r.html).toContain('&lt;Sam&gt;')
-    expect(r.html).toContain('Robin')
+    expect(r.html).toContain('&lt;Robin&gt;')
     expect(r.html).toContain('href="https://app.test/invite/tok"')
     expect(r.text).toContain('Accept and join: https://app.test/invite/tok')
   })
   it('falls back to a neutral line without an inviter name', () => {
-    const r = householdInviteEmail({ householdName: 'H', memberName: 'M', inviterName: null, inviteUrl: 'https://a.test/x' })
+    const r = householdInviteEmail({ householdName: 'H', inviterName: null, inviteUrl: 'https://a.test/x' })
     expect(r.html).toContain('You have been invited')
   })
 })

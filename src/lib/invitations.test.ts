@@ -6,6 +6,7 @@ import {
   hashInviteToken,
   inviteExpiry,
   inviteUrl,
+  inviteTokenFromNext,
   invitationStatus,
   safeNextPath,
 } from './invitations'
@@ -70,5 +71,27 @@ describe('acceptErrorMessage', () => {
     expect(acceptErrorMessage('email_mismatch')).toMatch(/different email/)
     expect(acceptErrorMessage('P0001: expired')).toMatch(/expired/)
     expect(acceptErrorMessage('something else')).toBe('Could not accept the invitation.')
+  })
+})
+
+describe('inviteTokenFromNext', () => {
+  it('pulls the token out of an invite path', () => {
+    expect(inviteTokenFromNext('/invite/lWngzzWxYdUYTrUoODNoUngEtBU30SkXEbsPoaGuAPw')).toBe(
+      'lWngzzWxYdUYTrUoODNoUngEtBU30SkXEbsPoaGuAPw',
+    )
+    expect(inviteTokenFromNext('/invite/lWngzzWxYdUYTrUoODNoUngEtBU30SkXEbsPoaGuAPw/')).toBe(
+      'lWngzzWxYdUYTrUoODNoUngEtBU30SkXEbsPoaGuAPw',
+    )
+  })
+  it('is null for anything else', () => {
+    expect(inviteTokenFromNext('/dashboard')).toBeNull()
+    expect(inviteTokenFromNext('')).toBeNull()
+    expect(inviteTokenFromNext(null)).toBeNull()
+    expect(inviteTokenFromNext('/invite/short')).toBeNull()
+    expect(inviteTokenFromNext('/invite/tok en/with space')).toBeNull()
+  })
+  it('refuses an off-origin next that only looks like an invite', () => {
+    expect(inviteTokenFromNext('//evil.example/invite/aaaaaaaaaaaaaaaaaaaa')).toBeNull()
+    expect(inviteTokenFromNext('https://evil.example/invite/aaaaaaaaaaaaaaaaaaaa')).toBeNull()
   })
 })

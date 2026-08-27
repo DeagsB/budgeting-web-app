@@ -20,17 +20,24 @@ export const loadOnboardingState = cache(
     const supabase = await createClient()
     const { data } = await supabase.auth.getUser()
     const user = data?.user ?? null
-    if (!user) {
-      return { user: null, ctx: null, state: { hasHousehold: false, role: null, accountCount: 0, completedAt: null } }
-    }
+    const empty = {
+      hasHousehold: false,
+      role: null,
+      accountCount: 0,
+      completedAt: null,
+      memberOnboardedAt: null,
+      hasMember: false,
+    } as const
+    if (!user) return { user: null, ctx: null, state: { ...empty } }
 
     const ctx = await getHouseholdContext()
-    if (!ctx) {
-      return { user, ctx: null, state: { hasHousehold: false, role: null, accountCount: 0, completedAt: null } }
-    }
+    if (!ctx) return { user, ctx: null, state: { ...empty } }
 
-    const [{ data: household }, { count }] = await Promise.all([
+    const [{ data: household }, { data: me }, { count }] = await Promise.all([
       supabase.from('households').select('onboarding_completed_at').eq('id', ctx.householdId).maybeSingle(),
+      ctx.memberId
+        ? supabase.from('members').select('onboarded_at').eq('id', ctx.memberId).maybeSingle()
+        : Promise.resolve({ data: null }),
       supabase.from('accounts').select('id', { count: 'exact', head: true }).eq('household_id', ctx.householdId),
     ])
 
@@ -42,6 +49,8 @@ export const loadOnboardingState = cache(
         role: ctx.role,
         accountCount: count ?? 0,
         completedAt: (household?.onboarding_completed_at as string | null) ?? null,
+        memberOnboardedAt: (me?.onboarded_at as string | null) ?? null,
+        hasMember: ctx.memberId !== null,
       },
     }
   },

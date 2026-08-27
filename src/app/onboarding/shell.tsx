@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { ONBOARDING_STEPS, onboardingStepNumber, type OnboardingStepName } from '@/lib/onboarding'
+import { onboardingStepCount, onboardingStepNumber, type OnboardingStepName } from '@/lib/onboarding'
 
 /**
  * Two-panel onboarding frame shared by every step: brand + welcome copy on
@@ -55,7 +55,7 @@ export function OnboardingShell({
           <div className="mt-10 md:mt-0">
             <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-leaf)]" />
-              Step {onboardingStepNumber(step)} of {ONBOARDING_STEPS.length}
+              Step {onboardingStepNumber(step)} of {onboardingStepCount(step)}
             </div>
             <h1 className="font-serif text-[40px] leading-[1.02] tracking-[-0.02em] text-[var(--color-ink)] md:text-[56px]">
               {title}

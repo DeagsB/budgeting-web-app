@@ -3,7 +3,8 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { safeNextPath } from '@/lib/invitations'
+import { inviteTokenFromNext, safeNextPath } from '@/lib/invitations'
+import { acceptInviteToken } from '@/lib/accept-invite'
 
 export type AuthState = { error: string } | undefined
 
@@ -24,7 +25,21 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
   if (error) return { error: error.message }
 
   revalidatePath('/', 'layout')
-  redirect(safeNextPath(String(formData.get('next') || '')))
+  const next = safeNextPath(String(formData.get('next') || ''))
+  redirect(await landingFor(next))
+}
+
+/**
+ * Where to send someone who has just authenticated. An invitation link is
+ * accepted here rather than on the invite page: they clicked through from the
+ * invitation and then proved who they are, so there is nothing left to ask.
+ * A failure keeps them on the invite page, which explains what went wrong.
+ */
+async function landingFor(next: string): Promise<string> {
+  const token = inviteTokenFromNext(next)
+  if (!token) return next
+  const accepted = await acceptInviteToken(token)
+  return accepted.ok ? '/onboarding/welcome' : next
 }
 
 export async function signUp(_prev: AuthState, formData: FormData): Promise<AuthState> {
@@ -50,8 +65,9 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
   if (error) return { error: error.message }
 
   revalidatePath('/', 'layout')
-  // Email-confirmation off → session is live immediately; skip the "check email" page.
-  if (data.session) redirect(next === '/dashboard' ? '/onboarding' : next)
+  // Email-confirmation off → session is live immediately; skip the "check email"
+  // page and, for an invitation, join the household right away.
+  if (data.session) redirect(next === '/dashboard' ? '/onboarding' : await landingFor(next))
   redirect('/sign-up/check-email')
 }
 

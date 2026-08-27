@@ -25,15 +25,16 @@ export default async function OnboardingInvitePage() {
       .order('sort_order'),
     supabase
       .from('household_invitations')
-      .select('member_id, email')
+      .select('id, email')
       .eq('household_id', ctx!.householdId)
       .is('accepted_at', null)
       .is('revoked_at', null)
-      .gt('expires_at', new Date().toISOString()),
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at'),
   ])
 
-  const emailByMember = new Map((invites ?? []).map((i) => [i.member_id as string, i.email as string]))
-  const others = (members ?? []).filter((m) => m.user_id !== ctx!.userId)
+  const joined = (members ?? []).filter((m) => m.user_id && m.user_id !== ctx!.userId)
+  const pending = invites ?? []
 
   return (
     <OnboardingShell
@@ -45,7 +46,7 @@ export default async function OnboardingInvitePage() {
           the money?
         </>
       }
-      intro="Invite a partner, roommate or family member. Each gets their own login and sees only their accounts plus anything marked shared."
+      intro="Invite a partner, roommate or family member by email. They create their own login, pick the name you'll see, and bring in their own accounts."
       eyebrow="Optional - you can invite people any time from Setup."
       footer={
         <StepFooter
@@ -65,16 +66,20 @@ export default async function OnboardingInvitePage() {
           </div>
         </div>
 
-        {others.length > 0 && (
+        {(pending.length > 0 || joined.length > 0) && (
           <div>
             <MapleLabel>Invited so far</MapleLabel>
             <ul className="mt-2 divide-y divide-hair rounded-[16px] border border-hair bg-cream-2 px-4">
-              {others.map((m) => (
+              {joined.map((m) => (
                 <li key={m.id} className="flex min-h-[44px] items-center justify-between gap-3 py-2">
                   <span className="truncate text-[14px] font-semibold text-ink">{m.display_name}</span>
-                  <span className="shrink-0 text-[12px] text-ink-3">
-                    {m.user_id ? 'Joined' : (emailByMember.get(m.id) ?? 'No invite sent')}
-                  </span>
+                  <span className="shrink-0 text-[12px] text-ink-3">Joined</span>
+                </li>
+              ))}
+              {pending.map((i) => (
+                <li key={i.id as string} className="flex min-h-[44px] items-center justify-between gap-3 py-2">
+                  <span className="truncate text-[14px] text-ink-2">{i.email as string}</span>
+                  <span className="shrink-0 text-[12px] text-ink-3">Invite sent</span>
                 </li>
               ))}
             </ul>

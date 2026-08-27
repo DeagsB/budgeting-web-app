@@ -18,18 +18,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const [{ data: household }, { data: me }, { count: accountCount }] = await Promise.all([
     supabase.from('households').select('name, onboarding_completed_at').eq('id', ctx.householdId).single(),
     ctx.memberId
-      ? supabase.from('members').select('display_name').eq('id', ctx.memberId).maybeSingle()
+      ? supabase.from('members').select('display_name, onboarded_at').eq('id', ctx.memberId).maybeSingle()
       : Promise.resolve({ data: null }),
     supabase.from('accounts').select('id', { count: 'exact', head: true }).eq('household_id', ctx.householdId),
   ])
 
-  // The creating owner walks the guided flow until they finish or skip it.
-  // Invitees are never gated (nextOnboardingStep returns 'done' for non-owners).
+  // The creating owner walks the guided flow until they finish or skip it;
+  // someone who joined by invitation walks their own three steps first.
   const step = nextOnboardingStep({
     hasHousehold: true,
     role: ctx.role,
     accountCount: accountCount ?? 0,
     completedAt: (household?.onboarding_completed_at as string | null) ?? null,
+    memberOnboardedAt: (me?.onboarded_at as string | null) ?? null,
+    hasMember: ctx.memberId !== null,
   })
   if (step !== 'done') redirect(onboardingPath(step))
 

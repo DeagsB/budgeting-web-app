@@ -18,7 +18,6 @@ export const INVITE_TTL_DAYS = 7
 
 export function householdInviteEmail(p: {
   householdName: string
-  memberName: string
   inviterName: string | null
   inviteUrl: string
 }) {
@@ -29,8 +28,8 @@ export function householdInviteEmail(p: {
     eyebrow: 'Household invitation',
     title: `Join ${p.householdName}`,
     intro: [
-      `${who} to track money together in ${strong(p.householdName)}, as ${strong(p.memberName)}.`,
-      `Your own accounts stay private. The household sees only joint accounts and the transactions you choose to share.`,
+      `${who} to track money together in ${strong(p.householdName)}.`,
+      `You will create your own login and pick the name the household sees. Your own accounts stay private; the household sees only joint accounts and the transactions you choose to share.`,
     ],
     button: { label: 'Accept and join', url: p.inviteUrl },
     note: `This link works once and expires in ${INVITE_TTL_DAYS} days. If you weren’t expecting it, you can ignore this email - nothing happens until you accept.`,

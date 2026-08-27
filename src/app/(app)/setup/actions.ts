@@ -28,17 +28,6 @@ export async function renameHousehold(fd: FormData) {
 
 // ───────── members ─────────
 
-export async function addMember(fd: FormData) {
-  const h = await hh()
-  if (!h) return
-  const name = String(fd.get('name') ?? '').trim()
-  if (!name) return
-  await h.supabase
-    .from('members')
-    .insert({ household_id: h.ctx.householdId, display_name: name })
-  revalidatePath('/setup')
-}
-
 export async function renameMember(fd: FormData) {
   const h = await hh()
   if (!h) return

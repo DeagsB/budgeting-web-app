@@ -1,13 +1,14 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useActionState, useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { addMember, renameMember, archiveMember, unarchiveMember } from './actions'
-import { claimMember, removeMemberLogin, revokeInvitation } from './invite-actions'
-import { InviteSheet } from './invite-sheet'
+import { renameMember, archiveMember, unarchiveMember } from './actions'
+import { claimMember, inviteMember, removeMemberLogin, revokeInvitation, type InviteState } from './invite-actions'
 import { Button } from '@/components/ui/button'
+import { Field } from '@/components/ui/field'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ConfirmButton } from '@/components/ui/confirm-button'
+import { InviteResult } from '@/components/invite-result'
 
 export type MemberView = {
   id: string
@@ -17,20 +18,36 @@ export type MemberView = {
   linked: boolean
   /** The login attached is the current user. */
   isMe: boolean
-  pendingInvite: { id: string; email: string; expiresAt: string } | null
 }
 
+export type PendingInviteView = {
+  id: string
+  email: string
+  role: string
+  expiresAt: string
+}
+
+/**
+ * Who is in the household, and who has been asked to join.
+ *
+ * People arrive by invitation only: the owner sends an email address a link,
+ * and the member row appears when it is accepted - named by the invitee
+ * during their own onboarding, not by whoever invited them. Rows here are
+ * people who have already joined (plus any legacy slot from before invites
+ * worked this way).
+ */
 export function MembersList({
   members,
+  invites,
   canManage,
   myMemberId,
 }: {
   members: MemberView[]
+  invites: PendingInviteView[]
   canManage: boolean
   myMemberId: string | null
 }) {
   const [show, setShow] = useState<'active' | 'archived'>('active')
-  const [inviting, setInviting] = useState<{ id: string; name: string } | null>(null)
   const visible = members.filter((m) => (show === 'archived' ? m.archived : !m.archived))
   const archivedCount = members.filter((m) => m.archived).length
   const activeCount = members.filter((m) => !m.archived).length
@@ -40,18 +57,21 @@ export function MembersList({
     <div className="mt-3 flex flex-col gap-3">
       {myMemberId === null && claimable.length > 0 && <ClaimPicker members={claimable} />}
 
-      <AddMember />
+      {canManage && <InviteForm />}
 
-      {activeCount === 0 && archivedCount === 0 ? (
+      {activeCount === 0 && archivedCount === 0 && invites.length === 0 ? (
         <EmptyState
-          title="Add the first member"
-          body="A member is anyone whose money flows through this household. Each one signs in with their own login and sees their own accounts, joint accounts, and transactions shared with them."
+          title="Invite the first person"
+          body="Everyone in a household signs in with their own login and sees their own accounts, joint accounts, and transactions shared with them. Send them an email invitation and they pick their own name when they join."
         />
       ) : (
         <>
           <div className="mt-2 flex items-baseline justify-between">
             <span className="text-[12px] text-ink-3">
               {visible.length} {show === 'archived' ? 'archived' : 'active'}
+              {invites.length > 0 && show === 'active'
+                ? ` · ${invites.length} invited`
+                : ''}
             </span>
             {archivedCount > 0 && (
               <button
@@ -65,20 +85,83 @@ export function MembersList({
           </div>
 
           <ul className="divide-y divide-hair border-y border-hair">
-            {visible.length === 0 && (
+            {visible.length === 0 && invites.length === 0 && (
               <li className="py-6 text-center text-[13.5px] text-ink-2">
-                {show === 'archived' ? 'Nothing archived.' : 'Add someone above.'}
+                {show === 'archived' ? 'Nothing archived.' : 'Invite someone above.'}
               </li>
             )}
             {visible.map((m) => (
-              <MemberRow key={m.id} member={m} canManage={canManage} onInvite={() => setInviting({ id: m.id, name: m.name })} />
+              <MemberRow key={m.id} member={m} canManage={canManage} />
             ))}
+            {show === 'active' &&
+              invites.map((i) => <InviteRow key={i.id} invite={i} canManage={canManage} />)}
           </ul>
         </>
       )}
-
-      <InviteSheet open={inviting !== null} onClose={() => setInviting(null)} member={inviting} />
     </div>
+  )
+}
+
+/** Email + access level. The link is shown once, whether or not the mail went out. */
+function InviteForm() {
+  const router = useRouter()
+  const [state, formAction, pending] = useActionState<InviteState, FormData>(inviteMember, undefined)
+  const [dismissed, setDismissed] = useState<InviteState>(undefined)
+  const [round, setRound] = useState(0)
+
+  useEffect(() => {
+    if (state && 'ok' in state) router.refresh()
+  }, [state, router])
+
+  if (state && 'ok' in state && state !== dismissed) {
+    return (
+      <InviteResult
+        inviteUrl={state.inviteUrl}
+        emailSent={state.emailSent}
+        emailError={state.emailError}
+        onDone={() => {
+          setDismissed(state)
+          setRound((r) => r + 1)
+        }}
+        doneLabel="Invite someone else"
+      />
+    )
+  }
+
+  return (
+    <form key={round} action={formAction} className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+        <div className="flex-1">
+          <Field label="Invite by email">
+            <input
+              name="email"
+              type="email"
+              inputMode="email"
+              autoComplete="off"
+              required
+              placeholder="them@domain.ca"
+              className="maple-input"
+            />
+          </Field>
+        </div>
+        <div className="sm:w-[150px]">
+          <Field label="Access">
+            <select name="role" className="maple-select" defaultValue="member">
+              <option value="member">Member</option>
+              <option value="admin">Admin</option>
+            </select>
+          </Field>
+        </div>
+        <Button type="submit" variant="primary" size="md" disabled={pending} className="shrink-0 sm:mb-[1px]">
+          {pending ? 'Sending…' : 'Invite'}
+        </Button>
+      </div>
+      {state && 'error' in state && (
+        <p role="alert" className="rounded-[12px] bg-maple-soft px-3 py-2 text-[13px] font-medium text-maple">
+          {state.error}
+        </p>
+      )}
+    </form>
   )
 }
 
@@ -118,45 +201,69 @@ function ClaimPicker({ members }: { members: MemberView[] }) {
   )
 }
 
-function AddMember() {
-  const [pending, startTransition] = useTransition()
-  return (
-    <form
-      action={(fd) => {
-        startTransition(async () => {
-          await addMember(fd)
-          const el = document.getElementById('new-member') as HTMLInputElement | null
-          if (el) el.value = ''
-        })
-      }}
-      className="flex flex-col gap-2 sm:flex-row sm:items-center"
-    >
-      <input
-        id="new-member"
-        name="name"
-        type="text"
-        required
-        maxLength={80}
-        aria-label="New member name"
-        placeholder="Add a member - first name is fine"
-        className="maple-input flex-1"
-      />
-      <Button type="submit" variant="primary" size="md" disabled={pending} className="shrink-0">
-        {pending ? 'Adding…' : 'Add'}
-      </Button>
-    </form>
-  )
-}
-
 function StatusChip({ member }: { member: MemberView }) {
   const cls = 'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em]'
   if (member.isMe) return <span className={`${cls} bg-leaf-soft text-leaf-deep`}>You</span>
   if (member.linked) return <span className={`${cls} bg-leaf-soft text-leaf-deep`}>Has login</span>
-  if (member.pendingInvite) return <span className={`${cls} bg-paper-2 text-down`}>Invite pending</span>
-  return null
+  return <span className={`${cls} bg-paper-2 text-down`}>No login</span>
 }
 
-function MemberRow({ member, canManage, onInvite }: { member: MemberView; canManage: boolean; onInvite: () => void }) {
+const actionCls =
+  'inline-flex min-h-[44px] items-center px-2 font-semibold text-ink-2 hover:text-ink hover:underline'
+
+/** An emailed invitation nobody has accepted yet. */
+function InviteRow({ invite, canManage }: { invite: PendingInviteView; canManage: boolean }) {
+  const router = useRouter()
+  const [pending, start] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+
+  return (
+    <li className="flex flex-col gap-1 py-2">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-dashed border-hair text-[13px] font-semibold text-ink-3"
+            aria-hidden
+          >
+            ?
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="truncate text-[14px] text-ink-2">{invite.email}</span>
+              <span className="rounded-full bg-paper-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-down">
+                Invited
+              </span>
+            </div>
+            <div className="truncate text-[11.5px] text-ink-3">
+              {invite.role === 'admin' ? 'Admin · ' : ''}They pick their name when they join
+            </div>
+          </div>
+        </div>
+        {canManage && (
+          <div className="-ml-2 flex shrink-0 flex-wrap items-center gap-1 pl-12 text-[12px] sm:ml-0 sm:justify-end sm:pl-0">
+            <form
+              action={(fd) =>
+                start(async () => {
+                  const res = await revokeInvitation(fd)
+                  if (res && 'error' in res) setError(res.error)
+                  else router.refresh()
+                })
+              }
+            >
+              <input type="hidden" name="id" value={invite.id} />
+              <button type="submit" disabled={pending} className={actionCls}>
+                {pending ? 'Working…' : 'Revoke'}
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
+      {error && <p className="text-[12px] font-medium text-maple">{error}</p>}
+    </li>
+  )
+}
+
+function MemberRow({ member, canManage }: { member: MemberView; canManage: boolean }) {
   const router = useRouter()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(member.name)
@@ -205,8 +312,6 @@ function MemberRow({ member, canManage, onInvite }: { member: MemberView; canMan
     )
   }
 
-  const actionCls = 'inline-flex min-h-[44px] items-center px-2 font-semibold text-ink-2 hover:text-ink hover:underline'
-
   return (
     <li className={'flex flex-col gap-1 py-2 ' + (member.archived ? 'opacity-60' : '')}>
       {/* Name + chips on one line, actions wrap beneath on narrow screens so a
@@ -224,9 +329,6 @@ function MemberRow({ member, canManage, onInvite }: { member: MemberView; canMan
               <span className="truncate font-serif text-[16px] text-ink">{member.name}</span>
               <StatusChip member={member} />
             </div>
-            {member.pendingInvite && !member.linked && (
-              <div className="truncate text-[11.5px] text-ink-3">Invited {member.pendingInvite.email}</div>
-            )}
           </div>
         </div>
         <div className="-ml-2 flex shrink-0 flex-wrap items-center gap-1 pl-12 text-[12px] sm:ml-0 sm:justify-end sm:pl-0">
@@ -234,27 +336,6 @@ function MemberRow({ member, canManage, onInvite }: { member: MemberView; canMan
             <button type="button" onClick={() => setEditing(true)} className={actionCls}>
               Rename
             </button>
-          )}
-          {!member.archived && !member.linked && canManage && (
-            <button type="button" onClick={onInvite} className={`${actionCls} text-leaf-deep`}>
-              {member.pendingInvite ? 'Resend' : 'Invite'}
-            </button>
-          )}
-          {!member.archived && member.pendingInvite && canManage && (
-            <form
-              action={(fd) =>
-                startTransition(async () => {
-                  const res = await revokeInvitation(fd)
-                  if (res && 'error' in res) setError(res.error)
-                  else router.refresh()
-                })
-              }
-            >
-              <input type="hidden" name="id" value={member.pendingInvite.id} />
-              <button type="submit" disabled={pending} className={actionCls}>
-                Revoke
-              </button>
-            </form>
           )}
           {!member.archived && member.linked && !member.isMe && canManage && (
             <ConfirmButton

@@ -11,11 +11,16 @@ export type FirstAccountState = { error: string } | { ok: true } | undefined
 const TYPES = new Set<AccountType>(ACCOUNT_TYPES.map((t) => t.value))
 
 /**
- * Onboarding step 2: create an account by hand. Same insert shape as
- * accounts/actions.ts `createAccount`, with the ownership defaulted to
- * `shared` (a one-member household has nobody else to assign it to yet) and
- * no last-four routing hint. Stays on the step on success so another account
- * - or another bank - can be added; the reader moves on with Continue.
+ * Create an account by hand during onboarding. Same insert shape as
+ * accounts/actions.ts `createAccount`, with no last-four routing hint.
+ *
+ * Ownership follows the track. The owner setting up a brand-new household has
+ * nobody else to assign anything to, so their accounts start `shared`; someone
+ * who joined by invitation is adding their own money to a household that
+ * already has other people in it, so theirs starts private to them.
+ *
+ * Stays on the step on success so another account - or another bank - can be
+ * added; the reader moves on with Continue.
  */
 export async function createFirstAccount(
   _prev: FirstAccountState,
@@ -37,13 +42,15 @@ export async function createFirstAccount(
   const ctx = await getHouseholdContext()
   if (!ctx) return { error: 'Not authorized.' }
 
+  const mine = ctx.role !== 'owner' && ctx.memberId !== null
+
   const supabase = await createClient()
   const { error } = await supabase.from('accounts').insert({
     household_id: ctx.householdId,
     name,
     type,
-    ownership: 'shared',
-    member_id: null,
+    ownership: mine ? 'member' : 'shared',
+    member_id: mine ? ctx.memberId : null,
     opening_balance_cents,
     last_four: null,
   })

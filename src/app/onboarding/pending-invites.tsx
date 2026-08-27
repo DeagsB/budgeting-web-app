@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { acceptInvitationById } from './actions'
 
-export type PendingInvite = { id: string; household_name: string; member_name: string }
+export type PendingInvite = { id: string; household_name: string; member_name: string | null }
 
 /** Shown above the create-household form when an invite is waiting for this email. */
 export function PendingInvites({ invites }: { invites: PendingInvite[] }) {
@@ -22,14 +22,16 @@ export function PendingInvites({ invites }: { invites: PendingInvite[] }) {
           <li key={inv.id} className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="truncate font-serif text-[17px] text-[var(--color-ink)]">{inv.household_name}</div>
-              <div className="truncate text-[12px] text-[var(--color-ink-2)]">as {inv.member_name}</div>
+              <div className="truncate text-[12px] text-[var(--color-ink-2)]">
+                {inv.member_name ? `as ${inv.member_name}` : 'You pick your name when you join'}
+              </div>
             </div>
             <form
               action={(fd) =>
                 start(async () => {
                   const res = await acceptInvitationById(fd)
                   if (res && 'error' in res) setError(res.error)
-                  else router.replace('/dashboard')
+                  else router.replace('/onboarding/welcome')
                 })
               }
             >

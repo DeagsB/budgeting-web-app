@@ -42,7 +42,7 @@ export default async function SetupPage() {
       .order('sort_order'),
     supabase
       .from('household_invitations')
-      .select('id, member_id, email, expires_at')
+      .select('id, email, role, expires_at')
       .eq('household_id', ctx.householdId)
       .is('accepted_at', null)
       .is('revoked_at', null)
@@ -61,9 +61,6 @@ export default async function SetupPage() {
       .is('archived_at', null)
       .order('name'),
   ])
-  const inviteByMember = new Map(
-    (invites ?? []).map((i) => [i.member_id as string, { id: i.id as string, email: i.email as string, expiresAt: i.expires_at as string }]),
-  )
 
   return (
     <div className="flex flex-col gap-6 pb-10">
@@ -84,7 +81,7 @@ export default async function SetupPage() {
       <Card padding="lg">
         <MapleLabel>Members</MapleLabel>
         <p className="mt-1 text-[13px] text-ink-2">
-          Each member signs in with their own login and sees their own accounts, joint accounts, and transactions shared with them. Until a member has a login, nothing can be assigned to them.
+          Invite someone by email and they create their own login, pick the name the household sees, and bring in their own accounts. Everyone sees their own money, joint accounts, and whatever is shared with them.
         </p>
         <MembersList
           members={(members ?? []).map((m) => ({
@@ -93,7 +90,12 @@ export default async function SetupPage() {
             archived: !!m.archived_at,
             linked: !!m.user_id,
             isMe: m.user_id === ctx.userId,
-            pendingInvite: inviteByMember.get(m.id) ?? null,
+          }))}
+          invites={(invites ?? []).map((i) => ({
+            id: i.id as string,
+            email: i.email as string,
+            role: (i.role as string) ?? 'member',
+            expiresAt: i.expires_at as string,
           }))}
           canManage={canManageHousehold(ctx)}
           myMemberId={ctx.memberId}

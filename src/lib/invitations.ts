@@ -53,6 +53,17 @@ export function safeNextPath(next: string | null | undefined, fallback = '/dashb
   return next
 }
 
+/**
+ * The invitation token inside a `next` path, if that is what it is. Sign-in
+ * and sign-up carry `?next=/invite/<token>` so the account can be created
+ * first and the invitation accepted the moment the session exists.
+ */
+export function inviteTokenFromNext(next: string | null | undefined): string | null {
+  if (!next) return null
+  const m = /^\/invite\/([A-Za-z0-9_-]{16,})\/?$/.exec(safeNextPath(next, ''))
+  return m ? m[1] : null
+}
+
 /** Map RPC exception strings to copy the invitee can act on. */
 export function acceptErrorMessage(code: string): string {
   const key = code.replace(/^.*?:\s*/, '').trim()
