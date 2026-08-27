@@ -500,3 +500,22 @@ Skippable steps make count-based inference impossible.
 - *`wipe_household(uuid)` SQL function*: a permanent, privileged, destructive RPC in production for a one-off need.
 - *Registering both `/onboarding/bank` and the settings page as Plaid redirect URIs*: two URIs to keep in sync, and the app-shell gate would still bounce an un-onboarded owner off the settings page mid-OAuth.
 - *Moving the Plaid page under `/setup`*: the URL is bookmarked and breadcrumbed; a status card on Setup is enough.
+
+## 2026-08-27 - Email through Resend; one layout for every message
+
+**Context:** Supabase's built-in mailer only delivers to project team addresses, so sign-up confirmations and invites silently failed for anyone else, and the invite path leaned on `auth.admin.inviteUserByEmail` plus a magic-link fallback.
+The one branded template lived as a hand-edited HTML file.
+
+**Decision:**
+- Supabase Auth emails (confirm signup, magic link, reset password, change email, invite user) are delivered through Resend SMTP, configured in the dashboard.
+  Templates are generated from `src/lib/email/templates.ts` by `scripts/build-email-templates.ts` into `docs/email-templates/` and pasted into the dashboard; the source is the code, not the HTML files.
+- Household invites are app-sent through the Resend SDK (`src/lib/email/send.ts`) with a richer message (household, inviter, member slot, one-time link).
+  `inviteUserByEmail` and the OTP fallback are gone: the `/invite/<token>` landing already handles "create an account" and "I already have one", so no auth user needs to pre-exist.
+  Delivery stays best-effort and the copyable link is always shown.
+- One layout (`src/lib/email/layout.ts`: tables, inline styles, VML button, dark-mode classes, text alternative) renders every email so they read as one product.
+- `RESEND_API_KEY` is required in production (`src/lib/env.ts`); `EMAIL_FROM` defaults to the Resend sandbox sender until a domain is verified.
+
+**Considered + rejected:**
+- *react-email*: a React render pipeline for five static emails; the table layout is already proven in the confirm-signup template.
+- *Keeping Supabase invites and only fixing SMTP*: still two send paths and a metadata-driven "set password" detour for a flow the landing page already handles.
+- *Notification digests by email*: out of scope; push covers alerts today.

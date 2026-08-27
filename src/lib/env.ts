@@ -69,6 +69,11 @@ export function collectEnvProblems(): string[] {
     }
   }
 
+  // Invites and every Supabase Auth email ride on Resend in production.
+  if (prod && process.env.VERCEL_ENV === 'production' && !process.env.RESEND_API_KEY) {
+    problems.push('RESEND_API_KEY is not set (household invite emails need it).')
+  }
+
   // Only the Vercel production deployment runs the cron; local `next start`
   // and preview deploys should not need the secret.
   if (prod && process.env.VERCEL_ENV === 'production') {

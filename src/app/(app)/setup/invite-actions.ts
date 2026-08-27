@@ -2,16 +2,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { createServiceClient } from '@/lib/supabase/service'
 import { getHouseholdContext, canManageHousehold, type HouseholdContext } from '@/lib/household'
-import {
-  confirmRedirectFor,
-  generateInviteToken,
-  hashInviteToken,
-  inviteExpiry,
-  inviteUrl,
-} from '@/lib/invitations'
+import { generateInviteToken, hashInviteToken, inviteExpiry, inviteUrl } from '@/lib/invitations'
 import { humanizeDbError } from '@/lib/errors'
+import { sendEmail } from '@/lib/email/send'
+import { householdInviteEmail } from '@/lib/email/templates'
 
 export type InviteState =
   | { ok: true; inviteUrl: string; emailSent: boolean; emailError?: string }
@@ -91,38 +86,29 @@ export async function createInvitation(
   if (insErr) return { error: insErr.message }
 
   const link = inviteUrl(siteUrl(), raw)
-  const redirectTo = confirmRedirectFor(siteUrl(), raw)
 
-  let emailSent = false
-  let emailError: string | undefined
-  const service = createServiceClient()
-  if (service) {
-    const { data: hh } = await supabase.from('households').select('name').eq('id', ctx.householdId).maybeSingle()
-    const meta = {
-      invited: true,
-      household_name: hh?.name ?? 'your household',
-      member_name: member.display_name as string,
-    }
-    const inv = await service.auth.admin.inviteUserByEmail(email, { redirectTo, data: meta })
-    if (!inv.error) {
-      emailSent = true
-    } else if (/already|registered|exists/i.test(inv.error.message)) {
-      // Existing account → magic link that lands on the same accept page.
-      const otp = await service.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: redirectTo, shouldCreateUser: false },
-      })
-      if (!otp.error) emailSent = true
-      else emailError = otp.error.message
-    } else {
-      emailError = inv.error.message
-    }
-  } else {
-    emailError = 'Email sending is not configured on this server.'
-  }
+  // The invite email is ours (Resend), not Supabase Auth's: the /invite/<token>
+  // landing handles both "create an account" and "I already have one", so no
+  // auth user needs to exist up front. Delivery is best-effort; the link is
+  // always returned so it can be shared by hand.
+  const [{ data: hh }, { data: me_ }] = await Promise.all([
+    supabase.from('households').select('name').eq('id', ctx.householdId).maybeSingle(),
+    ctx.memberId
+      ? supabase.from('members').select('display_name').eq('id', ctx.memberId).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ])
+  const mail = householdInviteEmail({
+    householdName: (hh?.name as string | undefined) ?? 'your household',
+    memberName: member.display_name as string,
+    inviterName: ((me_?.display_name as string | null | undefined) ?? null) || null,
+    inviteUrl: link,
+  })
+  const sent = await sendEmail({ to: email, ...mail, replyTo: me.user?.email ?? undefined })
 
   revalidatePath('/setup')
-  return { ok: true, inviteUrl: link, emailSent, emailError }
+  return sent.ok
+    ? { ok: true, inviteUrl: link, emailSent: true }
+    : { ok: true, inviteUrl: link, emailSent: false, emailError: sent.error }
 }
 
 export async function revokeInvitation(fd: FormData): Promise<SimpleState> {

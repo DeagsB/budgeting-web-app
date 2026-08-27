@@ -4,10 +4,9 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 
 /**
- * Post-invite block: explains whether the email went out and always shows
- * the one-time link (copyable), because Supabase's built-in mailer only
- * reaches team addresses until custom SMTP is configured. Shared by the
- * Setup invite sheet and onboarding step 3.
+ * Post-invite block: explains whether the email went out (Resend) and always
+ * shows the one-time link (copyable) so an invite can be handed over by any
+ * channel. Shared by the Setup invite sheet and onboarding step 3.
  */
 export function InviteResult({
   inviteUrl,
