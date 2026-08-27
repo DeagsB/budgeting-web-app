@@ -3,8 +3,7 @@
 import { useMemo, useRef, useState, useTransition } from 'react'
 import {
   renameCategory,
-  toggleRollover,
-  archiveCategory,
+    archiveCategory,
   unarchiveCategory,
 } from './actions'
 import { createCategoryReturning } from '@/app/(app)/categories/actions'
@@ -17,7 +16,6 @@ type Cat = {
   id: string
   parent_id: string | null
   name: string
-  rollover: boolean
   archived: boolean
   /** Report shorthand (e.g. GROC). Only rendered when `withCodes` is set. */
   code?: string
@@ -302,7 +300,6 @@ function CategoryRow({
   const [value, setValue] = useState(cat.name)
   const [code, setCode] = useState(cat.code ?? '')
   const [pending, startTransition] = useTransition()
-  const [rolloverPending, startRollover] = useTransition()
 
   function cancelEdit() {
     setValue(cat.name)
@@ -411,11 +408,6 @@ function CategoryRow({
             {cat.code}
           </span>
         )}
-        {cat.rollover && (
-          <span className="shrink-0 rounded-full bg-leaf-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-leaf">
-            Rollover
-          </span>
-        )}
       </div>
       <div
         className={
@@ -425,24 +417,6 @@ function CategoryRow({
       >
         {!cat.archived && (
           <>
-            <form
-              action={(fd) => {
-                startRollover(async () => {
-                  await toggleRollover(fd)
-                })
-              }}
-            >
-              <input type="hidden" name="id" value={cat.id} />
-              <input type="hidden" name="rollover" value={cat.rollover ? 'false' : 'true'} />
-              <button
-                type="submit"
-                disabled={rolloverPending}
-                aria-pressed={cat.rollover}
-                className="inline-flex min-h-[44px] items-center px-2 font-semibold text-ink-2 hover:text-ink hover:underline disabled:opacity-50"
-              >
-                {rolloverPending ? 'Saving…' : cat.rollover ? 'Stop rollover' : 'Rollover'}
-              </button>
-            </form>
             <button
               type="button"
               onClick={() => setEditing(true)}

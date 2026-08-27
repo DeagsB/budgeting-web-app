@@ -11,7 +11,6 @@ type Cat = {
   code: string
   sort_order: number
   archived_at: string | null
-  rollover_enabled: boolean
 }
 
 /**
@@ -26,7 +25,7 @@ export default async function CategoriesPage() {
   const supabase = await createClient()
   const { data: rows } = await supabase
     .from('categories')
-    .select('id, parent_id, name, code, sort_order, archived_at, rollover_enabled')
+    .select('id, parent_id, name, code, sort_order, archived_at')
     .eq('household_id', ctx.householdId)
     .order('sort_order')
 
@@ -48,7 +47,6 @@ export default async function CategoriesPage() {
             parent_id: c.parent_id,
             name: c.name,
             code: c.code,
-            rollover: !!c.rollover_enabled,
             archived: !!c.archived_at,
           }))}
         />

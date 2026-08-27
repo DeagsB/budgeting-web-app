@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
-import { addMonths, formatMoney, monthStartISO } from '@/lib/format'
+import { addMonths, formatMoney, monthLabel, monthStartISO } from '@/lib/format'
+import { budgetTotals, effectiveBudgets, monthsInRange } from '@/lib/budget'
 import { cleanTitle } from '@/lib/title'
 import { MapleLabel } from '@/components/ui/label'
 import { PageHeader } from '@/components/ui/page-header'
@@ -18,7 +19,6 @@ type Category = {
   parent_id: string | null
   name: string
   code: string
-  rollover_enabled: boolean
 }
 
 export default async function BudgetsPage({
@@ -42,24 +42,25 @@ export default async function BudgetsPage({
   const supabase = await createClient()
 
   const [
+    { data: household },
     { data: catRows },
-    { data: budgetRows },
+    { data: standingRows },
     { data: txRows },
-    { data: yearBudgetRows },
+    { data: overrideRows },
     { data: yearTxRows },
     { data: recurringTxRows },
   ] = await Promise.all([
+    supabase.from('households').select('created_at').eq('id', ctx.householdId).maybeSingle(),
     supabase
       .from('categories')
-      .select('id, parent_id, name, code, rollover_enabled')
+      .select('id, parent_id, name, code')
       .eq('household_id', ctx.householdId)
       .is('archived_at', null)
       .order('sort_order'),
     supabase
-      .from('monthly_budgets')
+      .from('category_budgets')
       .select('category_id, amount_cents')
-      .eq('household_id', ctx.householdId)
-      .eq('month', month),
+      .eq('household_id', ctx.householdId),
     supabase
       .from('transaction_splits')
       .select('category_id, amount_cents, transaction:transactions!inner(occurred_on)')
@@ -108,12 +109,22 @@ export default async function BudgetsPage({
     actualRolled.set(c.parent_id, (actualRolled.get(c.parent_id) ?? 0) + (actualDirect.get(c.id) ?? 0))
   }
 
-  const budgetByCat = new Map<string, number>()
-  for (const b of budgetRows ?? []) budgetByCat.set(b.category_id, Number(b.amount_cents))
-
-  const ytdBudget = new Map<string, number>()
-  for (const b of yearBudgetRows ?? [])
-    ytdBudget.set(b.category_id, (ytdBudget.get(b.category_id) ?? 0) + Number(b.amount_cents))
+  // Standing amount unless this month has an override; the year-to-date
+  // budget applies the same rule to every month from January.
+  const standing = standingRows ?? []
+  const overrides = overrideRows ?? []
+  const budgetByCat = effectiveBudgets(standing, overrides, month)
+  const overriddenThisMonth = new Set(
+    overrides.filter((o) => o.month === month).map((o) => o.category_id as string),
+  )
+  // A standing amount has no start date, so year-to-date runs from January or
+  // from the month the household was created, whichever is later - otherwise a
+  // household set up mid-year looks like it blew a budget it never had.
+  const createdMonth = household?.created_at
+    ? `${String(household.created_at).slice(0, 7)}-01`
+    : yearStart
+  const ytdStart = createdMonth > yearStart ? createdMonth : yearStart
+  const ytdBudget = budgetTotals(standing, overrides, monthsInRange(ytdStart, month))
 
   const ytdActualDirect = new Map<string, number>()
   for (const tx of yearTxRows ?? []) {
@@ -128,15 +139,6 @@ export default async function BudgetsPage({
       c.parent_id,
       (ytdActualRolled.get(c.parent_id) ?? 0) + (ytdActualDirect.get(c.id) ?? 0),
     )
-  }
-
-  const rolloverCredit = new Map<string, number>()
-  for (const c of categories) {
-    if (!c.rollover_enabled) continue
-    const priorBudget = (ytdBudget.get(c.id) ?? 0) - (budgetByCat.get(c.id) ?? 0)
-    const priorActual = (ytdActualDirect.get(c.id) ?? 0) - (actualDirect.get(c.id) ?? 0)
-    const credit = priorBudget - priorActual
-    if (credit !== 0) rolloverCredit.set(c.id, credit)
   }
 
   const totalBudget = Array.from(budgetByCat.entries())
@@ -353,20 +355,20 @@ export default async function BudgetsPage({
 
           <BudgetTable
             month={month}
+            monthLabel={monthLabel(month)}
             categories={categories}
             budgetByCat={Object.fromEntries(budgetByCat)}
             actualRolled={Object.fromEntries(actualRolled)}
             actualDirect={Object.fromEntries(actualDirect)}
             ytdBudget={Object.fromEntries(ytdBudget)}
             ytdActualRolled={Object.fromEntries(ytdActualRolled)}
-            rolloverCredit={Object.fromEntries(rolloverCredit)}
+            overridden={[...overriddenThisMonth]}
           />
 
           <p className="rounded-md border border-hair bg-paper-2 px-4 py-3 text-[12.5px] leading-relaxed text-ink-2">
             Actuals count outflows only. Paycheques and other inflows appear on P&amp;L.
-            Parent-category totals include their children.{' '}
-            <span className="font-semibold text-ink">Rollover</span> categories carry last
-            month&rsquo;s surplus or deficit into this month&rsquo;s effective budget.
+            Parent-category totals include their children. Budgets are standing - an amount
+            applies to every month until you change it, unless you set it for this month only.
           </p>
         </>
       )}

@@ -110,20 +110,6 @@ export async function renameCategory(fd: FormData) {
   revalidateCategoryConsumers()
 }
 
-export async function toggleRollover(fd: FormData) {
-  const h = await hh()
-  if (!h) return
-  const id = String(fd.get('id') ?? '')
-  if (!id) return
-  const rollover_enabled = String(fd.get('rollover')) === 'true'
-  await h.supabase
-    .from('categories')
-    .update({ rollover_enabled })
-    .eq('id', id)
-    .eq('household_id', h.ctx.householdId)
-  revalidateCategoryConsumers()
-}
-
 export async function archiveCategory(fd: FormData) {
   const h = await hh()
   if (!h) return

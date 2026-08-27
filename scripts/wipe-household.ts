@@ -85,6 +85,7 @@ const HOUSEHOLD_TABLES = [
   'plaid_sync_log',
   'categories',
   'monthly_budgets',
+  'category_budgets',
   'transaction_rules',
   'members',
   'household_users',

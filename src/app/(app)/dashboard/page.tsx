@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { addMonths, monthStartISO } from '@/lib/format'
 import { type AccountType } from '@/lib/domain'
+import { effectiveBudgets, type BudgetOverride, type StandingBudget } from '@/lib/budget'
 import {
   netWorthTrail as computeTrail,
   accountBalanceAt,
@@ -46,7 +47,8 @@ export default async function DashboardPage() {
     transactionsRes,
     splitsRes,
     categoriesRes,
-    budgetsRes,
+    standingBudgetsRes,
+    budgetOverridesRes,
     goalsRes,
     recurringTxRes,
     recentTxRes,
@@ -90,8 +92,12 @@ export default async function DashboardPage() {
       .is('archived_at', null)
       .order('sort_order'),
     supabase
-      .from('monthly_budgets')
+      .from('category_budgets')
       .select('category_id, amount_cents')
+      .eq('household_id', ctx.householdId),
+    supabase
+      .from('monthly_budgets')
+      .select('category_id, month, amount_cents')
       .eq('household_id', ctx.householdId)
       .eq('month', currentMonth),
     supabase
@@ -137,7 +143,8 @@ export default async function DashboardPage() {
     transactionsRes,
     splitsRes,
     categoriesRes,
-    budgetsRes,
+    standingBudgetsRes,
+    budgetOverridesRes,
     goalsRes,
     recurringTxRes,
     recentTxRes,
@@ -253,12 +260,14 @@ export default async function DashboardPage() {
     .sort((a, b) => b.amount_cents - a.amount_cents)
     .slice(0, 6)
 
-  // Budget hero - total budgeted across top-level categories for the
-  // current month. Spend is `expenses` already computed.
-  const budgetByCat = new Map<string, number>()
-  for (const b of (budgetsRes.data ?? []) as Array<{ category_id: string; amount_cents: number | string }>) {
-    budgetByCat.set(b.category_id, Number(b.amount_cents))
-  }
+  // Budget hero - total budgeted across top-level categories for the current
+  // month: the standing amount unless this month overrides it. Spend is
+  // `expenses` already computed.
+  const budgetByCat = effectiveBudgets(
+    (standingBudgetsRes.data ?? []) as StandingBudget[],
+    (budgetOverridesRes.data ?? []) as BudgetOverride[],
+    currentMonth,
+  )
   const totalBudget = Array.from(budgetByCat.entries())
     .filter(([id]) => !parentOf.get(id))
     .reduce((s, [, v]) => s + v, 0)

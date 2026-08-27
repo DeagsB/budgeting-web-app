@@ -8,11 +8,12 @@ import { completeOnboarding } from '../complete-actions'
 export type BudgetCategory = { id: string; name: string; parentName: string | null }
 
 /**
- * One dollar field per leaf category for the current month. Empty fields are
- * ignored, so a partial pass is fine. "Finish" saves whatever was entered and
- * ends the guided flow.
+ * One dollar field per leaf category. The amounts are standing - they apply to
+ * every month until changed - so `month` only tells the action which month the
+ * household is starting from. Empty fields are ignored, so a partial pass is
+ * fine. "Finish" saves whatever was entered and ends the guided flow.
  */
-export function BudgetForm({ month, monthLabel, categories }: { month: string; monthLabel: string; categories: BudgetCategory[] }) {
+export function BudgetForm({ month, categories }: { month: string; categories: BudgetCategory[] }) {
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
@@ -60,7 +61,7 @@ export function BudgetForm({ month, monthLabel, categories }: { month: string; m
                       type="text"
                       inputMode="decimal"
                       placeholder="0"
-                      aria-label={`${monthLabel} budget for ${c.name} in dollars`}
+                      aria-label={`Monthly budget for ${c.name} in dollars`}
                       className="w-[88px] bg-transparent py-2 text-right text-[16px] font-semibold text-ink outline-none placeholder:text-ink-3"
                     />
                   </span>

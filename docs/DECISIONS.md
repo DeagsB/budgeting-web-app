@@ -519,3 +519,22 @@ The one branded template lived as a hand-edited HTML file.
 - *react-email*: a React render pipeline for five static emails; the table layout is already proven in the confirm-signup template.
 - *Keeping Supabase invites and only fixing SMTP*: still two send paths and a metadata-driven "set password" detour for a flow the landing page already handles.
 - *Notification digests by email*: out of scope; push covers alerts today.
+
+## 2026-08-27 - Budgets are standing; rollover is gone
+
+**Context:** budgets were stored per `(household, category, month)` and nothing carried them forward, so every new month opened blank even though the onboarding copy promised "budgets roll forward".
+A household whose budget is the same number every month had to retype it twelve times a year.
+Per-category rollover sat next to Rename / Archive as an unexplained word during first-run setup, and carrying a surplus forward is an envelope-budgeting idea that reads as ambiguous when the budget itself never changes.
+
+**Decision:**
+- `category_budgets` holds one standing amount per category that applies to every month until it is changed.
+- `monthly_budgets` keeps its shape but changes meaning: a row there is an override for that single month, including an explicit zero ("nothing budgeted this month").
+- The effective budget is resolved in one place, `src/lib/budget.ts` (`effectiveBudgets`, `budgetTotals`, `monthsInRange`), used by the budgets page, the dashboard hero and the overspend push alert.
+- The budgets editor saves standing by default; a per-row "Every month / <Month> only" toggle pins one category to the month on screen. Switching a row back to standing drops that month's override.
+- Rollover is removed everywhere: the toggle, the pill, the budgets-table column, and `categories.rollover_enabled`.
+- The migration seeds each category's standing amount from the most recent month it was budgeted in, then deletes override rows for the current month and later so nothing shows as overridden on day one. Past months keep their rows - that really was the budget at the time.
+
+**Considered + rejected:**
+- *Auto-copying last month's amounts into a new month*: still per-month storage, so a change to a standing figure means editing every month that was already seeded.
+- *A nullable `month` on `monthly_budgets` to mean "standing"*: one table with two meanings, and the unique constraint stops enforcing anything useful.
+- *Keeping rollover behind an explanation*: the household's budget does not change month to month, so a carried surplus has nothing to attach to.

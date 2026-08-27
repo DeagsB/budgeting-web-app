@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { monthLabel, monthStartISO } from '@/lib/format'
+import { monthStartISO } from '@/lib/format'
 import { MapleLabel } from '@/components/ui/label'
 import { CategoriesList } from '@/app/(app)/setup/categories-list'
 import { OnboardingShell } from '../shell'
@@ -10,9 +10,10 @@ import { BudgetForm } from './budget-form'
 export const dynamic = 'force-dynamic'
 
 /**
- * Onboarding step 4 - categories + a first monthly budget. The default
- * categories were seeded with the household; rename/archive here if they
- * don't fit, then pencil in amounts for this month. Skippable.
+ * Onboarding step 4 - categories + the household's standing budget. The
+ * default categories were seeded with the household; rename/archive here if
+ * they don't fit, then pencil in what a normal month costs. The amounts apply
+ * to every month until they're changed. Skippable.
  */
 export default async function OnboardingBudgetPage() {
   const { ctx } = await requireOnboardingStep('budget')
@@ -20,7 +21,7 @@ export default async function OnboardingBudgetPage() {
 
   const { data: categories } = await supabase
     .from('categories')
-    .select('id, parent_id, name, rollover_enabled, sort_order, archived_at')
+    .select('id, parent_id, name, sort_order, archived_at')
     .eq('household_id', ctx!.householdId)
     .order('sort_order')
 
@@ -48,10 +49,16 @@ export default async function OnboardingBudgetPage() {
           month look like?
         </>
       }
-      intro="Rough numbers are fine - budgets roll forward and you can tune them any time. Leave a category blank to skip it."
+      intro="Rough numbers are fine - what you set here applies to every month until you change it. Leave a category blank to skip it."
       eyebrow="Last step"
-      footer={<StepFooter skip="finish" skipLabel="Skip and go to my dashboard" />}
-      footnote="Budgets are per household and per month. Rollover carries any unspent amount into next month for categories that have it on."
+      footer={
+        <StepFooter
+          backHref="/onboarding/invite"
+          skip="finish"
+          skipLabel="Skip and go to my dashboard"
+        />
+      }
+      footnote="Budgets are per household. A category keeps the same amount every month, and you can override a single month from the Budgets page."
     >
       <div className="flex flex-col gap-7">
         <div>
@@ -65,7 +72,6 @@ export default async function OnboardingBudgetPage() {
                 id: c.id as string,
                 parent_id: (c.parent_id as string | null) ?? null,
                 name: c.name as string,
-                rollover: !!c.rollover_enabled,
                 archived: !!c.archived_at,
               }))}
             />
@@ -73,9 +79,9 @@ export default async function OnboardingBudgetPage() {
         </div>
 
         <div>
-          <MapleLabel>{monthLabel(month)} budget</MapleLabel>
+          <MapleLabel>Monthly budget</MapleLabel>
           <div className="mt-3">
-            <BudgetForm month={month} monthLabel={monthLabel(month)} categories={leaves} />
+            <BudgetForm month={month} categories={leaves} />
           </div>
         </div>
       </div>

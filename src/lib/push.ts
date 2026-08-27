@@ -10,6 +10,7 @@
 import webpush from 'web-push'
 import { createServiceClient } from '@/lib/supabase/service'
 import { formatMoney } from '@/lib/format'
+import { effectiveBudgets } from '@/lib/budget'
 
 export type PushPayload = { title: string; body: string; url?: string; tag?: string }
 
@@ -180,7 +181,8 @@ export async function notifyBudgetOverspendIfCrossed(
   const nextMonth = `${Number(tx.occurredOn.slice(0, 4)) + (tx.occurredOn.slice(5, 7) === '12' ? 1 : 0)}-${tx.occurredOn.slice(5, 7) === '12' ? '01' : String(Number(tx.occurredOn.slice(5, 7)) + 1).padStart(2, '0')}-01`
 
   // Resolve the budgeted category: the transaction's category or its parent,
-  // whichever has a monthly_budgets row this month.
+  // whichever is budgeted for this month. The budget is the category's
+  // standing amount unless that month carries an override.
   const { data: cat } = await service
     .from('categories')
     .select('id, name, parent_id')
@@ -189,16 +191,24 @@ export async function notifyBudgetOverspendIfCrossed(
   if (!cat) return
   const candidateIds = [cat.id as string, cat.parent_id as string | null].filter(Boolean) as string[]
 
-  const { data: budgets } = await service
-    .from('monthly_budgets')
-    .select('category_id, amount_cents')
-    .eq('household_id', householdId)
-    .eq('month', month)
-    .in('category_id', candidateIds)
-  if (!budgets || budgets.length === 0) return
-  const budget = budgets[0]
-  const budgetCents = Number(budget.amount_cents)
-  const budgetCatId = budget.category_id as string
+  const [{ data: standing }, { data: overrides }] = await Promise.all([
+    service
+      .from('category_budgets')
+      .select('category_id, amount_cents')
+      .eq('household_id', householdId)
+      .in('category_id', candidateIds),
+    service
+      .from('monthly_budgets')
+      .select('category_id, month, amount_cents')
+      .eq('household_id', householdId)
+      .eq('month', month)
+      .in('category_id', candidateIds),
+  ])
+
+  const budgets = effectiveBudgets(standing ?? [], overrides ?? [], month)
+  const budgetCatId = candidateIds.find((id) => budgets.has(id))
+  if (!budgetCatId) return
+  const budgetCents = budgets.get(budgetCatId) as number
 
   // Children of the budgeted category count toward its spend.
   const { data: children } = await service

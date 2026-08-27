@@ -37,7 +37,7 @@ export default async function SetupPage() {
       .order('sort_order'),
     supabase
       .from('categories')
-      .select('id, parent_id, name, rollover_enabled, sort_order, archived_at')
+      .select('id, parent_id, name, sort_order, archived_at')
       .eq('household_id', ctx.householdId)
       .order('sort_order'),
     supabase
@@ -131,7 +131,6 @@ export default async function SetupPage() {
             id: c.id,
             parent_id: c.parent_id,
             name: c.name,
-            rollover: !!c.rollover_enabled,
             archived: !!c.archived_at,
           }))}
         />
