@@ -1,5 +1,4 @@
 import { createClient } from '@/lib/supabase/server'
-import { MapleLabel } from '@/components/ui/label'
 import { OnboardingShell } from '../shell'
 import { StepFooter } from '../step-footer'
 import { requireOnboardingStep } from '../guard'
@@ -43,12 +42,7 @@ export default async function MemberNamePage() {
       }
       footnote="You can change it any time from Setup."
     >
-      <div>
-        <MapleLabel>Display name</MapleLabel>
-        <div className="mt-3">
-          <MemberNameForm current={(me?.display_name as string | undefined) ?? ''} />
-        </div>
-      </div>
+      <MemberNameForm current={(me?.display_name as string | undefined) ?? ''} />
     </OnboardingShell>
   )
 }

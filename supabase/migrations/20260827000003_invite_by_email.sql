@@ -110,7 +110,7 @@ declare
   caller uuid := auth.uid();
   caller_email text := lower(coalesce(auth.jwt() ->> 'email', ''));
   other_household uuid;
-  member_id uuid := inv.member_id;
+  target_member uuid := inv.member_id;
   base_name text;
   try_name text;
   n int := 1;
@@ -120,8 +120,8 @@ begin
   if inv.revoked_at is not null then raise exception 'revoked'; end if;
   if inv.expires_at < now() then raise exception 'expired'; end if;
   if lower(inv.email) <> caller_email then raise exception 'email_mismatch'; end if;
-  if member_id is not null
-     and exists (select 1 from members where id = member_id and user_id is not null) then
+  if target_member is not null
+     and exists (select 1 from members where id = target_member and user_id is not null) then
     raise exception 'member_already_linked';
   end if;
 
@@ -143,16 +143,16 @@ begin
   values (inv.household_id, caller, inv.role)
   on conflict (household_id, user_id) do update set role = excluded.role;
 
-  if member_id is null then
+  if target_member is null then
     -- Already in this household (re-invited, or invited twice)? Keep the
     -- member row they already have rather than making a second one.
-    select id into member_id
+    select id into target_member
     from members
     where household_id = inv.household_id and user_id = caller
     limit 1;
   end if;
 
-  if member_id is null then
+  if target_member is null then
     base_name := nullif(split_part(inv.email, '@', 1), '');
     if base_name is null then base_name := 'Member'; end if;
     base_name := left(base_name, 76);
@@ -171,13 +171,13 @@ begin
       coalesce((select max(sort_order) + 1 from members where household_id = inv.household_id), 0),
       caller
     )
-    returning id into member_id;
+    returning id into target_member;
   else
-    update members set user_id = caller where id = member_id;
+    update members set user_id = caller where id = target_member;
   end if;
 
   update household_invitations
-    set accepted_at = now(), accepted_by = caller, member_id = accept_invitation_row.member_id
+    set accepted_at = now(), accepted_by = caller, member_id = target_member
     where id = inv.id;
   return inv.household_id;
 end

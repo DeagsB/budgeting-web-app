@@ -11,16 +11,18 @@ export const dynamic = 'force-dynamic'
  * see before the invitee puts any of their own money in.
  */
 export default async function MemberWelcomePage() {
-  const { ctx } = await requireOnboardingStep('welcome')
+  const { ctx, user } = await requireOnboardingStep('welcome')
   const supabase = await createClient()
 
   const [{ data: household }, { data: invite }] = await Promise.all([
     supabase.from('households').select('name').eq('id', ctx!.householdId).maybeSingle(),
+    // Matched on the invited address, not accepted_by: that column is not in
+    // the table's select grant, and the address is what the invite was sent to.
     supabase
       .from('household_invitations')
       .select('invited_by, accepted_at')
       .eq('household_id', ctx!.householdId)
-      .eq('accepted_by', ctx!.userId)
+      .eq('email', (user!.email ?? '').toLowerCase())
       .not('accepted_at', 'is', null)
       .order('accepted_at', { ascending: false })
       .limit(1)

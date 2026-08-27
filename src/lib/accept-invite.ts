@@ -20,6 +20,11 @@ export async function acceptInviteToken(token: string): Promise<AcceptResult> {
   if (!userData.user) return { ok: false, error: acceptErrorMessage('not_authenticated') }
 
   const { data, error } = await supabase.rpc('accept_household_invitation', { raw_token: token })
-  if (error) return { ok: false, error: acceptErrorMessage(error.message) }
+  if (error) {
+    // The mapped messages cover the invitation's own rules; anything else is a
+    // fault worth seeing in the server log rather than only as "could not".
+    console.error('[invite] accept failed:', error.message)
+    return { ok: false, error: acceptErrorMessage(error.message) }
+  }
   return { ok: true, householdId: (data as string | null) ?? null }
 }
