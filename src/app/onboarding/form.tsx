@@ -77,14 +77,14 @@ export function OnboardingForm() {
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3 pt-1">
+      <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-[12px] text-[var(--color-ink-3)]">
           You can invite others after setup.
         </div>
         <button
           type="submit"
           disabled={pending || !ready}
-          className="inline-flex items-center gap-2 rounded-full bg-[var(--color-ink)] px-5 py-3 text-[14px] font-semibold text-[var(--color-paper)] transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex min-h-[46px] items-center justify-center gap-2 whitespace-nowrap rounded-full bg-[var(--color-ink)] px-5 py-3 text-[14px] font-semibold text-[var(--color-paper)] transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pending ? 'Creating…' : 'Create household'}
           {!pending && (

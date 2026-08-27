@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
-
-const TOTAL_STEPS = 2
+import { ONBOARDING_STEPS, onboardingStepNumber, type OnboardingStepName } from '@/lib/onboarding'
 
 /**
  * Two-panel onboarding frame shared by every step: brand + welcome copy on
@@ -14,14 +13,17 @@ export function OnboardingShell({
   intro,
   eyebrow,
   children,
+  footer,
   footnote,
 }: {
-  step: number
+  step: OnboardingStepName
   title: ReactNode
   intro: string
   /** Short line under the step indicator, e.g. "takes about 30 seconds". */
   eyebrow: string
   children: ReactNode
+  /** Optional row under the card for Continue / Skip controls. */
+  footer?: ReactNode
   footnote: string
 }) {
   return (
@@ -38,7 +40,7 @@ export function OnboardingShell({
           opacity: 0.7,
         }}
       />
-      <div className="relative mx-auto flex min-h-dvh max-w-[1100px] flex-col px-6 pb-8 pt-[calc(env(safe-area-inset-top)+24px)] md:flex-row md:items-center md:gap-16 md:px-10 md:py-12">
+      <div className="relative mx-auto flex min-h-dvh max-w-[1100px] flex-col px-6 pb-[calc(env(safe-area-inset-bottom)+32px)] pt-[calc(env(safe-area-inset-top)+24px)] md:flex-row md:items-center md:gap-16 md:px-10 md:py-12">
         {/* Brand + welcome panel */}
         <aside className="flex flex-col justify-between md:w-[420px] md:self-stretch md:py-8">
           <div>
@@ -53,7 +55,7 @@ export function OnboardingShell({
           <div className="mt-10 md:mt-0">
             <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-3)]">
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-leaf)]" />
-              Step {step} of {TOTAL_STEPS}
+              Step {onboardingStepNumber(step)} of {ONBOARDING_STEPS.length}
             </div>
             <h1 className="font-serif text-[40px] leading-[1.02] tracking-[-0.02em] text-[var(--color-ink)] md:text-[56px]">
               {title}
@@ -69,6 +71,7 @@ export function OnboardingShell({
           <div className="rounded-[24px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-6 shadow-[var(--shadow-float)] md:p-8">
             {children}
           </div>
+          {footer ? <div className="mt-4">{footer}</div> : null}
           <p className="mt-4 px-1 text-[12px] leading-relaxed text-[var(--color-ink-3)]">{footnote}</p>
         </section>
       </div>

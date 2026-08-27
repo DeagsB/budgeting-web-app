@@ -36,6 +36,9 @@ A web app that replicates the structure and formulas of a personal-finance Excel
   - `(app)/rules/` — transaction rules UI (`transaction_rules`); engine in `src/lib/transaction-rules*.ts`, shared on every ingest path.
   - `(auth)/` — sign-in + sign-up pages (route group, doesn't affect URL).
   - `(auth)/actions.ts` — `signIn`, `signUp`, `signOut` Server Actions.
+  - `onboarding/` — guided first run for the household OWNER: `/onboarding` (household) → `/onboarding/bank` (Plaid or manual account) → `/onboarding/invite` → `/onboarding/budget`. Pure step resolver in `src/lib/onboarding.ts`; done = `households.onboarding_completed_at` (set by the `complete_onboarding()` RPC). `(app)/layout.tsx` bounces an owner back in until then; invitees are never gated.
+  - `plaid/oauth-return/` — the single Plaid OAuth redirect URI (`PLAID_REDIRECT_URI`), outside both gates so a bank hand-off can't be interrupted. Resume state lives in localStorage (`src/lib/plaid-oauth.ts`).
+  - `src/components/plaid/plaid-connect.tsx` — `PlaidConnect` / `AccountMappingForm` / `usePlaidReauth`, shared by onboarding step 2, `/transactions/import/plaid-setup`, and the OAuth return page.
   - `auth/confirm/route.ts` — email-confirmation callback (Supabase `verifyOtp`).
   - `invite/[token]/` — unauthenticated invitation landing; previews via `preview_household_invitation` RPC, accepts via `accept_household_invitation`. Token is only ever in the URL; the DB stores its hash.
   - `api/cron/daily/route.ts` — the single Vercel Cron entry (`vercel.json`, Hobby allows daily only): Plaid safety-net sweep + settlement auto-close. Bearer `CRON_SECRET`; every job idempotent.
@@ -58,6 +61,9 @@ Required env vars (copy `.env.example` → `.env.local`):
 Without these the app will crash on first request — sign up for a Supabase project, paste the URL and anon key.
 
 Everything else (`NEXT_PUBLIC_SITE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PLAID_*`, `CRON_SECRET`, VAPID keys) is documented inline in `.env.example`; `src/lib/env.ts` validates the production set at boot and fails closed.
+`PLAID_REDIRECT_URI` must be `${NEXT_PUBLIC_SITE_URL}/plaid/oauth-return` and registered verbatim as an allowed redirect URI in the Plaid dashboard; leave it unset in sandbox unless testing an OAuth institution.
+
+One-off maintenance scripts live in `scripts/` and run with plain Node (`node --env-file=.env.local scripts/<name>.ts`); they are excluded from tsc / eslint / vitest. `scripts/wipe-household.ts` deletes one household's data (dry-run by default, `--yes` to execute) and keeps the auth login.
 
 ## Auth model
 

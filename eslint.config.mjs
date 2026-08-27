@@ -18,6 +18,8 @@ const eslintConfig = defineConfig([
     "fixes/**",
     // Local Playwright screenshot helper, never committed.
     ".pw-shot.cjs",
+    // One-off maintenance scripts run with plain Node, outside the Next toolchain.
+    "scripts/**",
   ]),
   {
     // Allow leading-underscore to signal "received but intentionally unused"

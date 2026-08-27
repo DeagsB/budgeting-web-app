@@ -9,6 +9,7 @@ import { MembersList } from './members-list'
 import { SplitWeightsForm } from './split-weights-form'
 import { CategoriesList } from './categories-list'
 import { NotificationSettings } from './notifications'
+import { BankConnections } from './bank-connections'
 import { DEFAULT_PREFS, type NotificationPrefs } from './notification-prefs'
 
 /**
@@ -20,7 +21,14 @@ export default async function SetupPage() {
   if (!ctx) return null
   const supabase = await createClient()
 
-  const [{ data: household }, { data: members }, { data: categories }, { data: invites }] = await Promise.all([
+  const [
+    { data: household },
+    { data: members },
+    { data: categories },
+    { data: invites },
+    { data: plaidItems },
+    { data: plaidAccounts },
+  ] = await Promise.all([
     supabase.from('households').select('id, name, notification_prefs, settlement_close_day').eq('id', ctx.householdId).single(),
     supabase
       .from('members')
@@ -39,6 +47,19 @@ export default async function SetupPage() {
       .is('accepted_at', null)
       .is('revoked_at', null)
       .gt('expires_at', new Date().toISOString()),
+    supabase
+      .from('plaid_items')
+      .select('id, institution_name, status, last_synced_at, needs_account_review')
+      .eq('household_id', ctx.householdId)
+      .neq('status', 'removed')
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('accounts')
+      .select('name, plaid_item_id')
+      .eq('household_id', ctx.householdId)
+      .not('plaid_item_id', 'is', null)
+      .is('archived_at', null)
+      .order('name'),
   ])
   const inviteByMember = new Map(
     (invites ?? []).map((i) => [i.member_id as string, { id: i.id as string, email: i.email as string, expiresAt: i.expires_at as string }]),
@@ -76,6 +97,21 @@ export default async function SetupPage() {
           }))}
           canManage={canManageHousehold(ctx)}
           myMemberId={ctx.memberId}
+        />
+      </Card>
+
+      <Card padding="lg">
+        <BankConnections
+          items={(plaidItems ?? []).map((it) => ({
+            id: it.id as string,
+            institutionName: (it.institution_name as string | null) ?? 'Bank',
+            status: it.status as string,
+            lastSyncedAt: (it.last_synced_at as string | null) ?? null,
+            needsAccountReview: it.needs_account_review === true,
+            accountNames: (plaidAccounts ?? [])
+              .filter((a) => a.plaid_item_id === it.id)
+              .map((a) => a.name as string),
+          }))}
         />
       </Card>
 

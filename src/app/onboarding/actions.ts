@@ -36,9 +36,9 @@ export async function createHousehold(
   if (error) return { error: humanizeDbError(error, { entity: 'household name' }) }
 
   revalidatePath('/', 'layout')
-  // Step 2: the first account. A dashboard with no accounts is an empty
-  // screen, so we don't land there yet.
-  redirect('/onboarding/account')
+  // Step 2: connect a bank (or add an account by hand). A dashboard with no
+  // accounts is an empty screen, so we don't land there yet.
+  redirect('/onboarding/bank')
 }
 
 /** Accept an invitation addressed to the signed-in email (no token needed). */

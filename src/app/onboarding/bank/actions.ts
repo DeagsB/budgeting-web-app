@@ -15,7 +15,7 @@ const TYPES = new Set<AccountType>(ACCOUNT_TYPES.map((t) => t.value))
  * Onboarding step 2: create the household's first account. Same insert shape
  * as accounts/actions.ts `createAccount`, with the ownership defaulted to
  * `shared` (a one-member household has nobody else to assign it to yet) and
- * no last-four routing hint. Lands on the dashboard on success.
+ * no last-four routing hint. Moves on to step 3 (invite) on success.
  */
 export async function createFirstAccount(
   _prev: FirstAccountState,
@@ -50,5 +50,5 @@ export async function createFirstAccount(
   if (error) return { error: humanizeDbError(error, { entity: 'account name' }) }
 
   revalidatePath('/', 'layout')
-  redirect('/dashboard')
+  redirect('/onboarding/invite')
 }

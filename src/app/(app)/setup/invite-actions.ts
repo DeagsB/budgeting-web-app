@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
-import { getHouseholdContext, canManageHousehold } from '@/lib/household'
+import { getHouseholdContext, canManageHousehold, type HouseholdContext } from '@/lib/household'
 import {
   confirmRedirectFor,
   generateInviteToken,
@@ -43,6 +43,17 @@ export async function inviteMember(_prev: InviteState, fd: FormData): Promise<In
   if (!email.includes('@')) return { error: 'Enter a valid email address.' }
   if (!memberId) return { error: 'Pick which member this person is.' }
 
+  return createInvitation(ctx, { memberId, email, role })
+}
+
+/**
+ * Core of inviteMember, shared with onboarding (which creates the member slot
+ * first). Caller has already authorised `ctx` and normalised the inputs.
+ */
+export async function createInvitation(
+  ctx: HouseholdContext,
+  { memberId, email, role }: { memberId: string; email: string; role: 'member' | 'admin' },
+): Promise<InviteState> {
   const supabase = await createClient()
   const { data: me } = await supabase.auth.getUser()
   if (me.user?.email && me.user.email.toLowerCase() === email) {

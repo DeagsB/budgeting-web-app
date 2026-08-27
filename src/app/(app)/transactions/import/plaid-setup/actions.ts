@@ -8,6 +8,7 @@ import { getHouseholdContext } from '@/lib/household'
 import {
   createPlaidClient,
   plaidCountryCodes,
+  PLAID_MAX_ITEMS,
   plaidProducts,
   encryptToken,
   decryptToken,
@@ -17,7 +18,7 @@ import { getPlaidEnv } from '@/lib/env'
 import type { AccountType } from '@/lib/domain'
 import { humanizeDbError } from '@/lib/errors'
 
-const MAX_ITEMS = 10 // Plaid free Trial tier cap.
+const MAX_ITEMS = PLAID_MAX_ITEMS
 
 // ─── Shared types (client ↔ server) ───────────────────────────────────────
 

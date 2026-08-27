@@ -40,6 +40,9 @@ export function createPlaidClient(): PlaidApi | null {
   )
 }
 
+/** Plaid free Trial tier cap on linked banks (Items). */
+export const PLAID_MAX_ITEMS = 10
+
 /** Canada only - the app's market. */
 export function plaidCountryCodes(): CountryCode[] {
   return [CountryCode.Ca]

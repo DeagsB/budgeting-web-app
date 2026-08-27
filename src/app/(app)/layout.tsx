@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
+import { nextOnboardingStep, onboardingPath } from '@/lib/onboarding'
 import { AppShell } from './shell'
 
 export const dynamic = 'force-dynamic'
@@ -14,12 +15,23 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const ctx = await getHouseholdContext()
   if (!ctx) redirect('/onboarding')
 
-  const [{ data: household }, { data: me }] = await Promise.all([
-    supabase.from('households').select('name').eq('id', ctx.householdId).single(),
+  const [{ data: household }, { data: me }, { count: accountCount }] = await Promise.all([
+    supabase.from('households').select('name, onboarding_completed_at').eq('id', ctx.householdId).single(),
     ctx.memberId
       ? supabase.from('members').select('display_name').eq('id', ctx.memberId).maybeSingle()
       : Promise.resolve({ data: null }),
+    supabase.from('accounts').select('id', { count: 'exact', head: true }).eq('household_id', ctx.householdId),
   ])
+
+  // The creating owner walks the guided flow until they finish or skip it.
+  // Invitees are never gated (nextOnboardingStep returns 'done' for non-owners).
+  const step = nextOnboardingStep({
+    hasHousehold: true,
+    role: ctx.role,
+    accountCount: accountCount ?? 0,
+    completedAt: (household?.onboarding_completed_at as string | null) ?? null,
+  })
+  if (step !== 'done') redirect(onboardingPath(step))
 
   return (
     <AppShell

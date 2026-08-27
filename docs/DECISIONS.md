@@ -475,3 +475,28 @@ Two mechanisms: the root cross-fade blended the old and new tab bars (active sta
 **Considered + rejected:**
 - *Painting a cream background on the new pseudo*: on the broken WebKit builds the background paints but the image does not, leaving a blank bar.
 - *Dropping the route transition*: the fade is fine; only the chrome needed pulling out of it.
+
+## 2026-08-27 - Guided onboarding: household → bank → invite → budget; explicit completion flag
+
+**Context:** onboarding was two steps (household, one manual account) and "done" was inferred from row counts.
+Plaid lived only under Transactions → Import → Connect a bank, so a first-run user never found bank sync.
+Skippable steps make count-based inference impossible.
+
+**Decision:**
+- `households.onboarding_completed_at` (nullable, migration `20260827000001_onboarding_state.sql`) is the single source of truth, set only by the owner through `complete_onboarding()`.
+  Existing households were backfilled so nobody already using the app is bounced.
+  Invitees are never gated: the resolver returns `done` for any non-owner.
+- The resume step is derived, not stored (`src/lib/onboarding.ts`): no accounts → bank; otherwise → invite.
+  Invite and budget are quick and skippable, so re-showing invite on resume costs nothing.
+- Plaid Link + account mapping moved out of the settings wizard into `src/components/plaid/plaid-connect.tsx` (`PlaidConnect`, `AccountMappingForm`, `usePlaidReauth`) so onboarding step 2, the settings page and the OAuth return page share one Link implementation.
+  OAuth resume state is a pure module (`src/lib/plaid-oauth.ts`) and now also remembers the page that started the flow.
+- One OAuth return URL, `/plaid/oauth-return`, outside the app shell and outside `/onboarding`, so neither redirect gate can swallow a bank hand-off.
+- "Connect a bank" is reachable from `/accounts` (header + empty state) and `/setup` (a Bank connections card with status per bank); the Plaid page keeps its URL.
+- One-off data wipes are a local script (`scripts/wipe-household.ts`) that removes Plaid items via the API, deletes transactions before the household row (the schema's only `on delete restrict` FK is `transactions.account_id`), and keeps `auth.users`.
+  Dry-run is the default.
+
+**Considered + rejected:**
+- *`onboarding_step` column*: a second write per step for information that is cheaply derivable.
+- *`wipe_household(uuid)` SQL function*: a permanent, privileged, destructive RPC in production for a one-off need.
+- *Registering both `/onboarding/bank` and the settings page as Plaid redirect URIs*: two URIs to keep in sync, and the app-shell gate would still bounce an un-onboarded owner off the settings page mid-OAuth.
+- *Moving the Plaid page under `/setup`*: the URL is bookmarked and breadcrumbed; a status card on Setup is enough.

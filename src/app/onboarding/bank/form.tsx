@@ -1,7 +1,6 @@
 'use client'
 
 import { useActionState, useState } from 'react'
-import Link from 'next/link'
 import { ACCOUNT_TYPES } from '@/lib/domain'
 import { Field } from '@/components/ui/field'
 import { Button } from '@/components/ui/button'
@@ -70,21 +69,10 @@ export function FirstAccountForm() {
         </div>
       )}
 
-      <div className="flex flex-col gap-2 pt-1 sm:flex-row-reverse sm:items-center sm:justify-between">
-        <Button type="submit" variant="primary" size="md" disabled={pending || !ready}>
+      <div className="flex pt-1 sm:justify-end">
+        <Button type="submit" variant="secondary" size="md" disabled={pending || !ready} className="w-full sm:w-auto">
           {pending ? 'Adding…' : 'Add account'}
-          {!pending && (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-              <path d="M5 12h14M13 6l6 6-6 6" />
-            </svg>
-          )}
         </Button>
-        <Link
-          href="/dashboard"
-          className="inline-flex min-h-[44px] items-center justify-center px-2 text-[13.5px] font-semibold text-ink-2 transition-colors hover:text-ink"
-        >
-          Skip for now
-        </Link>
       </div>
     </form>
   )

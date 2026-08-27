@@ -1,11 +1,12 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
+import { PLAID_MAX_ITEMS } from '@/lib/plaid'
 import { PlaidWizard } from './plaid-wizard'
 
 export const dynamic = 'force-dynamic'
 
-const MAX_ITEMS = 10
+const MAX_ITEMS = PLAID_MAX_ITEMS
 
 export default async function PlaidSetupPage() {
   const ctx = await getHouseholdContext()

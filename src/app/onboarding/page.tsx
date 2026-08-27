@@ -1,20 +1,15 @@
-import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { getHouseholdContext } from '@/lib/household'
 import { OnboardingShell } from './shell'
 import { OnboardingForm } from './form'
 import { PendingInvites, type PendingInvite } from './pending-invites'
+import { requireOnboardingStep } from './guard'
 
 export const dynamic = 'force-dynamic'
 
+/** Onboarding step 1 - create the household (or accept a waiting invite). */
 export default async function OnboardingPage() {
+  await requireOnboardingStep('household')
   const supabase = await createClient()
-  const { data } = await supabase.auth.getUser()
-  const user = data?.user
-  if (!user) redirect('/sign-in')
-
-  const ctx = await getHouseholdContext()
-  if (ctx) redirect('/dashboard')
 
   const { data: inviteRows } = await supabase.rpc('my_pending_invitations')
   const invites = ((inviteRows as PendingInvite[] | null) ?? []).map((i) => ({
@@ -25,7 +20,7 @@ export default async function OnboardingPage() {
 
   return (
     <OnboardingShell
-      step={1}
+      step="household"
       title={
         <>
           Welcome.
