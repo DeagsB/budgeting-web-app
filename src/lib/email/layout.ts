@@ -191,14 +191,14 @@ export function renderEmailHtml(e: EmailContent): string {
       <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" align="center"><tr><td><![endif]-->
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" class="sm-w-full" style="width: 600px; max-width: 600px; margin: 0 auto;">
         <tr><td align="center" style="padding: 8px 0 28px 0;">
-          <span class="sm-wordmark dm-ink" style="font-family: ${SERIF}; font-size: 34px; line-height: 36px; letter-spacing: 0.5px; color: ${C.ink};">Maple</span><span class="dm-leaf" style="font-family: ${SERIF}; font-size: 18px; line-height: 36px; color: ${C.leaf};" role="img" aria-label="maple leaf">&nbsp;&#9650;</span>
+          <span class="sm-wordmark dm-ink" style="font-family: ${SERIF}; font-size: 34px; line-height: 36px; letter-spacing: 0.5px; color: ${C.ink};">Maple</span>
         </td></tr>
         <tr><td style="padding: 0;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="dm-card" style="background-color: ${C.card}; border: 1px solid ${C.hair}; border-radius: 16px;">
             <tr><td class="sm-px sm-py" style="padding: 44px 48px 40px 48px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr><td style="padding: 0 0 18px 0;">
-                  <span class="dm-leaf" style="font-family: ${SANS}; font-size: 12px; line-height: 12px; color: ${C.leaf};" aria-hidden="true">&#9650;&nbsp;&nbsp;</span><span class="dm-ink-2" style="font-family: ${SANS}; font-size: 12px; line-height: 12px; letter-spacing: 2.5px; text-transform: uppercase; color: ${C.ink2};">${esc(e.eyebrow)}</span>
+                  <span class="dm-ink-2" style="font-family: ${SANS}; font-size: 12px; line-height: 12px; letter-spacing: 2.5px; text-transform: uppercase; color: ${C.ink2};">${esc(e.eyebrow)}</span>
                 </td></tr>
               </table>
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
@@ -219,7 +219,7 @@ export function renderEmailHtml(e: EmailContent): string {
           <p class="dm-ink-3" style="margin: 0 0 16px 0; mso-line-height-rule: exactly; font-family: ${SANS}; font-size: 13px; line-height: 21px; color: ${C.ink3}; text-align: center;">${esc(e.note)}</p>
         </td></tr>
         <tr><td align="center" style="padding: 8px 0 0 0;">
-          <span class="dm-ink-2" style="font-family: ${SERIF}; font-size: 16px; line-height: 18px; color: ${C.ink2};">Maple</span><span class="dm-leaf" style="font-family: ${SERIF}; font-size: 11px; line-height: 18px; color: ${C.leaf};" role="img" aria-label="maple leaf">&nbsp;&#9650;</span>
+          <span class="dm-ink-2" style="font-family: ${SERIF}; font-size: 16px; line-height: 18px; color: ${C.ink2};">Maple</span>
           <p class="dm-ink-3" style="margin: 8px 0 0 0; mso-line-height-rule: exactly; font-family: ${SANS}; font-size: 12px; line-height: 18px; color: ${C.ink3};">Calm budgeting for Canadian households.</p>
         </td></tr>
       </table>
