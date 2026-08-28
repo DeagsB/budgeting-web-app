@@ -60,6 +60,8 @@ export async function updateSession(request: NextRequest) {
     // Public ingestion webhooks authenticate via per-household secret in the
     // request body, not via cookies - don't bounce unauth callers to /sign-in.
     pathname.startsWith('/api/ingest') ||
+    // Supabase Auth's Send Email hook: signed with the hook secret, no cookie.
+    pathname.startsWith('/api/auth/send-email') ||
     // Plaid webhook (verified via signed JWT) and the scheduled cron route
     // (CRON_SECRET bearer) are called by external services with no cookie.
     pathname.startsWith('/api/plaid/webhook') ||
