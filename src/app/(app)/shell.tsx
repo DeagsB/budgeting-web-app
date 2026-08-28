@@ -13,6 +13,7 @@ import { PullToSync } from '@/components/pull-to-sync'
 import { useScrollLock } from '@/lib/use-scroll-lock'
 import { useOnline } from '@/lib/run-action'
 import { QuickAddProvider, useQuickAdd } from '@/lib/quick-add'
+import { IOSInstallHint } from '@/components/pwa/ios-install-hint'
 
 /**
  * Maple shell. Light + dark are driven by the `.dark` class on <html>
@@ -520,7 +521,9 @@ function AppShellInner({
       <main className="md:pl-[240px]">
         <div
           className="mx-auto max-w-[720px] px-4 py-5 md:max-w-[1080px] md:px-10 md:py-10"
-          style={{ paddingBottom: 'calc(72px + env(safe-area-inset-bottom) + 16px)' }}
+          // Tab bar + home indicator, plus whatever the iOS install hint is
+          // occupying above the bar (0 when hidden - see IOSInstallHint).
+          style={{ paddingBottom: 'calc(72px + env(safe-area-inset-bottom) + 16px + var(--maple-hint-h, 0px))' }}
         >
           {/* Pull-to-sync wraps every screen so the gesture is universal - a
               pull-down at the top of any page triggers a Gmail sync + refresh.
@@ -709,6 +712,7 @@ function AppShellInner({
       )}
 
       {!online && <OfflineBanner />}
+      <IOSInstallHint />
     </div>
     </ToastProvider>
     </ShellTitleContext.Provider>
@@ -727,7 +731,7 @@ function OfflineBanner() {
     <div
       role="status"
       aria-live="polite"
-      className="maple-chrome pointer-events-none fixed left-3 right-[84px] z-30 bottom-[calc(72px+env(safe-area-inset-bottom)+12px)] md:left-auto md:right-6 md:bottom-4 md:w-auto"
+      className="maple-chrome pointer-events-none fixed left-3 right-[84px] z-30 bottom-[calc(72px+env(safe-area-inset-bottom)+12px+var(--maple-hint-h,0px))] md:left-auto md:right-6 md:bottom-4 md:w-auto"
     >
       <div className="flex min-h-[40px] items-center gap-2 rounded-full bg-[var(--color-ink)] px-4 text-[13px] font-medium tracking-[-0.01em] text-[var(--color-paper)] shadow-[var(--shadow-float)]">
         <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--color-maple)]" aria-hidden />

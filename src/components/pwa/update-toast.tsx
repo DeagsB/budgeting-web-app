@@ -12,7 +12,7 @@ export function UpdateToast({ onReload, busy }: { onReload: () => void; busy: bo
       role="status"
       aria-live="polite"
       className="maple-chrome fixed inset-x-0 z-50 px-3"
-      style={{ bottom: 'calc(72px + env(safe-area-inset-bottom) + 12px)' }}
+      style={{ bottom: 'calc(72px + env(safe-area-inset-bottom) + 12px + var(--maple-hint-h, 0px))' }}
     >
       <div
         className="mx-auto flex h-11 max-w-[420px] items-center justify-between gap-3 rounded-full pl-4 pr-1.5 shadow-[var(--shadow-float)]"

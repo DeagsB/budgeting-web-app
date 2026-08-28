@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from 'next'
 import { Inter_Tight, Instrument_Serif, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { ServiceWorkerRegistrar } from '@/components/pwa/sw-registrar'
-import { IOSInstallHint } from '@/components/pwa/ios-install-hint'
 import { SPLASH_DEVICES, splashFileName, splashMedia } from './splash/brand'
 
 const interTight = Inter_Tight({
@@ -91,7 +90,6 @@ export default function RootLayout({
         <div className="status-bar-band" aria-hidden="true" />
         {children}
         <ServiceWorkerRegistrar />
-        <IOSInstallHint />
       </body>
     </html>
   )

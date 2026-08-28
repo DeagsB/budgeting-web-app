@@ -84,8 +84,8 @@ export function ToastProvider({
         className={
           'maple-chrome pointer-events-none fixed left-3 right-[84px] z-[70] flex flex-col items-stretch gap-2 md:left-auto md:right-6 md:w-[360px] ' +
           (raised
-            ? 'bottom-[calc(72px+env(safe-area-inset-bottom)+64px)] md:bottom-[68px]'
-            : 'bottom-[calc(72px+env(safe-area-inset-bottom)+12px)] md:bottom-4')
+            ? 'bottom-[calc(72px+env(safe-area-inset-bottom)+64px+var(--maple-hint-h,0px))] md:bottom-[68px]'
+            : 'bottom-[calc(72px+env(safe-area-inset-bottom)+12px+var(--maple-hint-h,0px))] md:bottom-4')
         }
       >
         {items.map((t) => (
