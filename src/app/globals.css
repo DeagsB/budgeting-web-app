@@ -211,6 +211,38 @@ button,
   touch-action: manipulation;
 }
 
+/* ─── App feel on touch screens ───
+   A long press on a phone should never start selecting page text or pop the
+   iOS callout - that is what makes a web app feel like a web page. Selection
+   stays on for what people genuinely copy: form fields, code/pre blocks
+   (links, secrets, scripts) and anything opted in with .maple-selectable.
+   Desktop keeps normal text selection - the rule only applies to coarse
+   pointers (fingers). Images and links also stop acting as drag sources. */
+@media (pointer: coarse) {
+  body {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  input,
+  textarea,
+  select,
+  [contenteditable],
+  [contenteditable] *,
+  pre,
+  code,
+  .maple-selectable,
+  .maple-selectable * {
+    -webkit-user-select: text;
+    user-select: text;
+    -webkit-touch-callout: default;
+  }
+  img,
+  a {
+    -webkit-user-drag: none;
+  }
+}
+
 /* One focus ring for every keyboard-reachable control. Form fields keep their
    own ring (see .maple-input:focus below); overlays with tabindex="-1" are
    programmatically focused and deliberately excluded. */
