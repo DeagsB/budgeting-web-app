@@ -58,6 +58,12 @@ function SignInInner() {
                 placeholder="At least 8 characters"
               />
             </Field>
+            <Link
+              href="/forgot-password"
+              className="-mt-1 self-end py-1 text-[12.5px] font-semibold text-[var(--color-ink-2)] underline-offset-2 hover:underline"
+            >
+              Forgot password?
+            </Link>
 
             {state?.error && (
               <p

@@ -49,6 +49,10 @@ export async function updateSession(request: NextRequest) {
   const isAuthRoute =
     pathname.startsWith('/sign-in') ||
     pathname.startsWith('/sign-up') ||
+    pathname.startsWith('/forgot-password') ||
+    // Reached from the emailed recovery link with a fresh session; when the
+    // session is missing the page itself explains that the link expired.
+    pathname.startsWith('/reset-password') ||
     pathname.startsWith('/auth') ||
     // Invitation landing page previews the invite signed-out and offers
     // sign-in / sign-up; acceptance itself requires a session.

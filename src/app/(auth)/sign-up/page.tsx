@@ -78,10 +78,26 @@ function SignUpInner() {
 
             {state?.error && (
               <p
-                className="rounded-[10px] px-3 py-2 text-[12.5px] font-medium"
+                className="rounded-[10px] px-3 py-2 text-[12.5px] font-medium leading-relaxed"
                 style={{ background: 'var(--color-maple-soft)', color: 'var(--color-maple)' }}
               >
                 {state.error}
+                {state.code === 'account_exists' && (
+                  <>
+                    {' '}
+                    <Link
+                      href={`/sign-in${next !== '/dashboard' ? `?next=${encodeURIComponent(next)}` : ''}`}
+                      className="font-bold underline underline-offset-2"
+                    >
+                      Sign in
+                    </Link>{' '}
+                    or{' '}
+                    <Link href="/forgot-password" className="font-bold underline underline-offset-2">
+                      reset your password
+                    </Link>
+                    .
+                  </>
+                )}
               </p>
             )}
 

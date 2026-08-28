@@ -7,9 +7,15 @@ import { createClient } from '@/lib/supabase/server'
 import { inviteTokenFromNext, safeNextPath } from '@/lib/invitations'
 import { acceptInviteToken } from '@/lib/accept-invite'
 import { PENDING_EMAIL_COOKIE, PENDING_EMAIL_TTL_SECONDS, normalizePendingEmail } from '@/lib/pending-email'
+import { RESET_PASSWORD_PATH, isExistingAccountSignUp } from '@/lib/auth-signals'
 
-export type AuthState = { error: string } | undefined
+/**
+ * `code` lets the form render something smarter than the message alone -
+ * `account_exists` gets "Sign in" / "Reset password" links on the sign-up page.
+ */
+export type AuthState = { error: string; code?: 'account_exists' } | undefined
 export type ResendState = { error: string } | { sent: true } | undefined
+export type ResetRequestState = { error: string } | { sent: true; email: string } | undefined
 
 function confirmUrlFor(next: string): string {
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
@@ -92,12 +98,63 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
   })
   if (error) return { error: error.message }
 
+  // Already registered and confirmed: Supabase answers with a decoy user and
+  // sends nothing (see isExistingAccountSignUp). Say so rather than sending
+  // them to wait for an email that will never arrive.
+  if (isExistingAccountSignUp(data.user)) {
+    return {
+      error: 'An account already exists for that email.',
+      code: 'account_exists',
+    }
+  }
+
   revalidatePath('/', 'layout')
   // Email-confirmation off → session is live immediately; skip the "check email"
   // page and, for an invitation, join the household right away.
   if (data.session) redirect(next === '/dashboard' ? '/onboarding' : await landingFor(next))
   await rememberPendingEmail(v.email.toLowerCase())
   redirect('/sign-up/check-email')
+}
+
+/**
+ * Email a password-reset link. The link runs through /auth/confirm, which
+ * turns the recovery token into a session and lands on /reset-password.
+ * Supabase deliberately answers the same way whether or not the address is
+ * registered, so the form always reports "sent" unless sending itself failed
+ * (rate limit, SMTP).
+ */
+export async function requestPasswordReset(_prev: ResetRequestState, formData: FormData): Promise<ResetRequestState> {
+  const email = normalizePendingEmail(String(formData.get('email') ?? ''))
+  if (!email) return { error: 'Enter a valid email address.' }
+
+  const supabase = await createClient()
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: confirmUrlFor(RESET_PASSWORD_PATH),
+  })
+  if (error) return { error: error.message }
+  return { sent: true, email }
+}
+
+/**
+ * Set a new password for the recovery session established by the emailed
+ * link. Requires a live session - an expired or reused link never reaches
+ * here because /auth/confirm bounces it to sign-in with the reason.
+ */
+export async function updatePassword(_prev: AuthState, formData: FormData): Promise<AuthState> {
+  const password = String(formData.get('password') ?? '')
+  const confirm = String(formData.get('confirm') ?? '')
+  if (password.length < 8) return { error: 'Password must be at least 8 characters.' }
+  if (password !== confirm) return { error: 'Those passwords don’t match.' }
+
+  const supabase = await createClient()
+  const { data } = await supabase.auth.getUser()
+  if (!data.user) redirect('/forgot-password?expired=1')
+
+  const { error } = await supabase.auth.updateUser({ password, data: { has_password: true } })
+  if (error) return { error: error.message }
+
+  revalidatePath('/', 'layout')
+  redirect('/dashboard')
 }
 
 /**
