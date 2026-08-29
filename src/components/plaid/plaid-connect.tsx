@@ -17,7 +17,7 @@ import {
   createUpdateLinkToken,
   exchangePublicToken,
   saveAccountMapping,
-  triggerPlaidSync,
+  completeReauth,
   type PlaidAccountChoice,
   type AccountMapping,
 } from '@/app/(app)/transactions/import/plaid-setup/actions'
@@ -435,13 +435,12 @@ export function usePlaidReauth({
   const onSuccess = useCallback(() => {
     finishOAuth()
     const id = itemRef.current
-    if (!id) {
-      onDone(id, resumedReturnTo, null)
-      return
-    }
     onSyncStart?.(id)
     startTransition(async () => {
-      const res = await triggerPlaidSync(id)
+      // Ask Plaid for the item's real state, write it, then sync. A null id
+      // (the OAuth bounce lost track of which bank was being repaired)
+      // reconciles every bank of the household that was waiting on the user.
+      const res = await completeReauth(id)
       if (res && 'error' in res) {
         onError(res.error)
         return

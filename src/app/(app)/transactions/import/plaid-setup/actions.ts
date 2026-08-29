@@ -15,6 +15,8 @@ import {
 } from '@/lib/plaid'
 import { refreshPlaidBalances, syncPlaidItem, type SyncTrigger } from '@/lib/plaid-sync'
 import { plaidSyncSelection } from '@/lib/plaid-sync-plan'
+import { reconcileItemStatus } from '@/lib/plaid-item-health'
+import { PLAID_ATTENTION_STATUSES } from '@/lib/plaid-attention'
 import { getPlaidEnv } from '@/lib/env'
 import type { AccountType } from '@/lib/domain'
 import { humanizeDbError } from '@/lib/errors'
@@ -479,5 +481,63 @@ export async function triggerPlaidSync(
   revalidatePath('/transactions/import/plaid-setup')
   revalidatePath('/transactions')
   revalidatePath('/dashboard')
+  return { ok: true, added, reconciled, loginRequired, skipped: ran === 0 }
+}
+
+/**
+ * After update-mode Link: ask Plaid whether the item is healthy now, write
+ * that status (every state change is logged), and only then sync. A null
+ * `itemRowId` means the OAuth bounce lost track of which bank was being
+ * repaired; every bank of the household that was waiting on the user is
+ * reconciled instead, so a repair is never silently dropped.
+ */
+export async function completeReauth(itemRowId: string | null): Promise<PlaidSyncNowState> {
+  const ctx = await getHouseholdContext()
+  if (!ctx) return { error: 'Not authorized.' }
+  const plaid = createPlaidClient()
+  if (!plaid) return { error: 'Plaid isn’t configured on this server.' }
+  const service = createServiceClient()
+  if (!service) return { error: 'Server is missing SUPABASE_SERVICE_ROLE_KEY.' }
+
+  let query = service
+    .from('plaid_items')
+    .select('id, household_id, item_id, cursor, status')
+    .eq('household_id', ctx.householdId)
+    .neq('status', 'removed')
+  query = itemRowId ? query.eq('id', itemRowId) : query.in('status', [...PLAID_ATTENTION_STATUSES])
+  const { data: items } = await query
+  if (!items || items.length === 0) {
+    return { error: itemRowId ? 'Bank not found.' : 'No bank was waiting to be reconnected.' }
+  }
+
+  let added = 0
+  let reconciled = 0
+  let loginRequired = false
+  let ran = 0
+  for (const it of items) {
+    const row = {
+      id: it.id as string,
+      household_id: it.household_id as string,
+      item_id: it.item_id as string,
+      cursor: (it.cursor as string | null) ?? null,
+    }
+    const health = await reconcileItemStatus(service, plaid, { ...row, status: it.status as string }, { source: 'reauth' })
+    if (health.status && health.status !== 'active') {
+      loginRequired = true
+      continue
+    }
+    // Healthy, or Plaid could not be asked: Link just succeeded, so try the
+    // sync; its own error handling writes the truthful status either way.
+    ran += 1
+    const res = await syncPlaidItem(service, plaid, row, { trigger: 'manual' })
+    added += res.added
+    reconciled += res.reconciled
+    if (res.status === 'login_required') loginRequired = true
+  }
+
+  revalidatePath('/transactions/import/plaid-setup')
+  revalidatePath('/transactions')
+  revalidatePath('/dashboard')
+  revalidatePath('/accounts')
   return { ok: true, added, reconciled, loginRequired, skipped: ran === 0 }
 }

@@ -158,6 +158,67 @@ export function plaidSyncSelection(itemRowId?: string | null): PlaidSyncSelectio
  * mapped, because with nothing mapped there is nothing to write and the live
  * call is exactly what provokes a fresh login demand at MFA banks.
  */
-export function shouldRefreshBalancesLive(mappedAccounts: number, snapshotsWritten: number): boolean {
-  return mappedAccounts > 0 && snapshotsWritten === 0
+export const BALANCE_REFRESH_MIN_MS = 20 * 60 * 60 * 1000
+
+export function shouldRefreshBalancesLive(
+  mappedAccounts: number,
+  snapshotsWritten: number,
+  lastSnapshotUpdatedISO: string | null = null,
+  now: number = Date.now(),
+): boolean {
+  if (mappedAccounts === 0 || snapshotsWritten > 0) return false
+  if (!lastSnapshotUpdatedISO) return true
+  const t = Date.parse(lastSnapshotUpdatedISO)
+  // At most one live balance call per item per ~day: each one is a fresh
+  // login at the bank, and at MFA banks that is what trips ITEM_LOGIN_REQUIRED.
+  return !Number.isFinite(t) || now - t >= BALANCE_REFRESH_MIN_MS
+}
+
+// ─── Item status from Plaid's own view of the item ─────────────────────────
+
+export type PlaidItemStatus = 'active' | 'login_required' | 'pending_disconnect' | 'revoked' | 'error'
+
+/**
+ * Plaid's `item.error.error_code` (from /item/get, or the body of an
+ * ITEM: ERROR webhook) → the status we store. No error means healthy; a
+ * transient institution problem is not a reason to ask the user for anything.
+ */
+export function statusFromItemError(code: string | null | undefined): PlaidItemStatus {
+  if (!code) return 'active'
+  if (code === 'PENDING_DISCONNECT') return 'pending_disconnect'
+  switch (classifyPlaidError(code)) {
+    case 'reauth':
+      return 'login_required'
+    case 'revoked':
+      return 'revoked'
+    case 'transient':
+      return 'active'
+    default:
+      return 'error'
+  }
+}
+
+/** plaid_sync_log.status is constrained; fold item statuses onto it. */
+export function logStatusFor(status: PlaidItemStatus): 'ok' | 'login_required' | 'revoked' | 'error' {
+  switch (status) {
+    case 'active':
+      return 'ok'
+    case 'login_required':
+    case 'pending_disconnect':
+      return 'login_required'
+    case 'revoked':
+      return 'revoked'
+    default:
+      return 'error'
+  }
+}
+
+/** Days before consent expiry at which a bank counts as needing the user. */
+export const CONSENT_EXPIRY_WARNING_MS = 7 * 24 * 60 * 60 * 1000
+
+/** Consent expiring within the warning window is a re-auth in waiting. */
+export function consentExpiringSoon(consentExpirationISO: string | null | undefined, now: number = Date.now()): boolean {
+  if (!consentExpirationISO) return false
+  const t = Date.parse(consentExpirationISO)
+  return Number.isFinite(t) && t - now < CONSENT_EXPIRY_WARNING_MS
 }

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createPlaidClient } from '@/lib/plaid'
 import { syncPlaidItem, type PlaidSyncResult } from '@/lib/plaid-sync'
+import { reconcileItemStatus } from '@/lib/plaid-item-health'
 
 export type SweepSummary = {
   considered: number
@@ -86,4 +87,51 @@ export async function runPlaidSweep(
     if (i < rows.length - 1) await new Promise((r) => setTimeout(r, STAGGER_MS))
   }
   return summary
+}
+
+export type HealthSweepSummary = { considered: number; healed: number; unchanged: number; unreachable: number }
+
+/**
+ * Health pass for banks that are waiting on the user: one /item/get each
+ * (answered from Plaid's side, never a login at the bank), so a status left
+ * behind by a late or out-of-order webhook heals itself within a day, and a
+ * bank repaired without us hearing LOGIN_REPAIRED gets synced. Banks that
+ * really do still need the user stay exactly as they are. Revoked
+ * connections need a fresh Link, not a check, so they are left out.
+ */
+export async function runPlaidHealthSweep(
+  service: SupabaseClient,
+  opts: { budgetMs: number },
+): Promise<HealthSweepSummary> {
+  const out: HealthSweepSummary = { considered: 0, healed: 0, unchanged: 0, unreachable: 0 }
+  const plaid = createPlaidClient()
+  if (!plaid) return out
+
+  const { data: items } = await service
+    .from('plaid_items')
+    .select('id, household_id, item_id, cursor, status')
+    .in('status', ['login_required', 'pending_disconnect', 'error'])
+    .order('updated_at', { ascending: true })
+  const rows = items ?? []
+  out.considered = rows.length
+
+  const started = Date.now()
+  for (let i = 0; i < rows.length; i++) {
+    if (Date.now() - started > opts.budgetMs) break
+    const it = rows[i]
+    const row = {
+      id: it.id as string,
+      household_id: it.household_id as string,
+      item_id: it.item_id as string,
+      cursor: (it.cursor as string | null) ?? null,
+    }
+    const res = await reconcileItemStatus(service, plaid, { ...row, status: it.status as string }, { source: 'cron' })
+    if (!res.reachable) out.unreachable += 1
+    else if (res.status === 'active') {
+      out.healed += 1
+      await syncPlaidItem(service, plaid, row, { trigger: 'cron' })
+    } else out.unchanged += 1
+    if (i < rows.length - 1) await new Promise((r) => setTimeout(r, STAGGER_MS))
+  }
+  return out
 }

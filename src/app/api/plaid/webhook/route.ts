@@ -6,6 +6,8 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { createPlaidClient } from '@/lib/plaid'
 import { getPlaidEnv } from '@/lib/env'
 import { syncPlaidItem } from '@/lib/plaid-sync'
+import { reconcileItemStatus } from '@/lib/plaid-item-health'
+import { statusFromItemError } from '@/lib/plaid-sync-plan'
 
 // POST /api/plaid/webhook
 //
@@ -114,12 +116,31 @@ export async function POST(request: NextRequest) {
   if (webhook_type === 'ITEM') {
     switch (webhook_code) {
       case 'ERROR':
-      case 'PENDING_EXPIRATION':
-        await service
-          .from('plaid_items')
-          .update({ status: 'login_required', error_detail: body.error?.error_code ?? webhook_code })
-          .eq('id', itemRow.id)
-        return NextResponse.json({ status: 'login_required' }, { status: 200 })
+      case 'PENDING_EXPIRATION': {
+        // Verify with Plaid before believing the webhook. Deliveries can be
+        // late or out of order, and a stale ERROR landing after a repair
+        // would put a healthy bank back into "reconnect" with nothing to
+        // clear it. /item/get never logs in at the bank, so this is cheap.
+        // If Plaid cannot be reached the webhook's claim stands.
+        const claimedCode =
+          (body.error?.error_code as string | undefined) ??
+          (webhook_code === 'PENDING_EXPIRATION' ? 'PENDING_EXPIRATION' : 'ITEM_LOGIN_REQUIRED')
+        const claimed = webhook_code === 'PENDING_EXPIRATION' ? 'login_required' : statusFromItemError(claimedCode)
+        const plaidClient = createPlaidClient()
+        if (!plaidClient) {
+          await service
+            .from('plaid_items')
+            .update({ status: claimed, error_detail: claimedCode })
+            .eq('id', itemRow.id)
+          return NextResponse.json({ status: claimed }, { status: 200 })
+        }
+        const res = await reconcileItemStatus(service, plaidClient, itemRow, {
+          source: 'webhook',
+          detail: `${webhook_code}:${claimedCode}`,
+          claimed,
+        })
+        return NextResponse.json({ status: res.status ?? 'unverified' }, { status: 200 })
+      }
       case 'PENDING_DISCONNECT':
         await service
           .from('plaid_items')
@@ -137,9 +158,28 @@ export async function POST(request: NextRequest) {
       case 'NEW_ACCOUNTS_AVAILABLE':
         await service.from('plaid_items').update({ needs_account_review: true }).eq('id', itemRow.id)
         return NextResponse.json({ status: 'needs_account_review' }, { status: 200 })
-      case 'LOGIN_REPAIRED':
+      case 'LOGIN_REPAIRED': {
         await service.from('plaid_items').update({ status: 'active', error_detail: null }).eq('id', itemRow.id)
+        await service.from('plaid_sync_log').insert({
+          household_id: itemRow.household_id,
+          item_id: itemRow.id,
+          trigger: 'webhook',
+          status: 'ok',
+          error_detail: 'webhook:LOGIN_REPAIRED',
+        })
+        // The bank is back: pull whatever accumulated while it was out.
+        const plaidClient = createPlaidClient()
+        if (plaidClient) {
+          after(async () => {
+            try {
+              await syncPlaidItem(service, plaidClient, itemRow, { trigger: 'webhook' })
+            } catch (e) {
+              console.error('[plaid-webhook] post-repair sync threw', { item: itemRow.id, e: e instanceof Error ? e.message : e })
+            }
+          })
+        }
         return NextResponse.json({ status: 'active' }, { status: 200 })
+      }
       default:
         return NextResponse.json({ status: 'ignored' }, { status: 200 })
     }

@@ -504,8 +504,13 @@ export async function syncPlaidItem(
   //     provokes a fresh login demand, which Plaid then reports through an
   //     ITEM: ERROR webhook seconds after this run logged "ok" - the
   //     re-auth loop seen in production.
+  //     Even with accounts mapped, the live call is throttled to about one a
+  //     day per bank (see shouldRefreshBalancesLive).
   const written = await upsertPlaidBalanceSnapshots(db, item, plaidAccounts)
-  if (shouldRefreshBalancesLive(acctMap.size, written)) await refreshPlaidBalances(db, plaid, item)
+  if (shouldRefreshBalancesLive(acctMap.size, written)) {
+    const lastLive = await latestSnapshotUpdatedAt(db, [...acctMap.values()].map((a) => a.id))
+    if (shouldRefreshBalancesLive(acctMap.size, written, lastLive)) await refreshPlaidBalances(db, plaid, item)
+  }
 
   // 8. Cursor: compare-and-set against the cursor this run started from. A
   //    miss means another run moved it; our rows are already deduped, so the
@@ -731,4 +736,17 @@ async function log(db: Db, item: PlaidItemRow, trigger: SyncTrigger, result: Pla
     status: result.status,
     error_detail: result.error ?? null,
   })
+}
+
+/** When any of these accounts last had a balance snapshot written or refreshed. */
+export async function latestSnapshotUpdatedAt(db: Db, accountIds: string[]): Promise<string | null> {
+  if (accountIds.length === 0) return null
+  const { data } = await db
+    .from('account_balance_snapshots')
+    .select('updated_at')
+    .in('account_id', accountIds)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return (data?.updated_at as string | undefined) ?? null
 }

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { verifyCronAuth } from '@/lib/cron/auth'
 import { createServiceClient } from '@/lib/supabase/service'
-import { runPlaidSweep } from '@/lib/cron/plaid-sweep'
+import { runPlaidHealthSweep, runPlaidSweep } from '@/lib/cron/plaid-sweep'
 import { runSettlementAutoClose } from '@/lib/cron/settlement-close'
 // Household close days are civil dates; todayISO() is America/Toronto so "the
 // 28th" means the 28th for a Canadian household, not UTC's version of it.
@@ -26,11 +26,16 @@ export async function GET(request: NextRequest) {
   if (!service) return NextResponse.json({ error: 'service key missing' }, { status: 503 })
 
   const started = Date.now()
-  const plaid = await runPlaidSweep(service, { budgetMs: 200_000, perItemMs: 45_000 })
+  const plaid = await runPlaidSweep(service, { budgetMs: 180_000, perItemMs: 45_000 })
   console.log('[cron/daily] plaid sweep', { ...plaid, items: undefined })
+
+  // Banks waiting on the user: re-check with Plaid so a status nobody cleared
+  // (a late webhook, a repair we never heard about) heals within a day.
+  const health = await runPlaidHealthSweep(service, { budgetMs: 40_000 })
+  console.log('[cron/daily] plaid health', health)
 
   const settle = await runSettlementAutoClose(service, { todayISO: todayISO() })
   console.log('[cron/daily] settlement auto-close', settle)
 
-  return NextResponse.json({ ok: true, ms: Date.now() - started, plaid, settle })
+  return NextResponse.json({ ok: true, ms: Date.now() - started, plaid, health, settle })
 }

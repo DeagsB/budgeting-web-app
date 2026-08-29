@@ -576,6 +576,13 @@ A single-item sync ignores the item's status (`plaidSyncSelection`); only the bu
 - A sync never makes the live `/accounts/balance/get` call for a bank with no accounts mapped (`shouldRefreshBalancesLive`).
 The production CIBC item had zero accounts chosen, so every sync fell through to that live call, the bank demanded a fresh sign-in, and Plaid's `ITEM: ERROR` webhook flipped the item to `login_required` one second after the sync had logged "ok"; re-authenticating only bought one more cycle.
 A bank with nothing mapped is now flagged `needs_account_review`, the setup page shows "Choose accounts" for it, and `getPlaidAttention` surfaces it on the dashboard and /accounts as "is linked but no accounts are tracked yet".
+- `plaid_items.status` has one source of truth: Plaid's `/item/get` (`checkItemHealth` / `reconcileItemStatus` in `src/lib/plaid-item-health.ts`), which is answered on Plaid's side and never logs in at the bank.
+Every writer goes through it except the sync, which sees the bank's answer first-hand: an `ITEM: ERROR` or `PENDING_EXPIRATION` webhook is verified before it is believed (a late or out-of-order delivery cannot put a repaired bank back into "reconnect"), re-authentication (`completeReauth`) writes the real state before syncing and reconciles every waiting bank when the OAuth bounce lost the item id, and the daily cron (`runPlaidHealthSweep`) re-checks every bank that is waiting on the user so a status nobody cleared heals within a day.
+`LOGIN_REPAIRED` triggers a sync.
+Every state change lands in `plaid_sync_log` with who asked and what changed (`webhook:ERROR:ITEM_LOGIN_REQUIRED -> ok`, `cron -> ok (login_required -> active)`).
+When Plaid cannot be reached, a webhook's claim is applied and everything else is left alone.
+- The live balance call is throttled to about one per bank per day even with accounts mapped (`BALANCE_REFRESH_MIN_MS`), because each one is a fresh login at the bank.
+- Verified in sandbox: a hand-set stale `login_required` healed by the cron pass and synced; an unsigned `ITEM: ERROR` while healthy left the item active with a log row; a real `reset_login` plus webhook flipped it; Reconnect through update-mode Link wrote `reauth -> ok (login_required -> active)` and synced.
 
 **Considered + rejected:**
 - *Keeping the one-by-one Review sheet as the primary path*: it is a review mode by definition; it stays as a secondary "Review one by one" link only.
