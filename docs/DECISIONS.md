@@ -573,6 +573,9 @@ A single-item sync ignores the item's status (`plaidSyncSelection`); only the bu
 - Forms keep their primary action reachable with the keyboard open: `Sheet` sizes itself from `visualViewport`, `SheetActions` is the sticky footer for form sheets, and `html, body` use `overflow-x: clip` (not `hidden`) so `position: sticky` works against the viewport.
 - GST is one tap in the split editor ("Split out GST (5%)", `src/lib/gst.ts`, tax = round(total x 5 / 105)).
 - Onboarding's bank step "Skip for now" advances to the invite step; `canVisitStep` no longer requires an account to reach invite or budget.
+- A sync never makes the live `/accounts/balance/get` call for a bank with no accounts mapped (`shouldRefreshBalancesLive`).
+The production CIBC item had zero accounts chosen, so every sync fell through to that live call, the bank demanded a fresh sign-in, and Plaid's `ITEM: ERROR` webhook flipped the item to `login_required` one second after the sync had logged "ok"; re-authenticating only bought one more cycle.
+A bank with nothing mapped is now flagged `needs_account_review`, the setup page shows "Choose accounts" for it, and `getPlaidAttention` surfaces it on the dashboard and /accounts as "is linked but no accounts are tracked yet".
 
 **Considered + rejected:**
 - *Keeping the one-by-one Review sheet as the primary path*: it is a review mode by definition; it stays as a secondary "Review one by one" link only.

@@ -20,6 +20,7 @@ import {
   planSplitUpdate,
   planSyncBatch,
   plaidErrorCode,
+  shouldRefreshBalancesLive,
 } from '@/lib/plaid-sync-plan'
 
 /**
@@ -236,6 +237,13 @@ export async function syncPlaidItem(
       memberId: a.ownership === 'member' ? ((a.member_id as string | null) ?? null) : null,
       name: (a.name as string | null) ?? null,
     })
+  }
+
+  // A bank with no accounts chosen syncs nothing - every row below is skipped
+  // as unmapped. Flag it so the setup page and the dashboard notice can send
+  // the user to "Choose accounts" instead of leaving a silent, empty bank.
+  if (acctMap.size === 0) {
+    await db.from('plaid_items').update({ needs_account_review: true }).eq('id', item.id)
   }
 
   let skippedUnmapped = 0
@@ -491,8 +499,13 @@ export async function syncPlaidItem(
   //     a failure here must never cost us the batch or the cursor.
   //     Sandbox (and some institutions) omit `accounts` from /transactions/sync
   //     pages, so fall back to /accounts/balance/get when nothing came back.
+  //     Never make that live call when no account is mapped: there is nothing
+  //     to write, and at MFA banks (CIBC) a live /accounts/balance/get is what
+  //     provokes a fresh login demand, which Plaid then reports through an
+  //     ITEM: ERROR webhook seconds after this run logged "ok" - the
+  //     re-auth loop seen in production.
   const written = await upsertPlaidBalanceSnapshots(db, item, plaidAccounts)
-  if (written === 0) await refreshPlaidBalances(db, plaid, item)
+  if (shouldRefreshBalancesLive(acctMap.size, written)) await refreshPlaidBalances(db, plaid, item)
 
   // 8. Cursor: compare-and-set against the cursor this run started from. A
   //    miss means another run moved it; our rows are already deduped, so the

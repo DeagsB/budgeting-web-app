@@ -244,14 +244,22 @@ export function PlaidWizard({
                         Reconnect
                       </button>
                     )}
-                    {it.needsAccountReview && it.status === 'active' && (
+                    {/* A bank with nothing mapped syncs nothing: "Choose
+                        accounts" is the way back into the picker, whether
+                        the sync flagged it or the user simply left before
+                        mapping. */}
+                    {(mapped.length === 0 || it.needsAccountReview) && it.status === 'active' && (
                       <button
                         type="button"
                         onClick={() => reviewAccounts(it.id)}
                         disabled={busy}
-                        className="inline-flex min-h-[44px] items-center rounded-full border border-honey bg-paper-2 px-3 text-[12.5px] font-semibold text-down hover:underline disabled:opacity-50"
+                        className={
+                          mapped.length === 0
+                            ? 'inline-flex min-h-[44px] items-center rounded-full bg-ink px-3 text-[12.5px] font-semibold text-cream hover:bg-ink-2 disabled:opacity-50'
+                            : 'inline-flex min-h-[44px] items-center rounded-full border border-honey bg-paper-2 px-3 text-[12.5px] font-semibold text-down hover:underline disabled:opacity-50'
+                        }
                       >
-                        Review new accounts
+                        {mapped.length === 0 ? 'Choose accounts' : 'Review new accounts'}
                       </button>
                     )}
                     <ConfirmButton

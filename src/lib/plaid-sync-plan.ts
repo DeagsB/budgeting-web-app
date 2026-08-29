@@ -148,3 +148,16 @@ export function plaidSyncSelection(itemRowId?: string | null): PlaidSyncSelectio
   if (itemRowId) return { byId: itemRowId }
   return { statuses: ['active', 'error'] }
 }
+
+// ─── When a sync may make a live balance call ───────────────────────────────
+
+/**
+ * /transactions/sync pages normally carry the item's accounts with balances;
+ * only when they did not (sandbox, some institutions) is a live
+ * /accounts/balance/get worth making - and only if at least one account is
+ * mapped, because with nothing mapped there is nothing to write and the live
+ * call is exactly what provokes a fresh login demand at MFA banks.
+ */
+export function shouldRefreshBalancesLive(mappedAccounts: number, snapshotsWritten: number): boolean {
+  return mappedAccounts > 0 && snapshotsWritten === 0
+}
