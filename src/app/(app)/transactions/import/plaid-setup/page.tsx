@@ -8,9 +8,15 @@ export const dynamic = 'force-dynamic'
 
 const MAX_ITEMS = PLAID_MAX_ITEMS
 
-export default async function PlaidSetupPage() {
+export default async function PlaidSetupPage({
+  searchParams,
+}: {
+  /** `?reauth=<itemRowId>` from plaidReconnectHref - auto-opens update-mode Link for that bank. */
+  searchParams: Promise<{ reauth?: string }>
+}) {
   const ctx = await getHouseholdContext()
   if (!ctx) return null
+  const { reauth } = await searchParams
 
   const supabase = await createClient()
   const [{ data: items }, { data: accounts }, { data: log }] = await Promise.all([
@@ -62,44 +68,24 @@ export default async function PlaidSetupPage() {
         </p>
       </header>
 
-      {!plaidConfigured && (
+      {/*
+       * Full env-var checklist for whoever runs this server (never shown to
+       * end users - they can't do anything about a missing env var):
+       *   PLAID_CLIENT_ID, PLAID_SECRET, PLAID_ENV  - from dashboard.plaid.com
+       *     (Sandbox keys to try it, Production keys for the free Trial tier)
+       *   PLAID_TOKEN_KEY                           - 32 random bytes, base64;
+       *     encrypts the stored access token at rest
+       *   SUPABASE_SERVICE_ROLE_KEY                 - lets the sync write
+       *     transactions with the service-role client
+       * Set them in .env.local (or the host's env config) and restart.
+       */}
+      {(!plaidConfigured || !hasServiceRoleKey || !hasTokenKey) && (
         <section className="rounded-lg border border-honey bg-paper-2 p-5 md:p-6">
           <div className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-down">
-            Plaid isn’t configured yet
+            Bank sync isn’t set up yet
           </div>
           <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-2">
-            Add <code className="rounded bg-cream-2 px-1.5 py-0.5 font-mono text-[12px]">PLAID_CLIENT_ID</code>,{' '}
-            <code className="rounded bg-cream-2 px-1.5 py-0.5 font-mono text-[12px]">PLAID_SECRET</code>,{' '}
-            <code className="rounded bg-cream-2 px-1.5 py-0.5 font-mono text-[12px]">PLAID_ENV</code> and{' '}
-            <code className="rounded bg-cream-2 px-1.5 py-0.5 font-mono text-[12px]">PLAID_TOKEN_KEY</code> to{' '}
-            <code className="rounded bg-cream-2 px-1.5 py-0.5 font-mono text-[12px]">.env.local</code> and restart.
-            Sign up free at{' '}
-            <a href="https://dashboard.plaid.com" target="_blank" rel="noreferrer" className="font-semibold text-ink underline-offset-2 hover:underline">
-              dashboard.plaid.com
-            </a>{' '}
-            - use Sandbox keys to try it, then Production keys for the free Trial tier.
-          </p>
-        </section>
-      )}
-
-      {plaidConfigured && (!hasServiceRoleKey || !hasTokenKey) && (
-        <section className="rounded-lg border border-honey bg-paper-2 p-5 md:p-6">
-          <div className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-down">
-            One more env var needed
-          </div>
-          <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-2">
-            {!hasServiceRoleKey && (
-              <>
-                <code className="rounded bg-cream-2 px-1.5 py-0.5 font-mono text-[12px]">SUPABASE_SERVICE_ROLE_KEY</code>{' '}
-                lets the sync write transactions.{' '}
-              </>
-            )}
-            {!hasTokenKey && (
-              <>
-                <code className="rounded bg-cream-2 px-1.5 py-0.5 font-mono text-[12px]">PLAID_TOKEN_KEY</code>{' '}
-                (32 random bytes, base64) encrypts the access token at rest.
-              </>
-            )}
+            Bank sync isn’t set up on this server yet. Ask whoever runs it to finish the Plaid setup.
           </p>
         </section>
       )}
@@ -107,6 +93,7 @@ export default async function PlaidSetupPage() {
       <PlaidWizard
         plaidConfigured={plaidConfigured}
         maxItems={MAX_ITEMS}
+        reauthItemId={reauth}
         items={(items ?? []).map((it) => ({
           id: it.id,
           institutionName: it.institution_name ?? 'Bank',

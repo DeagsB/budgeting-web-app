@@ -107,6 +107,23 @@ export function accountBalanceAt(
   return base + delta
 }
 
+/** An account, insofar as it may or may not be fed automatically by a linked bank. */
+export type LinkableAccount = { plaid_account_id: string | null }
+
+/**
+ * A linked (Plaid) account's balance always comes from the bank via
+ * `snapshotsFromPlaidBalances` (src/lib/plaid-balances.ts), which upserts a
+ * snapshot straight from the bank's own reported figure every sync - a
+ * hand-typed number can never be more current or more correct. Every manual
+ * balance entry point (the accounts edit form, the balance-sheet "Update
+ * balances" sheet, and its server action) checks this before accepting typed
+ * input, so the bank's reported figure always wins and a stale guess can
+ * never shadow it.
+ */
+export function isManuallyEditableBalance(account: LinkableAccount): boolean {
+  return !account.plaid_account_id
+}
+
 /** Household net worth (assets − liabilities) through the end of `monthISO`. */
 export function netWorthAt(
   accounts: BalanceAccount[],

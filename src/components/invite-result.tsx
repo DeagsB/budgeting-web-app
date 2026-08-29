@@ -11,7 +11,10 @@ import { Button } from '@/components/ui/button'
 export function InviteResult({
   inviteUrl,
   emailSent,
-  emailError,
+  // Accepted for backward compatibility with callers built before this fix,
+  // but never rendered: the raw provider error isn't something a user can
+  // act on, so every failure shows the same plain-language message instead.
+  emailError: _emailError,
   onDone,
   doneLabel = 'Done',
 }: {
@@ -27,7 +30,7 @@ export function InviteResult({
       <p className="text-[14px] leading-relaxed text-ink-2">
         {emailSent
           ? 'An email is on its way. You can also share this link directly - it works once and expires in 7 days.'
-          : `We could not send the email${emailError ? ` (${emailError})` : ''}. Share this link instead - it works once and expires in 7 days.`}
+          : "Couldn't send the invite email. Copy the link below instead - it works once and expires in 7 days."}
       </p>
       <div className="flex flex-col gap-2">
         <input

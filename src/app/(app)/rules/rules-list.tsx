@@ -148,10 +148,10 @@ function RuleRow({ row, first, last, onEdit }: { row: RuleRowVM; first: boolean;
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="truncate font-serif text-[18px] leading-tight text-ink">{r.name}</span>
+                <span className={'truncate font-serif text-[18px] leading-tight ' + (r.enabled ? 'text-ink' : 'text-ink-3')}>{r.name}</span>
                 {!r.enabled && <span className="rounded-full bg-paper-2 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-3">Paused</span>}
               </div>
-              <div className="mt-0.5 text-[12.5px] text-ink-2">{describeRuleMatch(r, formatMoney, row.accountName)}</div>
+              <div className={'mt-0.5 text-[12.5px] ' + (r.enabled ? 'text-ink-2' : 'text-ink-3')}>{describeRuleMatch(r, formatMoney, row.accountName)}</div>
               <div className="mt-1 flex flex-wrap gap-1.5 text-[11px]">
                 <span className="rounded-full bg-leaf-soft px-2 py-0.5 font-semibold text-leaf-deep">{shareLabel}</span>
                 {row.categoryName && <span className="rounded-full bg-paper-2 px-2 py-0.5 font-semibold text-ink-2">→ {row.categoryName}</span>}

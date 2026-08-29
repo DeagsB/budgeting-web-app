@@ -66,17 +66,37 @@
         color: var(--ink-2);
         margin: 0 0 20px;
       }
-      button {
+      .actions {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      button,
+      .link {
         appearance: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
+        border-radius: 999px;
+        font-size: 14px;
+        font-weight: 600;
+        font-family: inherit;
+        text-decoration: none;
+        box-sizing: border-box;
+      }
+      button {
+        width: 100%;
         border: 0;
         background: var(--ink);
         color: var(--paper);
-        font-size: 14px;
-        font-weight: 600;
         padding: 12px 20px;
-        border-radius: 999px;
         cursor: pointer;
-        font-family: inherit;
+      }
+      .link {
+        border: 1px solid var(--hair);
+        color: var(--ink-2);
+        padding: 11px 20px;
       }
     </style>
   </head>
@@ -86,7 +106,10 @@
         <div class="logo" aria-hidden>M</div>
         <h1>You&rsquo;re offline.</h1>
         <p>Maple needs the network to read your transactions. Reconnect and try again.</p>
-        <button onclick="location.reload()">Try again</button>
+        <div class="actions">
+          <button onclick="location.reload()">Try again</button>
+          <a class="link" href="/dashboard">Go to dashboard</a>
+        </div>
       </div>
     </div>
   </body>

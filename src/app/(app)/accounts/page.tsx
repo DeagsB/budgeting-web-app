@@ -4,6 +4,8 @@ import { getHouseholdContext } from '@/lib/household'
 import { accountTypeLabel, LIABILITY_TYPES, type AccountType } from '@/lib/domain'
 import { monthStartISO } from '@/lib/format'
 import { accountBalanceAt, groupSnapsByAccount, groupTxByAccount } from '@/lib/balances'
+import { getPlaidAttention, plaidReconnectHref, PLAID_ATTENTION_STATUSES } from '@/lib/plaid-attention'
+import { formatSyncedAt } from '@/lib/relative-time'
 import { PageHeader } from '@/components/ui/page-header'
 import { Card } from '@/components/ui/card'
 import { StatTile } from '@/components/ui/stat-tile'
@@ -11,7 +13,8 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { ResponsiveAmount } from '@/components/ui/responsive-amount'
 import { MapleLabel } from '@/components/ui/label'
-import { AddAccountForm } from './add-form'
+import { ReauthNotice } from '@/components/plaid/reauth-notice'
+import { AddAccountSheet } from './add-account-sheet'
 import { AccountRow } from './row'
 
 export default async function AccountsPage({
@@ -31,23 +34,46 @@ export default async function AccountsPage({
   // the SAME current balances (opening/snapshot anchor + transactions) that
   // the dashboard, balance sheet and net-worth views show - not the opening
   // balances, which drift from reality the moment a transaction lands.
-  const [{ data: accounts }, { data: snapshots }, { data: txData }] = await Promise.all([
-    supabase
-      .from('accounts')
-      .select('id, name, type, ownership, opening_balance_cents, last_four, archived_at')
-      .eq('household_id', ctx.householdId)
-      .order('name'),
-    supabase
-      .from('account_balance_snapshots')
-      .select('account_id, balance_cents, as_of_month')
-      .eq('household_id', ctx.householdId)
-      .order('as_of_month', { ascending: false }),
-    supabase
-      .from('transactions')
-      .select('account_id, occurred_on, amount_cents')
-      .eq('household_id', ctx.householdId)
-      .limit(20000),
-  ])
+  const [{ data: accounts }, { data: snapshots }, { data: txData }, { data: plaidItems }, attention] =
+    await Promise.all([
+      supabase
+        .from('accounts')
+        .select(
+          'id, name, type, ownership, opening_balance_cents, last_four, archived_at, plaid_account_id, plaid_item_id',
+        )
+        .eq('household_id', ctx.householdId)
+        .order('name'),
+      supabase
+        .from('account_balance_snapshots')
+        .select('account_id, balance_cents, as_of_month')
+        .eq('household_id', ctx.householdId)
+        .order('as_of_month', { ascending: false }),
+      supabase
+        .from('transactions')
+        .select('account_id, occurred_on, amount_cents')
+        .eq('household_id', ctx.householdId)
+        .limit(20000),
+      // All linked banks (not just ones needing attention) - every linked
+      // account row needs its institution name / sync time / status, not
+      // only the unhealthy ones ReauthNotice cares about.
+      supabase
+        .from('plaid_items')
+        .select('id, institution_name, status, last_synced_at')
+        .eq('household_id', ctx.householdId),
+      getPlaidAttention(supabase, ctx.householdId),
+    ])
+
+  const itemById = new Map(
+    (plaidItems ?? []).map((i) => [
+      i.id as string,
+      {
+        institutionName: i.institution_name as string | null,
+        status: i.status as string,
+        lastSyncedAt: i.last_synced_at as string | null,
+      },
+    ]),
+  )
+  const attentionStatuses: readonly string[] = PLAID_ATTENTION_STATUSES
 
   const visible = (accounts ?? []).filter((a) => (showArchived ? a.archived_at : !a.archived_at))
   const archivedCount = (accounts ?? []).filter((a) => a.archived_at).length
@@ -71,8 +97,11 @@ export default async function AccountsPage({
   // Headline split: "you have" sums current balances of non-liability
   // accounts; "you owe" sums current balances of liabilities (loan /
   // credit_card). Summing everything together would let a loan inflate assets.
+  // The same per-account figure is kept in `balanceByAccount` so each row
+  // renders the real derived balance instead of the opening balance.
   let assetsCents = 0
   let owingCents = 0
+  const balanceByAccount = new Map<string, number>()
   for (const a of visible) {
     const cents = accountBalanceAt(
       { id: a.id, type: a.type as AccountType, opening_balance_cents: Number(a.opening_balance_cents) },
@@ -80,6 +109,7 @@ export default async function AccountsPage({
       txByAccount,
       snapsByAccount,
     )
+    balanceByAccount.set(a.id, cents)
     if (LIABILITY_TYPES.has(a.type as AccountType)) owingCents += cents
     else assetsCents += cents
   }
@@ -99,6 +129,7 @@ export default async function AccountsPage({
                 Connect a bank
               </Button>
             </Link>
+            {!showArchived && <AddAccountSheet canOwn={ctx.memberId !== null} />}
             <Link
               href={showArchived ? '/accounts' : '/accounts?show=archived'}
               className="inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-ink-2 transition-colors hover:text-ink"
@@ -108,6 +139,8 @@ export default async function AccountsPage({
           </div>
         }
       />
+
+      <ReauthNotice items={attention} />
 
       {/* One compact three-up row so the ledger stays above the fold on a
           375px screen. Mobile abbreviates the value; sm+ shows cents. */}
@@ -140,13 +173,6 @@ export default async function AccountsPage({
         </section>
       )}
 
-      {!showArchived && (
-        <Card>
-          <MapleLabel>Add account</MapleLabel>
-          <AddAccountForm canOwn={ctx.memberId !== null} />
-        </Card>
-      )}
-
       <Card padding="none" className="overflow-hidden">
         <header className="flex items-baseline justify-between border-b border-hair px-5 py-3.5">
           <MapleLabel>
@@ -177,21 +203,36 @@ export default async function AccountsPage({
           </div>
         ) : (
           <ul>
-            {visible.map((a) => (
-              <AccountRow
-                key={a.id}
-                account={{
-                  id: a.id,
-                  name: a.name,
-                  type: a.type,
-                  typeLabel: accountTypeLabel(a.type),
-                  ownership: a.ownership,
-                  opening_balance_cents: Number(a.opening_balance_cents),
-                  last_four: a.last_four ?? null,
-                  archived: !!a.archived_at,
-                }}
-              />
-            ))}
+            {visible.map((a) => {
+              const linked = !!a.plaid_account_id
+              const item = a.plaid_item_id ? itemById.get(a.plaid_item_id as string) : undefined
+              const needsReconnect = linked && !!item && attentionStatuses.includes(item.status)
+              return (
+                <AccountRow
+                  key={a.id}
+                  account={{
+                    id: a.id,
+                    name: a.name,
+                    type: a.type,
+                    typeLabel: accountTypeLabel(a.type),
+                    ownership: a.ownership,
+                    opening_balance_cents: Number(a.opening_balance_cents),
+                    balance_cents: balanceByAccount.get(a.id) ?? 0,
+                    last_four: a.last_four ?? null,
+                    archived: !!a.archived_at,
+                    linked,
+                    bank: linked
+                      ? {
+                          label: item?.institutionName ?? 'Bank',
+                          syncedLabel: formatSyncedAt(item?.lastSyncedAt ?? null),
+                          needsReconnect,
+                          reconnectHref: plaidReconnectHref((a.plaid_item_id as string | null) ?? undefined),
+                        }
+                      : null,
+                  }}
+                />
+              )
+            })}
           </ul>
         )}
       </Card>

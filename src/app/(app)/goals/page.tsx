@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
-import { formatDate } from '@/lib/format'
+import { formatDate, monthStartISO } from '@/lib/format'
+import { accountBalanceAt, groupSnapsByAccount, groupTxByAccount } from '@/lib/balances'
+import type { AccountType } from '@/lib/domain'
 import { MapleLabel } from '@/components/ui/label'
 import { PageHeader } from '@/components/ui/page-header'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -24,7 +26,7 @@ export default async function GoalsPage() {
   if (!ctx) return null
 
   const supabase = await createClient()
-  const [{ data: goals }, { data: accounts }] = await Promise.all([
+  const [{ data: goals }, { data: accounts }, { data: snapshots }, { data: txData }] = await Promise.all([
     supabase
       .from('goals')
       .select('id, name, target_amount_cents, current_amount_cents, target_date, funding_account_id, note, achieved_at')
@@ -34,16 +36,67 @@ export default async function GoalsPage() {
       .order('created_at', { ascending: true }),
     supabase
       .from('accounts')
-      .select('id, name')
+      .select('id, name, type, opening_balance_cents')
       .eq('household_id', ctx.householdId)
       .is('archived_at', null)
       .order('name'),
+    supabase
+      .from('account_balance_snapshots')
+      .select('account_id, balance_cents, as_of_month')
+      .eq('household_id', ctx.householdId)
+      .order('as_of_month', { ascending: false }),
+    supabase
+      .from('transactions')
+      .select('account_id, occurred_on, amount_cents')
+      .eq('household_id', ctx.householdId)
+      .limit(20000),
   ])
 
-  const rows: Goal[] = (goals ?? []) as Goal[]
   const accountName = new Map((accounts ?? []).map((a) => [a.id, a.name]))
-
   const accountList = (accounts ?? []).map((a) => ({ id: a.id, name: a.name }))
+
+  // A goal with a funding account tracks progress from that account's real
+  // balance - see src/lib/balances.ts - instead of a typed figure, so
+  // nobody has to keep a number in sync by hand (goals/add-form.tsx,
+  // goals/row.tsx hide the typed field once a funding account is chosen).
+  const txByAccount = groupTxByAccount(
+    (txData ?? []).map((t) => ({
+      account_id: t.account_id as string,
+      occurred_on: t.occurred_on as string,
+      amount_cents: Number(t.amount_cents),
+    })),
+  )
+  const snapsByAccount = groupSnapsByAccount(
+    (snapshots ?? []).map((s) => ({
+      account_id: s.account_id as string,
+      as_of_month: s.as_of_month as string,
+      balance_cents: Number(s.balance_cents),
+    })),
+  )
+  const accountById = new Map(
+    (accounts ?? []).map((a) => [
+      a.id as string,
+      { type: a.type as AccountType, opening_balance_cents: Number(a.opening_balance_cents) },
+    ]),
+  )
+  const thisMonth = monthStartISO()
+  function currentAmountFor(g: { current_amount_cents: number | string; funding_account_id: string | null }): number {
+    if (!g.funding_account_id) return Number(g.current_amount_cents)
+    const acct = accountById.get(g.funding_account_id)
+    if (!acct) return Number(g.current_amount_cents) // funding account archived/missing - fall back to what's stored
+    const bal = accountBalanceAt(
+      { id: g.funding_account_id, type: acct.type, opening_balance_cents: acct.opening_balance_cents },
+      thisMonth,
+      txByAccount,
+      snapsByAccount,
+    )
+    return Math.max(0, bal)
+  }
+
+  const rows: Goal[] = ((goals ?? []) as Goal[]).map((g) => ({
+    ...g,
+    current_amount_cents: currentAmountFor(g),
+  }))
   const active = rows.filter((g) => !g.achieved_at)
   const done = rows.filter((g) => g.achieved_at)
   const totalTarget = active.reduce((s, g) => s + Number(g.target_amount_cents), 0)

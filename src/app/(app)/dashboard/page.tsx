@@ -3,6 +3,7 @@ import { getHouseholdContext } from '@/lib/household'
 import { addMonths, monthStartISO } from '@/lib/format'
 import { type AccountType } from '@/lib/domain'
 import { effectiveBudgets, type BudgetOverride, type StandingBudget } from '@/lib/budget'
+import { getPlaidAttention } from '@/lib/plaid-attention'
 import {
   netWorthTrail as computeTrail,
   accountBalanceAt,
@@ -10,6 +11,8 @@ import {
   groupSnapsByAccount,
 } from '@/lib/balances'
 import { DashboardClient } from './client'
+import { computeInboxSummary } from './inbox'
+import { categoryBudgetsLeftToSpend } from './category-budgets'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,6 +56,8 @@ export default async function DashboardPage() {
     recurringTxRes,
     recentTxRes,
     balanceTxRes,
+    allSplitsRes,
+    plaidAttentionItems,
   ] = await Promise.all([
     supabase.from('households').select('name').eq('id', ctx.householdId).maybeSingle(),
     supabase
@@ -123,13 +128,24 @@ export default async function DashboardPage() {
       .order('created_at', { ascending: false })
       .limit(8),
     // All transactions up to the end of the current month - drives the
-    // cashflow-derived running balances + the net-worth trail.
+    // cashflow-derived running balances + the net-worth trail, and (via `id`
+    // + `member_id` below) the household-wide "to categorize" count so that
+    // doesn't need its own round trip.
     supabase
       .from('transactions')
-      .select('account_id, occurred_on, amount_cents')
+      .select('id, account_id, member_id, occurred_on, amount_cents')
       .eq('household_id', ctx.householdId)
       .lt('occurred_on', currentMonthEnd)
       .limit(20000),
+    // Every split ever recorded (not just this month, unlike `splitsRes`
+    // above) - the "to categorize" count spans the whole history.
+    supabase
+      .from('transaction_splits')
+      .select('transaction_id, category_id')
+      .eq('household_id', ctx.householdId),
+    // Linked banks that have stopped feeding transactions/balances and need
+    // reconnecting - rendered as a notice under the greeting.
+    getPlaidAttention(supabase, ctx.householdId),
   ])
 
   // If any query errored, the derived figures below silently read as $0/empty.
@@ -149,6 +165,7 @@ export default async function DashboardPage() {
     recurringTxRes,
     recentTxRes,
     balanceTxRes,
+    allSplitsRes,
   ].some((r) => r.error)
 
   const household = householdRes.data ?? { name: 'Household' }
@@ -178,11 +195,15 @@ export default async function DashboardPage() {
   // net-worth trail + card balances track real spending/income instead of
   // sitting flat on opening balances.
   const balanceTx = ((balanceTxRes.data ?? []) as Array<{
+    id: string
     account_id: string
+    member_id: string | null
     occurred_on: string
     amount_cents: number | string
   }>).map((t) => ({
+    id: t.id,
     account_id: t.account_id,
+    member_id: t.member_id,
     occurred_on: t.occurred_on,
     amount_cents: Number(t.amount_cents),
   }))
@@ -237,6 +258,13 @@ export default async function DashboardPage() {
     else if (tx.amount_cents > 0) expenses += tx.amount_cents
   }
 
+  // "To categorize" - editable transactions, household-wide across every
+  // month, that still need a category (see ./inbox.ts for the rule, which
+  // mirrors transactions/page.tsx exactly).
+  const accountVisibleIds = new Set(accounts.map((a) => a.id))
+  const allSplits = (allSplitsRes.data ?? []) as Array<{ transaction_id: string; category_id: string | null }>
+  const inbox = computeInboxSummary(balanceTx, allSplits, accountVisibleIds, ctx.memberId, currentMonth)
+
   // Spending breakdown by category. Splits only on positive amounts (outflows).
   // Roll child category spend into the parent so the breakdown bar shows
   // top-level groups.
@@ -271,6 +299,11 @@ export default async function DashboardPage() {
   const totalBudget = Array.from(budgetByCat.entries())
     .filter(([id]) => !parentOf.get(id))
     .reduce((s, [, v]) => s + v, 0)
+
+  // Left to spend per top-level category (see ./category-budgets.ts for the
+  // rule). `spendByCategory` above already has the same exclusions as
+  // `expenses` (outflows only) and rolls child spend into the parent.
+  const categoryBudgets = categoryBudgetsLeftToSpend(categories, budgetByCat, spendByCategory)
 
   // Goals - active, not yet achieved, with progress.
   const goals = ((goalsRes.data ?? []) as Array<{
@@ -359,6 +392,7 @@ export default async function DashboardPage() {
       accounts={accountsWithBalance}
       spendingBreakdown={spendingBreakdown}
       totalBudget={totalBudget}
+      categoryBudgets={categoryBudgets}
       goals={goals}
       recurring={recurring}
       recurringTotal={recurringTotal}
@@ -371,6 +405,8 @@ export default async function DashboardPage() {
       }}
       categories={categories.map((c) => ({ id: c.id, parent_id: c.parent_id, name: c.name }))}
       hasError={hasError}
+      inbox={inbox}
+      plaidAttention={plaidAttentionItems}
     />
   )
 }

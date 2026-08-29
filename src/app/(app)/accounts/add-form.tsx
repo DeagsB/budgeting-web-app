@@ -4,23 +4,44 @@ import { useActionState, useRef, useState, useEffect } from 'react'
 import { createAccount, type AccountState } from './actions'
 import { ACCOUNT_TYPES, ACCOUNT_OWNERSHIP } from '@/lib/domain'
 import { Button } from '@/components/ui/button'
+import { SheetActions } from '@/components/ui/sheet'
 
 /**
- * Maple "add account" form. Two-row grid: identity (name + type) on top,
- * ownership (mine vs joint) + opening balance below. A "Mine" account belongs
- * to the signed-in member; the server stamps the owner, so there is no picker.
+ * Maple "add account" form for manual accounts (cash, or a bank Maple cannot
+ * link). Two-row grid: identity (name + type) on top, ownership (mine vs
+ * joint) + opening balance below. A "Mine" account belongs to the signed-in
+ * member; the server stamps the owner, so there is no picker. Lives inside
+ * the `AddAccountSheet` bottom sheet; `onSaved` closes it after a successful
+ * submit.
  */
-export function AddAccountForm({ canOwn }: { /** False until this login has claimed a member. */ canOwn: boolean }) {
+export function AddAccountForm({
+  canOwn,
+  onSaved,
+}: {
+  /** False until this login has claimed a member. */
+  canOwn: boolean
+  onSaved?: () => void
+}) {
   const [state, formAction, pending] = useActionState<AccountState, FormData>(createAccount, undefined)
   const formRef = useRef<HTMLFormElement>(null)
   const [ownership, setOwnership] = useState<'member' | 'shared'>(canOwn ? 'member' : 'shared')
 
+  // Reset + close only after a submit completes without an error. The
+  // `wasPending` guard keeps the mount render (pending=false, no state) from
+  // firing `onSaved` before the user has typed anything.
+  const wasPending = useRef(false)
   useEffect(() => {
-    if (!pending && !state?.error) formRef.current?.reset()
+    if (wasPending.current && !pending && !state?.error) {
+      formRef.current?.reset()
+      onSaved?.()
+    }
+    wasPending.current = pending
+    // `onSaved` is stable from the caller; depend only on the action outcome.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pending, state])
 
   return (
-    <form ref={formRef} action={formAction} className="mt-4 flex flex-col gap-4">
+    <form ref={formRef} action={formAction} className="flex flex-col gap-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Name">
           <input
@@ -64,7 +85,11 @@ export function AddAccountForm({ canOwn }: { /** False until this login has clai
           </select>
         </Field>
 
-        <Field label="Opening balance (CAD)" hint="For loans or credit cards, enter the balance owing as a positive number.">
+        <Field
+          label="Opening balance (CAD)"
+          hint="For loans or credit cards, enter the balance owing as a positive number."
+          error={state?.error}
+        >
           <div className="flex items-center rounded-md border border-hair bg-paper px-3 py-2.5 transition-colors focus-within:border-leaf focus-within:shadow-[0_0_0_3px_var(--color-leaf-soft)]">
             <span className="text-[14px] text-ink-3">$</span>
             <input
@@ -74,6 +99,7 @@ export function AddAccountForm({ canOwn }: { /** False until this login has clai
               placeholder="0.00"
               defaultValue="0.00"
               aria-label="Opening balance in dollars"
+              aria-invalid={state?.error ? true : undefined}
               className="w-full bg-transparent pl-1 text-[15px] tabular-nums text-ink outline-none placeholder:text-ink-3"
             />
           </div>
@@ -87,25 +113,19 @@ export function AddAccountForm({ canOwn }: { /** False until this login has clai
             pattern="[0-9]{4}"
             maxLength={4}
             placeholder="1234"
+            enterKeyHint="done"
             className="maple-input tabular-nums"
           />
         </Field>
       </div>
 
-      <div className="flex items-center justify-between gap-3">
-        <div aria-live="polite" className="min-w-0">
-          {state?.error ? (
-            <p className="rounded-md bg-maple-soft px-3 py-1.5 text-[12.5px] font-medium text-maple">
-              {state.error}
-            </p>
-          ) : (
-            <span />
-          )}
-        </div>
-        <Button type="submit" variant="primary" size="sm" disabled={pending}>
+      {/* Sticky footer inside the sheet: the primary button stays above the
+          on-screen keyboard while the fields scroll. */}
+      <SheetActions>
+        <Button type="submit" variant="primary" size="sm" className="w-full" disabled={pending}>
           {pending ? 'Adding…' : 'Add account'}
         </Button>
-      </div>
+      </SheetActions>
     </form>
   )
 }
@@ -114,11 +134,13 @@ function Field({
   label,
   span,
   hint,
+  error,
   children,
 }: {
   label: string
   span?: number
   hint?: string
+  error?: string
   children: React.ReactNode
 }) {
   const sc = span === 2 ? 'sm:col-span-2' : ''
@@ -128,7 +150,13 @@ function Field({
         {label}
       </span>
       {children}
-      {hint && <span className="text-[11.5px] text-ink-3">{hint}</span>}
+      {error ? (
+        <span role="alert" className="text-[11.5px] font-medium text-maple">
+          {error}
+        </span>
+      ) : hint ? (
+        <span className="text-[11.5px] text-ink-3">{hint}</span>
+      ) : null}
     </label>
   )
 }

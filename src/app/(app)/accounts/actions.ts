@@ -17,7 +17,10 @@ type AccountInput = {
   type: AccountType
   ownership: AccountOwnership
   member_id: string | null
-  opening_balance_cents: number
+  // Omitted (not just 0) when the caller's form didn't render the field at
+  // all - a linked account hides opening balance entirely, and an update
+  // must leave the stored value untouched rather than zeroing it out.
+  opening_balance_cents?: number
   last_four: string | null
 }
 
@@ -31,9 +34,21 @@ function parseForm(fd: FormData, myMemberId: string | null): ParseResult {
   const name = String(fd.get('name') ?? '').trim().slice(0, 80)
   const type = String(fd.get('type') ?? '') as AccountType
   const ownership = String(fd.get('ownership') ?? '') as AccountOwnership
-  const openingRaw = String(fd.get('opening_balance') ?? '0')
   const member_id = ownership === 'member' ? myMemberId : null
-  const opening_balance_cents = parseMoneyToCents(openingRaw) ?? 0
+
+  // The opening balance field is absent entirely for a linked account's edit
+  // form (task 1: opening balance is hidden for linked accounts) - treat
+  // "field not submitted" as "leave the stored value alone", not "0".
+  let opening_balance_cents: number | undefined
+  if (fd.has('opening_balance')) {
+    const openingRaw = String(fd.get('opening_balance') ?? '')
+    const parsed = parseMoneyToCents(openingRaw)
+    if (parsed === null) {
+      return { error: 'Enter the opening balance as dollars and cents, e.g. 1234.56' }
+    }
+    opening_balance_cents = parsed
+  }
+
   const lastFourRaw = String(fd.get('last_four') ?? '').trim()
   let last_four: string | null = null
   if (lastFourRaw) {

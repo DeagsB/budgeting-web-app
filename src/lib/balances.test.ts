@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { accountBalanceAt, groupSnapsByAccount, groupTxByAccount, netWorthAt } from './balances'
+import { accountBalanceAt, groupSnapsByAccount, groupTxByAccount, isManuallyEditableBalance, netWorthAt } from './balances'
 
 const MONTH = '2026-08-01'
 
@@ -39,5 +39,15 @@ describe('accountBalanceAt sign conventions', () => {
     const snaps = groupSnapsByAccount([{ account_id: 'cc', as_of_month: MONTH, balance_cents: 50000 }])
     const bal = accountBalanceAt({ id: 'cc', type: 'credit_card', opening_balance_cents: 0 }, MONTH, tx, snaps)
     expect(bal).toBe(50000 + 1000)
+  })
+})
+
+describe('isManuallyEditableBalance', () => {
+  it('a linked (Plaid) account cannot take a typed balance - the bank always wins', () => {
+    expect(isManuallyEditableBalance({ plaid_account_id: 'plaid-acc-123' })).toBe(false)
+  })
+
+  it('a manual account can be typed in', () => {
+    expect(isManuallyEditableBalance({ plaid_account_id: null })).toBe(true)
   })
 })

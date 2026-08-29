@@ -19,28 +19,51 @@ type Category = { id: string; parent_id: string | null; name: string }
  *
  * `onCreated(id, name, parentId)` fires once the category exists so the caller
  * can immediately assign it.
+ *
+ * Open state is normally internal (driven by the "+ New" trigger below), but
+ * a caller with its own trigger (e.g. the split editor's "Split out GST"
+ * chip, which only needs the category form when no GST category exists yet)
+ * can drive it instead via `open` + `onOpenChange`, and hide the built-in
+ * trigger with `showTrigger={false}`.
  */
 export function NewCategoryInline({
   categories,
   defaultParentId = '',
+  defaultName = '',
   onCreated,
   variant = 'sheet',
+  open: openProp,
+  onOpenChange,
+  showTrigger = true,
 }: {
   categories: Category[]
   defaultParentId?: string
+  /** Pre-fills the name field, e.g. "GST" from the split editor's tax chip. */
+  defaultName?: string
   onCreated: (id: string, name: string, parentId: string | null) => void
   variant?: 'sheet' | 'inline'
+  /** Controlled open state; omit to let the component manage it itself. */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  /** Hide the "+ New" trigger, for a caller that supplies its own. */
+  showTrigger?: boolean
 }) {
-  const [open, setOpen] = useState(false)
-  const [name, setName] = useState('')
+  const [openState, setOpenState] = useState(false)
+  const open = openProp ?? openState
+  const [name, setName] = useState(defaultName)
   const [parentId, setParentId] = useState(defaultParentId)
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
   const parents = categories.filter((c) => !c.parent_id)
 
+  function setOpen(next: boolean) {
+    if (openProp === undefined) setOpenState(next)
+    onOpenChange?.(next)
+  }
+
   function reset() {
-    setName('')
+    setName(defaultName)
     setParentId(defaultParentId)
     setError(null)
   }
@@ -149,12 +172,12 @@ export function NewCategoryInline({
         <div className="w-full basis-full rounded-lg border border-hair bg-cream-2 p-3">{form}</div>
       )
     }
-    return trigger
+    return showTrigger ? trigger : null
   }
 
   return (
     <>
-      {trigger}
+      {showTrigger && trigger}
       <Sheet open={open} onClose={close} title="New category">
         {form}
       </Sheet>

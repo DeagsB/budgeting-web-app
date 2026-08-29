@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { updateTransaction, deleteTransaction } from './actions'
+import { useMemo, useState, useTransition } from 'react'
+import { updateTransaction, deleteTransaction, setTransactionCategory } from './actions'
 import { toggleShared } from '@/app/(app)/shared/actions'
 import { useToast } from '@/components/ui/toast'
 import { CategorySelect } from './category-select'
@@ -12,6 +12,7 @@ import { Amount } from '@/components/ui/amount'
 import { Button } from '@/components/ui/button'
 import { RuleSheet, type RuleSheetMember } from '@/app/(app)/rules/rule-sheet'
 import { prefillRuleFromTransaction } from '@/lib/transaction-rules'
+import { useUncategorizedCount } from './uncategorized-count'
 
 type TransactionVM = {
   id: string
@@ -47,6 +48,7 @@ export function TransactionRow({
   memberWeights,
   isUncategorized = false,
   topCategoryIds = [],
+  dayLabel,
 }: {
   transaction: TransactionVM
   accounts: { id: string; name: string }[]
@@ -55,14 +57,68 @@ export function TransactionRow({
   memberWeights: RuleSheetMember[]
   isUncategorized?: boolean
   topCategoryIds?: string[]
+  /**
+   * When set, renders this row's date inline in the meta line. Used by the
+   * "To categorize" section at the top of the list, which pulls rows out of
+   * their day group so they no longer sit under a day header of their own.
+   */
+  dayLabel?: string
 }) {
   const [editing, setEditing] = useState(false)
   const [showSplits, setShowSplits] = useState(false)
-  const [categorizing, setCategorizing] = useState(false)
   const [ruleOpen, setRuleOpen] = useState(false)
   const [sharePending, startShare] = useTransition()
   const { toast } = useToast()
   const canEdit = t.canEdit ?? true
+
+  // ───────── Quick categorize (row-local, optimistic) ─────────
+  // The chip strip on an uncategorized row must show its result on the tap
+  // itself, not after the next server round trip - a revalidate triggered
+  // from inside a Server Action isn't guaranteed to reach every mounted
+  // instance of this row promptly, which is what made chip taps look like
+  // they'd silently failed even on a 200. So the picked category lives here,
+  // optimistically, and only reverts if the save comes back with an error.
+  const [optimisticCategoryId, setOptimisticCategoryId] = useState<string | null>(null)
+  const [categorizeError, setCategorizeError] = useState<string | null>(null)
+  const [categorizePending, startCategorize] = useTransition()
+  const uncategorizedCount = useUncategorizedCount()
+  const categoryById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories])
+
+  // Once the server confirms this row is no longer uncategorized (or a fresh
+  // row lands under a reused key), drop any optimistic override so it can't
+  // outlive what it stood in for. Adjusted during render (React's documented
+  // pattern for resetting state when a prop changes) rather than in an
+  // effect, so it can't cause an extra cascading render.
+  const rowKey = `${t.id}:${isUncategorized}`
+  const [prevRowKey, setPrevRowKey] = useState(rowKey)
+  if (rowKey !== prevRowKey) {
+    setPrevRowKey(rowKey)
+    setOptimisticCategoryId(null)
+    setCategorizeError(null)
+  }
+
+  const effectiveUncategorized = isUncategorized && optimisticCategoryId === null
+  const effectiveCategorySummary =
+    optimisticCategoryId !== null
+      ? (categoryById.get(optimisticCategoryId)?.name ?? t.categorySummary)
+      : t.categorySummary
+
+  function handleQuickPick(categoryId: string) {
+    setCategorizeError(null)
+    setOptimisticCategoryId(categoryId)
+    startCategorize(async () => {
+      const fd = new FormData()
+      fd.set('id', t.id)
+      fd.set('category_id', categoryId)
+      const res = await setTransactionCategory(fd)
+      if (res && 'error' in res) {
+        setOptimisticCategoryId(null)
+        setCategorizeError(res.error)
+      } else {
+        uncategorizedCount?.markCategorized(t.id)
+      }
+    })
+  }
 
   // One-tap share / unshare by the household ratio (same action as the
   // checkbox on the Shared page). The page revalidates, so the badge and
@@ -168,6 +224,23 @@ export function TransactionRow({
             </Button>
           </div>
         </form>
+        {/* Delete lives with Edit, not on every row: the row strip stays one
+            line of everyday actions and the destructive one sits behind an
+            intent. ConfirmButton renders its own <form>, so it must be a
+            sibling of the edit form, never nested inside it. */}
+        <div className="mt-3 flex justify-end border-t border-hair pt-2">
+          <ConfirmButton
+            action={deleteTransaction}
+            formData={{ id: t.id }}
+            prompt="Delete this transaction?"
+            description="The transaction and its splits will be removed. This can't be undone."
+            confirmLabel="Delete"
+            destructive
+            className="inline-flex min-h-[44px] items-center rounded-md px-2 text-[12px] font-semibold text-maple transition-colors hover:bg-maple-soft"
+          >
+            Delete transaction
+          </ConfirmButton>
+        </div>
       </li>
     )
   }
@@ -181,8 +254,10 @@ export function TransactionRow({
   const sign = isExpense ? '-' : '+'
   const totalAbs = Math.abs(t.amount_cents)
 
-  // Small color disc derived from category name (stable, brand-safe palette)
-  const disc = discColorFor(t.categorySummary)
+  // Small color disc derived from category name (stable, brand-safe palette).
+  // Uses the effective (optimistic) summary so the disc and initial update
+  // the instant a quick-categorize chip lands, alongside the badge below.
+  const disc = discColorFor(effectiveCategorySummary)
 
   return (
     <li className="flex flex-col">
@@ -192,7 +267,7 @@ export function TransactionRow({
           style={{ background: disc.bg, color: disc.fg }}
           aria-hidden
         >
-          {initialFor(t.categorySummary, t.description)}
+          {initialFor(effectiveCategorySummary, t.description)}
         </div>
 
         <div className="min-w-0 flex-1">
@@ -219,12 +294,18 @@ export function TransactionRow({
           </div>
 
           <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-ink-3">
-            {isUncategorized ? (
+            {dayLabel && (
+              <>
+                <span className="shrink-0 font-semibold text-ink-2">{dayLabel}</span>
+                <span>·</span>
+              </>
+            )}
+            {effectiveUncategorized ? (
               <span className="inline-flex items-center rounded-full bg-butter px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-ink">
                 Uncategorized
               </span>
             ) : (
-              <span className="truncate">{t.categorySummary}</span>
+              <span className="truncate">{effectiveCategorySummary}</span>
             )}
             <span>·</span>
             <span>{t.accountName}</span>
@@ -239,6 +320,25 @@ export function TransactionRow({
             )}
           </div>
 
+          {/* Quick categorize - the chip strip lives directly on every
+              uncategorized row (no toggle to open it), collapses the instant
+              a chip lands, and only reappears if the save is rejected. */}
+          {canEdit && effectiveUncategorized && (
+            <div className="mt-2">
+              <QuickCategorize
+                categories={categories}
+                topCategoryIds={topCategoryIds}
+                onPick={handleQuickPick}
+                pending={categorizePending}
+              />
+            </div>
+          )}
+          {categorizeError && (
+            <p role="alert" className="mt-1.5 rounded-md bg-maple-soft px-2.5 py-1.5 text-[12px] font-medium text-maple">
+              {categorizeError}
+            </p>
+          )}
+
           {/* Row actions - always visible (no hover gating) with ≥44px tap
               targets so they work on touch without a hover state. */}
           {!canEdit && (
@@ -247,32 +347,18 @@ export function TransactionRow({
             </p>
           )}
           {canEdit && (
-            <div className="-ml-1 mt-1.5 flex flex-wrap items-center gap-1 text-[12px]">
-            {isUncategorized && (
-              <button
-                type="button"
-                onClick={() => setCategorizing((v) => !v)}
-                aria-expanded={categorizing}
-                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md bg-leaf px-2.5 font-semibold text-paper transition-colors hover:bg-leaf/90"
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z" />
-                  <circle cx="7" cy="7" r="1.2" fill="currentColor" />
-                </svg>
-                {categorizing ? 'Close' : 'Categorize'}
-              </button>
-            )}
+            <div className="hide-scroll -ml-1 mt-1.5 flex flex-nowrap items-center gap-0.5 overflow-x-auto whitespace-nowrap text-[12px]">
             <button
               type="button"
               onClick={() => setShowSplits((v) => !v)}
-              className="inline-flex min-h-[44px] items-center rounded-md px-2 font-semibold text-ink-2 transition-colors hover:bg-cream-2 hover:text-ink"
+              className="inline-flex min-h-[44px] items-center rounded-md px-1 font-semibold text-ink-2 transition-colors hover:bg-cream-2 hover:text-ink"
             >
               {showSplits ? 'Hide splits' : 'Splits'}
             </button>
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="inline-flex min-h-[44px] items-center rounded-md px-2 font-semibold text-ink-2 transition-colors hover:bg-cream-2 hover:text-ink"
+              className="inline-flex min-h-[44px] items-center rounded-md px-1 font-semibold text-ink-2 transition-colors hover:bg-cream-2 hover:text-ink"
             >
               Edit
             </button>
@@ -282,7 +368,7 @@ export function TransactionRow({
               disabled={sharePending}
               aria-pressed={t.isShared}
               className={
-                'inline-flex min-h-[44px] items-center gap-1.5 rounded-md px-2 font-semibold transition-colors disabled:opacity-50 ' +
+                'inline-flex min-h-[44px] items-center gap-1 rounded-md px-1 font-semibold transition-colors disabled:opacity-50 ' +
                 (t.isShared ? 'text-ink-2 hover:bg-cream-2 hover:text-ink' : 'text-leaf-deep hover:bg-leaf-soft')
               }
             >
@@ -297,36 +383,14 @@ export function TransactionRow({
             <button
               type="button"
               onClick={() => setRuleOpen(true)}
-              className="inline-flex min-h-[44px] items-center rounded-md px-2 font-semibold text-leaf-deep transition-colors hover:bg-leaf-soft"
+              className="inline-flex min-h-[44px] items-center rounded-md px-1 font-semibold text-leaf-deep transition-colors hover:bg-leaf-soft"
             >
-              Always share
+              Auto-share
             </button>
-            <ConfirmButton
-              action={deleteTransaction}
-              formData={{ id: t.id }}
-              prompt="Delete this transaction?"
-              description="The transaction and its splits will be removed. This can't be undone."
-              confirmLabel="Delete"
-              destructive
-              className="inline-flex min-h-[44px] items-center rounded-md px-2 font-semibold text-maple transition-colors hover:bg-maple-soft"
-            >
-              Delete
-            </ConfirmButton>
             </div>
           )}
         </div>
       </div>
-
-      {categorizing && (
-        <div className="border-t border-hair bg-cream-2 px-5 py-4">
-          <QuickCategorize
-            transactionId={t.id}
-            categories={categories}
-            topCategoryIds={topCategoryIds}
-            onDone={() => setCategorizing(false)}
-          />
-        </div>
-      )}
 
       {showSplits && (
         <div className="border-t border-hair bg-cream-2 px-5 py-5">

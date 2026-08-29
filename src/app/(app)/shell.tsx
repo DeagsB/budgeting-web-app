@@ -9,6 +9,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, ViewTransition } from '
 import { signOut } from '../(auth)/actions'
 import { ShellTitleContext } from '@/components/ui/page-header'
 import { ToastProvider } from '@/components/ui/toast'
+import { ConfirmButton } from '@/components/ui/confirm-button'
 import { PullToSync } from '@/components/pull-to-sync'
 import { useScrollLock } from '@/lib/use-scroll-lock'
 import { useOnline } from '@/lib/run-action'
@@ -56,6 +57,15 @@ const DESTS = [
 ] as const
 
 type Dest = (typeof DESTS)[number]
+
+// Visual height of the mobile tab bar's content (excluding the safe-area
+// inset, which every consumer adds separately via env(safe-area-inset-bottom)
+// so it composes cleanly). Published as --maple-tabbar-h on the shell root so
+// anything under it - in this file or elsewhere - can clear the bar without
+// hard-coding the number too. Matches the value already hard-coded in
+// several other bottom-fixed elements across the app.
+const TABBAR_HEIGHT_PX = 72
+const TABBAR_HEIGHT_VAR = '--maple-tabbar-h'
 
 // Exactly three nav slots flank the centre "+" and the fixed More button.
 const TAB_SLOT_COUNT = 3
@@ -350,7 +360,10 @@ function AppShellInner({
         .slice(0, TAB_SLOT_COUNT),
     [tabHrefs],
   )
-  // Anything not on the tab bar drops into the More sheet, grouped.
+  // Anything not on the tab bar drops into the More sheet, grouped. Setup
+  // isn't grouped here - it lives permanently in the fixed quick-access row
+  // (with Categories and Sign out) so it never disappears or duplicates
+  // depending on tab bar customisation.
   const moreItems = useMemo(() => {
     const onBar = new Set(tabHrefs)
     return {
@@ -358,7 +371,6 @@ function AppShellInner({
       split: DESTS.filter((d) => d.group === 'split' && !onBar.has(d.href)),
       reports: DESTS.filter((d) => d.group === 'reports' && !onBar.has(d.href)),
       plans: DESTS.filter((d) => d.group === 'plans' && !onBar.has(d.href)),
-      setup: DESTS.filter((d) => d.group === 'setup' && !onBar.has(d.href)),
     }
   }, [tabHrefs])
 
@@ -409,7 +421,10 @@ function AppShellInner({
   return (
     <ShellTitleContext.Provider value={shellTitle}>
     <ToastProvider raised={!online}>
-    <div className="min-h-dvh bg-[var(--color-cream)] text-[var(--color-ink)]">
+    <div
+      className="min-h-dvh bg-[var(--color-cream)] text-[var(--color-ink)]"
+      style={{ '--maple-tabbar-h': `${TABBAR_HEIGHT_PX}px` } as React.CSSProperties}
+    >
       {/* ───────── Desktop sidebar ───────── */}
       <aside
         className="maple-chrome fixed inset-y-0 left-0 z-20 hidden w-[240px] flex-col border-r border-[var(--color-hair)] bg-[var(--color-cream-2)] px-5 py-6 md:flex"
@@ -461,14 +476,16 @@ function AppShellInner({
             <div className="truncate font-serif text-[15px] text-[var(--color-ink)]">{memberName}</div>
           )}
           <div className="truncate text-[12px] text-[var(--color-ink-2)]">{userEmail}</div>
-          <form action={signOut} className="mt-1">
-            <button
-              type="submit"
+          <div className="mt-1">
+            <ConfirmButton
+              action={signOut}
+              prompt="Sign out of Maple?"
+              confirmLabel="Sign out"
               className="-mx-2 inline-flex min-h-[44px] items-center px-2 text-[12px] font-semibold text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
             >
               Sign out
-            </button>
-          </form>
+            </ConfirmButton>
+          </div>
         </div>
       </aside>
 
@@ -523,7 +540,9 @@ function AppShellInner({
           className="mx-auto max-w-[720px] px-4 py-5 md:max-w-[1080px] md:px-10 md:py-10"
           // Tab bar + home indicator, plus whatever the iOS install hint is
           // occupying above the bar (0 when hidden - see IOSInstallHint).
-          style={{ paddingBottom: 'calc(72px + env(safe-area-inset-bottom) + 16px + var(--maple-hint-h, 0px))' }}
+          style={{
+            paddingBottom: `calc(var(${TABBAR_HEIGHT_VAR}, ${TABBAR_HEIGHT_PX}px) + env(safe-area-inset-bottom) + 16px + var(--maple-hint-h, 0px))`,
+          }}
         >
           {/* Pull-to-sync wraps every screen so the gesture is universal - a
               pull-down at the top of any page triggers a Gmail sync + refresh.
@@ -660,7 +679,17 @@ function AppShellInner({
               </div>
             </div>
             <div className="px-4 pb-3">
-              <div className="mb-1 flex items-center gap-3 rounded-[12px] border border-[var(--color-leaf-soft)] bg-[var(--color-leaf-tint)] px-3 py-2.5">
+              {/* Always here regardless of tab bar customisation: Settings
+                  and Categories are real destinations (press-and-hold still
+                  places them on a slot); Sign out is an action, not a page,
+                  so it's excluded from placement cleanly - no hold handler
+                  at all, just a tap that opens the confirm sheet. */}
+              <QuickAccessRow
+                pathname={pathname}
+                onNav={(href) => { closeMore(); router.push(href) }}
+                onHold={startPlacing}
+              />
+              <div className="mt-3 mb-1 flex items-center gap-3 rounded-[12px] border border-[var(--color-leaf-soft)] bg-[var(--color-leaf-tint)] px-3 py-2.5">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-paper)] text-[var(--color-leaf)]">
                   <HoldIcon />
                 </span>
@@ -675,7 +704,6 @@ function AppShellInner({
                   ['Split & settle', moreItems.split],
                   ['Reports', moreItems.reports],
                   ['Plans & savings', moreItems.plans],
-                  ['Setup', moreItems.setup],
                 ] as const
               ).map(([label, items]) =>
                 items.length > 0 ? (
@@ -689,15 +717,7 @@ function AppShellInner({
                   />
                 ) : null,
               )}
-              <div className="mt-4 flex items-center justify-between border-t border-[var(--color-hair)] pt-2">
-                <form action={signOut}>
-                  <button
-                    type="submit"
-                    className="-mx-2 inline-flex min-h-[44px] items-center px-2 text-[14px] font-semibold text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
-                  >
-                    Sign out
-                  </button>
-                </form>
+              <div className="mt-4 flex items-center justify-end border-t border-[var(--color-hair)] pt-2">
                 <button
                   type="button"
                   onClick={() => saveTabs(DEFAULT_TABS)}
@@ -731,7 +751,7 @@ function OfflineBanner() {
     <div
       role="status"
       aria-live="polite"
-      className="maple-chrome pointer-events-none fixed left-3 right-[84px] z-30 bottom-[calc(72px+env(safe-area-inset-bottom)+12px+var(--maple-hint-h,0px))] md:left-auto md:right-6 md:bottom-4 md:w-auto"
+      className="maple-chrome pointer-events-none fixed left-3 right-[84px] z-30 bottom-[calc(var(--maple-tabbar-h,72px)+env(safe-area-inset-bottom)+12px+var(--maple-hint-h,0px))] md:left-auto md:right-6 md:bottom-4 md:w-auto"
     >
       <div className="flex min-h-[40px] items-center gap-2 rounded-full bg-[var(--color-ink)] px-4 text-[13px] font-medium tracking-[-0.01em] text-[var(--color-paper)] shadow-[var(--shadow-float)]">
         <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--color-maple)]" aria-hidden />
@@ -748,6 +768,17 @@ function tabClass(active: boolean) {
     'flex h-[58px] w-full touch-manipulation select-none flex-col items-center justify-center gap-0 transition-[color,opacity] active:opacity-60',
     active ? 'text-[var(--color-leaf)]' : 'text-[var(--color-ink-3)]',
   ].join(' ')
+}
+
+// Shared by every icon tile in the More sheet - the customisable grouped
+// tiles (TileGroup) and the fixed quick-access row (QuickAccessRow) alike.
+function tileClass(active: boolean) {
+  return (
+    'maple-tile flex min-h-[84px] w-full touch-manipulation select-none flex-col items-center justify-center gap-2 rounded-[14px] border px-1.5 py-3 text-center transition-[transform,background-color] duration-150 active:scale-[0.97] ' +
+    (active
+      ? 'border-[var(--color-leaf-soft)] bg-[var(--color-leaf-tint)] text-[var(--color-leaf)]'
+      : 'border-[var(--color-hair)] bg-[var(--color-paper)] text-[var(--color-ink)]')
+  )
 }
 
 function NavGroup({
@@ -1055,12 +1086,7 @@ function TileGroup({
                 type="button"
                 draggable={false}
                 aria-current={active ? 'page' : undefined}
-                className={
-                  'maple-tile flex min-h-[84px] w-full touch-manipulation select-none flex-col items-center justify-center gap-2 rounded-[14px] border px-1.5 py-3 text-center transition-[transform,background-color] duration-150 active:scale-[0.97] ' +
-                  (active
-                    ? 'border-[var(--color-leaf-soft)] bg-[var(--color-leaf-tint)] text-[var(--color-leaf)]'
-                    : 'border-[var(--color-hair)] bg-[var(--color-paper)] text-[var(--color-ink)]')
-                }
+                className={tileClass(active)}
                 {...handlers(d)}
               >
                 <span className={active ? 'text-[var(--color-leaf)]' : 'text-[var(--color-ink-2)]'}>
@@ -1073,5 +1099,139 @@ function TileGroup({
         })}
       </ul>
     </div>
+  )
+}
+
+// ─── More sheet quick-access row ──────────────────────────────────────────
+
+/**
+ * The first row of the More sheet, always present regardless of how the tab
+ * bar is customised: Settings, Categories, Sign out. Settings and Categories
+ * are real destinations and get the same press-and-hold-to-place gesture as
+ * every TileGroup tile; Sign out is an action, not a page, so it can't be
+ * dropped on a slot - it's excluded from placement cleanly (plain tap only,
+ * no hold timer) rather than half-wiring a gesture that has nowhere to land.
+ */
+function QuickAccessRow({
+  pathname,
+  onNav,
+  onHold,
+}: {
+  pathname: string
+  onNav: (href: string) => void
+  onHold: (item: Placing) => void
+}) {
+  const holdRef = useRef<{ timer: number; x: number; y: number } | null>(null)
+  const heldRef = useRef(false)
+
+  const clearHold = () => {
+    if (holdRef.current) {
+      window.clearTimeout(holdRef.current.timer)
+      holdRef.current = null
+    }
+  }
+  // Only Settings and Categories carry this - they're the only two items in
+  // this row with a real href a tab slot can hold.
+  const startHold = (e: React.PointerEvent, href: string, label: string) => {
+    if (e.button !== 0) return
+    heldRef.current = false
+    clearHold()
+    const timer = window.setTimeout(() => {
+      holdRef.current = null
+      heldRef.current = true
+      try { navigator.vibrate?.(10) } catch {}
+      onHold({ href, label })
+    }, PLACE_HOLD_MS)
+    holdRef.current = { timer, x: e.clientX, y: e.clientY }
+  }
+  const moveHold = (e: React.PointerEvent) => {
+    const h = holdRef.current
+    if (h && Math.hypot(e.clientX - h.x, e.clientY - h.y) > PLACE_MOVE_CANCEL) clearHold()
+  }
+  const tapOrNav = (e: React.MouseEvent, href: string) => {
+    if (heldRef.current) {
+      heldRef.current = false
+      e.preventDefault()
+      return
+    }
+    onNav(href)
+  }
+
+  const settingsActive = isActive(pathname, '/setup')
+  const categoriesActive = isActive(pathname, '/categories')
+
+  return (
+    <ul className="grid grid-cols-3 gap-2">
+      <li>
+        <button
+          type="button"
+          draggable={false}
+          aria-current={settingsActive ? 'page' : undefined}
+          className={tileClass(settingsActive)}
+          onPointerDown={(e) => startHold(e, '/setup', 'Settings')}
+          onPointerMove={moveHold}
+          onPointerUp={clearHold}
+          onPointerCancel={clearHold}
+          onContextMenu={(e) => e.preventDefault()}
+          onClick={(e) => tapOrNav(e, '/setup')}
+        >
+          <span className={settingsActive ? 'text-[var(--color-leaf)]' : 'text-[var(--color-ink-2)]'}>
+            <SettingsIcon active={settingsActive} />
+          </span>
+          <span className="text-[12px] font-medium leading-tight">Settings</span>
+        </button>
+      </li>
+      <li>
+        <button
+          type="button"
+          draggable={false}
+          aria-current={categoriesActive ? 'page' : undefined}
+          className={tileClass(categoriesActive)}
+          onPointerDown={(e) => startHold(e, '/categories', 'Categories')}
+          onPointerMove={moveHold}
+          onPointerUp={clearHold}
+          onPointerCancel={clearHold}
+          onContextMenu={(e) => e.preventDefault()}
+          onClick={(e) => tapOrNav(e, '/categories')}
+        >
+          <span className={categoriesActive ? 'text-[var(--color-leaf)]' : 'text-[var(--color-ink-2)]'}>
+            <CategoriesIcon active={categoriesActive} />
+          </span>
+          <span className="text-[12px] font-medium leading-tight">Categories</span>
+        </button>
+      </li>
+      <li>
+        <ConfirmButton
+          action={signOut}
+          prompt="Sign out of Maple?"
+          confirmLabel="Sign out"
+          className={tileClass(false)}
+        >
+          <span className="text-[var(--color-ink-2)]">
+            <SignOutIcon />
+          </span>
+          <span className="text-[12px] font-medium leading-tight">Sign out</span>
+        </ConfirmButton>
+      </li>
+    </ul>
+  )
+}
+
+function CategoriesIcon({ active }: { active: boolean }) {
+  return (
+    <svg {...iconProps(active)} aria-hidden>
+      <path d="M11 3.5l8 8a2 2 0 0 1 0 2.8l-5.4 5.4a2 2 0 0 1-2.8 0L3 11V3.5z" />
+      <circle cx="7.7" cy="7.7" r="1.3" fill={active ? 'var(--color-paper)' : 'currentColor'} />
+    </svg>
+  )
+}
+
+function SignOutIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4" />
+      <path d="M16 8l4 4-4 4" />
+      <path d="M20 12H9" />
+    </svg>
   )
 }

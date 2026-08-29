@@ -32,9 +32,12 @@ type SaveStatus = { kind: 'idle' } | { kind: 'saved' } | { kind: 'error'; messag
  * visible fields are controlled and unnamed and the form posts one hidden
  * field per category - otherwise every save would submit each amount twice.
  *
- * The save bar is sticky above the bottom tab bar on mobile and reports its
- * outcome honestly: green "Saved" only when the server action returns ok, an
- * error message otherwise. Status lives in an aria-live region.
+ * The save bar only takes up screen space when there's something to save: it
+ * appears the moment an amount or scope changes, sits sticky above the
+ * bottom tab bar on mobile, and reports its outcome honestly - green "Saved"
+ * for 2s only when the server action returns ok (then it clears, since the
+ * form is clean again), an error message otherwise (it stays up, since the
+ * change is still unsaved). Status lives in an aria-live region.
  */
 export function BudgetTable({
   month,
@@ -71,6 +74,16 @@ export function BudgetTable({
       categories.map((c) => [c.id, overridden.includes(c.id) ? 'month' : 'standing'] as const),
     ),
   )
+
+  // "Are there unsaved changes" - flipped true the moment any amount or
+  // scope changes, flipped back only once a save actually succeeds. A plain
+  // flag rather than a diff against the original values: diffing would need
+  // to read that baseline from a ref during render, which React disallows
+  // (refs are for event handlers/effects, not the render body). The
+  // trade-off is that undoing an edit back to its original value still
+  // counts as "unsaved" until the next save - an acceptable, common
+  // simplification for form-dirty tracking.
+  const [dirty, setDirty] = useState(false)
 
   const shortMonth = monthLabel.split(' ')[0]
 
@@ -113,9 +126,14 @@ export function BudgetTable({
     value: amounts[id] ?? '',
     scope: scopes[id] ?? ('standing' as Scope),
     monthLabel: shortMonth,
-    onAmount: (v: string) => setAmounts((prev) => ({ ...prev, [id]: v })),
-    onScope: () =>
-      setScopes((prev) => ({ ...prev, [id]: prev[id] === 'month' ? 'standing' : 'month' })),
+    onAmount: (v: string) => {
+      setAmounts((prev) => ({ ...prev, [id]: v }))
+      setDirty(true)
+    },
+    onScope: () => {
+      setScopes((prev) => ({ ...prev, [id]: prev[id] === 'month' ? 'standing' : 'month' }))
+      setDirty(true)
+    },
   })
 
   return (
@@ -124,8 +142,9 @@ export function BudgetTable({
         startTransition(async () => {
           const result = await saveBudgets(fd)
           if (result.ok) {
+            setDirty(false)
             setStatus({ kind: 'saved' })
-            setTimeout(() => setStatus({ kind: 'idle' }), 2500)
+            setTimeout(() => setStatus({ kind: 'idle' }), 2000)
           } else {
             setStatus({ kind: 'error', message: result.error })
           }
@@ -189,23 +208,27 @@ export function BudgetTable({
         </DataTable>
       </div>
 
-      {/* ── Sticky save bar (above the bottom tab bar on mobile) ── */}
-      <div
-        className="sticky bottom-[calc(72px+env(safe-area-inset-bottom))] z-10 flex items-center justify-between gap-3 rounded-lg border border-hair bg-cream-2 px-4 py-3 shadow-[var(--shadow-float)] sm:bottom-3"
-      >
-        <div aria-live="polite" className="min-w-0 flex-1 text-[12px]">
-          {status.kind === 'saved' ? (
-            <span className="font-semibold text-leaf">✓ Saved</span>
-          ) : status.kind === 'error' ? (
-            <span className="font-semibold text-maple">{status.message}</span>
-          ) : (
-            <span className="text-ink-3">Amounts apply every month unless you pin one to {shortMonth}</span>
-          )}
+      {/* ── Sticky save bar (above the bottom tab bar on mobile) ──
+          Only takes up space while there's something to save: an edit in
+          progress, a save in flight, or a "Saved" confirmation still
+          showing. Otherwise the form is clean and the bar gets out of the
+          way entirely rather than sitting there with nothing to do. */}
+      {(dirty || pending || status.kind === 'saved') && (
+        <div className="sticky bottom-[calc(var(--maple-tabbar-h)+env(safe-area-inset-bottom))] z-10 flex items-center justify-between gap-3 rounded-lg border border-hair bg-cream-2 px-4 py-3 shadow-[var(--shadow-float)] sm:bottom-3">
+          <div aria-live="polite" className="min-w-0 flex-1 text-[12px]">
+            {status.kind === 'saved' ? (
+              <span className="font-semibold text-leaf">Saved</span>
+            ) : status.kind === 'error' ? (
+              <span className="font-semibold text-maple">{status.message}</span>
+            ) : (
+              <span className="text-ink-3">Amounts apply every month unless you pin one to {shortMonth}</span>
+            )}
+          </div>
+          <Button type="submit" variant="primary" size="sm" disabled={pending} className="shrink-0">
+            {pending ? 'Saving…' : 'Save budgets'}
+          </Button>
         </div>
-        <Button type="submit" variant="primary" size="sm" disabled={pending} className="shrink-0">
-          {pending ? 'Saving…' : 'Save budgets'}
-        </Button>
-      </div>
+      )}
     </form>
   )
 }
@@ -232,6 +255,13 @@ type Field = {
 function progressFor(row: RenderRow) {
   const pct = row.budget > 0 ? Math.min(1.2, row.actual / row.budget) : row.actual > 0 ? 1.2 : 0
   return { pct, over: row.variance > 0 }
+}
+
+/** Moves focus to a row's amount input - used by the "Set budget" affordance
+ * on an unbudgeted category, so the prompt actually leads somewhere instead
+ * of just naming the problem. */
+function focusBudgetInput(categoryId: string) {
+  document.getElementById(`budget-${categoryId}`)?.focus()
 }
 
 function BudgetInput({ categoryId, field }: { categoryId: string; field: Field }) {
@@ -310,17 +340,34 @@ function BudgetCard({ row, field, child = false }: { row: RenderRow; field: Fiel
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-3 text-[12px]">
-        <span className="text-ink-3">
-          Spent <Amount cents={row.actual} className="text-[12px] text-ink-2" />
-        </span>
-        <span className="text-ink-3">
-          {row.variance > 0 ? 'Over by ' : 'Left '}
-          <Amount
-            cents={Math.abs(row.variance)}
-            tone={row.variance > 0 ? 'maple' : 'leaf'}
-            className="text-[12px]"
-          />
-        </span>
+        {row.budget > 0 ? (
+          <>
+            <span className="text-ink-3">
+              Spent <Amount cents={row.actual} className="text-[12px] text-ink-2" />
+            </span>
+            <span className="text-ink-3">
+              {row.variance > 0 ? 'Over by ' : 'Left '}
+              <Amount
+                cents={Math.abs(row.variance)}
+                tone={row.variance > 0 ? 'maple' : 'leaf'}
+                className="text-[12px]"
+              />
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="text-ink-3">
+              Spent <Amount cents={row.actual} className="text-[12px] text-ink-2" /> - no budget
+            </span>
+            <button
+              type="button"
+              onClick={() => focusBudgetInput(row.id)}
+              className="inline-flex min-h-[44px] shrink-0 items-center rounded-full bg-paper-2 px-2.5 text-[11px] font-semibold text-ink-2 transition-colors hover:bg-cream-2 hover:text-ink"
+            >
+              Set budget
+            </button>
+          </>
+        )}
       </div>
 
       {row.budget > 0 && (
@@ -347,8 +394,17 @@ function BudgetCard({ row, field, child = false }: { row: RenderRow; field: Fiel
 function TableRow({ row, field }: { row: RenderRow; field: Field }) {
   const isParent = row.depth === 0
   const { pct, over } = progressFor(row)
+  // No budget means there's nothing to be "over" or "under" - that reading
+  // only applies once a budget actually exists for the row.
+  const hasBudget = row.budget > 0
   const varColor =
-    row.variance > 0 ? 'var(--color-maple)' : row.variance < 0 ? 'var(--color-leaf)' : 'var(--color-ink-2)'
+    !hasBudget
+      ? 'var(--color-ink-3)'
+      : row.variance > 0
+        ? 'var(--color-maple)'
+        : row.variance < 0
+          ? 'var(--color-leaf)'
+          : 'var(--color-ink-2)'
   const ytdColor =
     row.ytdVariance > 0
       ? 'var(--color-maple)'
@@ -392,8 +448,20 @@ function TableRow({ row, field }: { row: RenderRow; field: Field }) {
         {formatMoney(row.actual)}
       </td>
       <td className="py-3 pr-3 text-right align-top tabular-nums" style={{ color: varColor }}>
-        {row.variance === 0 ? '-' : formatMoneySigned(row.variance, { plus: true })}
-        {row.variance > 0 && <span className="ml-1 text-[10.5px] font-semibold uppercase">over</span>}
+        {hasBudget ? (
+          <>
+            {row.variance === 0 ? '-' : formatMoneySigned(row.variance, { plus: true })}
+            {row.variance > 0 && <span className="ml-1 text-[10.5px] font-semibold uppercase">over</span>}
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => focusBudgetInput(row.id)}
+            className="min-h-[28px] text-[12.5px] font-semibold underline decoration-dotted underline-offset-2 hover:text-ink"
+          >
+            Set budget
+          </button>
+        )}
       </td>
       <td className="py-3 pr-5 text-right align-top text-[12.5px] tabular-nums" style={{ color: ytdColor }}>
         {row.ytdVariance === 0 ? '-' : formatMoneySigned(row.ytdVariance, { plus: true })}

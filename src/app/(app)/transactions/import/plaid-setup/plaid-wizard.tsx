@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { ConfirmButton } from '@/components/ui/confirm-button'
 import { StatusPill } from '@/components/plaid/status-pill'
+import { formatSyncedAt } from '@/lib/relative-time'
 import {
   AccountMappingForm,
   PlaidConnect,
@@ -49,6 +50,8 @@ export function PlaidWizard({
   accounts,
   canOwn,
   log,
+  /** From `?reauth=<itemRowId>` (see plaidReconnectHref) - opens update-mode Link for this item once. */
+  reauthItemId,
 }: {
   plaidConfigured: boolean
   maxItems: number
@@ -57,6 +60,7 @@ export function PlaidWizard({
   /** False until this login has claimed a member; then only joint accounts can be created. */
   canOwn: boolean
   log: LogView[]
+  reauthItemId?: string
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -66,12 +70,42 @@ export function PlaidWizard({
 
   const reauth = usePlaidReauth({
     returnTo: RETURN_TO,
-    onDone: () => {
+    onSyncStart: () => {
+      setError(null)
       setNotice('Re-authenticated. Syncing…')
+    },
+    onDone: (_id, _resumedReturnTo, result) => {
+      setNotice(
+        result
+          ? `Reconnected. Synced ${result.added} new transaction${result.added === 1 ? '' : 's'}.`
+          : 'Reconnected.',
+      )
       router.refresh()
     },
-    onError: setError,
+    onError: (message) => {
+      setNotice(null)
+      setError(message)
+    },
   })
+
+  // Auto-open update-mode Link once for a bank sent here via ?reauth=<id>
+  // (e.g. from the ReauthNotice banner elsewhere in the app). Guarded so a
+  // re-render (or React Strict Mode's double-invoke) can't open it twice, and
+  // drops the param once started so a refresh can't replay it.
+  const reauthStartedRef = useRef(false)
+  useEffect(() => {
+    if (!reauthItemId || reauthStartedRef.current || reauth.resuming) return
+    reauthStartedRef.current = true
+    setError(null)
+    setNotice(null)
+    reauth.start(reauthItemId)
+    const url = new URL(window.location.href)
+    url.searchParams.delete('reauth')
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+    // `reauth` is a fresh object every render (its `start` isn't memoised);
+    // only the item id from the URL should ever re-trigger this effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reauthItemId])
 
   function reviewAccounts(itemId: string) {
     setError(null)
@@ -183,7 +217,7 @@ export function PlaidWizard({
                         {mapped.length > 0
                           ? mapped.map((a) => a.name).join(', ')
                           : 'No accounts mapped yet'}
-                        {it.lastSyncedAt ? ` · synced ${it.lastSyncedAt.replace('T', ' ').slice(0, 16)}` : ''}
+                        {it.lastSyncedAt ? ` · ${formatSyncedAt(it.lastSyncedAt)}` : ''}
                       </div>
                     </div>
                   </div>
@@ -207,7 +241,7 @@ export function PlaidWizard({
                         disabled={busy}
                         className="inline-flex min-h-[44px] items-center rounded-full border border-honey bg-paper-2 px-3 text-[12.5px] font-semibold text-down hover:underline disabled:opacity-50"
                       >
-                        Re-authenticate
+                        Reconnect
                       </button>
                     )}
                     {it.needsAccountReview && it.status === 'active' && (
@@ -244,7 +278,7 @@ export function PlaidWizard({
                   )}
                   {it.status === 'pending_disconnect' && (
                     <p className="text-[11.5px] text-ink-2">
-                      The bank is about to drop this connection. Re-authenticate to keep syncing.
+                      The bank is about to drop this connection. Reconnect to keep syncing.
                     </p>
                   )}
                 </li>
@@ -263,7 +297,7 @@ export function PlaidWizard({
           <ul className="mt-2 flex flex-col gap-1.5">
             {log.map((l) => (
               <li key={l.id} className="flex items-center justify-between gap-3 text-[12.5px]">
-                <span className="text-ink-3">{l.ran_at.replace('T', ' ').slice(0, 16)}</span>
+                <span className="text-ink-3">{formatSyncedAt(l.ran_at)}</span>
                 <span className="flex items-center gap-2">
                   <StatusPill status={l.status} />
                   <span className="text-ink-2">

@@ -14,6 +14,7 @@ import {
   decryptToken,
 } from '@/lib/plaid'
 import { refreshPlaidBalances, syncPlaidItem, type SyncTrigger } from '@/lib/plaid-sync'
+import { plaidSyncSelection } from '@/lib/plaid-sync-plan'
 import { getPlaidEnv } from '@/lib/env'
 import type { AccountType } from '@/lib/domain'
 import { humanizeDbError } from '@/lib/errors'
@@ -52,7 +53,7 @@ export type AccountMapping = {
 export type MapState = { ok: true } | { error: string } | undefined
 export type PlaidSyncNowState =
   | { ok: true; added: number; reconciled: number; loginRequired: boolean; skipped: boolean }
-  | { error: string }
+  | { error: string; loginRequired?: boolean }
   | undefined
 
 export type RefreshAccountsState =
@@ -423,14 +424,32 @@ export async function triggerPlaidSync(
   const service = createServiceClient()
   if (!service) return { error: 'Server is missing SUPABASE_SERVICE_ROLE_KEY.' }
 
+  // A single item (a re-auth follow-up or one "Sync now" tap) is synced
+  // whatever its status - that status is exactly what the sync is trying to
+  // clear. Only the bulk path restricts itself to items still worth trying.
+  const selection = plaidSyncSelection(itemRowId)
   let query = service
     .from('plaid_items')
     .select('id, household_id, item_id, cursor, status, last_synced_at')
     .eq('household_id', ctx.householdId)
-    .in('status', ['active', 'error'])
-  if (itemRowId) query = query.eq('id', itemRowId)
+  query = 'byId' in selection ? query.eq('id', selection.byId) : query.in('status', selection.statuses)
   const { data: items } = await query
-  if (!items || items.length === 0) return quiet ? noop : { error: 'No connected banks to sync.' }
+  if (!items || items.length === 0) {
+    if (quiet) return noop
+    if (!itemRowId) {
+      // Bulk path found nothing active/error - tell apart "nothing linked"
+      // from "every linked bank needs attention before it can sync".
+      const { count } = await service
+        .from('plaid_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('household_id', ctx.householdId)
+        .neq('status', 'removed')
+      if ((count ?? 0) > 0) {
+        return { error: 'Your bank needs to be reconnected before it can sync.', loginRequired: true }
+      }
+    }
+    return { error: 'No connected banks to sync.' }
+  }
 
   const cutoff = opts.minIntervalMs ? Date.now() - opts.minIntervalMs : null
   let added = 0

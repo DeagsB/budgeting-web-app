@@ -7,6 +7,7 @@ import { Field } from '@/components/ui/field'
 import { InviteResult } from '@/components/invite-result'
 import type { InviteState } from '@/app/(app)/setup/invite-actions'
 import { inviteNewMember } from './actions'
+import { StepFormActions } from '../step-form-actions'
 
 /**
  * An email address, nothing else - whoever accepts picks their own name when
@@ -52,6 +53,7 @@ export function InviteForm() {
           placeholder="them@domain.ca"
           className="maple-input"
           autoFocus
+          enterKeyHint="done"
         />
       </Field>
 
@@ -61,11 +63,13 @@ export function InviteForm() {
         </div>
       )}
 
-      <div className="flex pt-1 sm:justify-end">
-        <Button type="submit" variant="secondary" size="md" disabled={pending} className="w-full sm:w-auto">
-          {pending ? 'Sending…' : 'Send invitation'}
-        </Button>
-      </div>
+      <StepFormActions>
+        <div className="flex sm:justify-end">
+          <Button type="submit" variant="secondary" size="md" disabled={pending} className="w-full sm:w-auto">
+            {pending ? 'Sending…' : 'Send invitation'}
+          </Button>
+        </div>
+      </StepFormActions>
     </form>
   )
 }

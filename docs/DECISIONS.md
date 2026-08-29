@@ -556,3 +556,25 @@ Accepting then dropped the new person straight onto a dashboard full of the hous
 - *Keeping the explicit "Accept and join" click after sign-up*: the invitee already clicked the invitation and then proved the email; a second confirmation adds a step without adding a decision.
 - *Onboarding invitees with the owner's four steps*: household, invite and budget are all household-level, and an invitee editing the household budget on their first screen is not what joining should mean.
 - *Letting the owner name people and having the invitee correct it later*: the correction never happens, and the wrong name is the one the household sees in every split.
+
+## 2026-08-29 - Categorize in place is the product; review modes, typed balances and hidden bank errors are friction
+
+**Context:** the mobile UX audit of 2026-08-28 (`docs/ux-audit-mobile-2026-08-28.md`) measured the app against the stated model: Plaid feeds transactions and balances, the household's daily job is to categorize what arrived (sometimes splitting out GST), and nobody should need a review mode or type a balance for a linked account.
+Live journeys showed the pile was invisible from the dashboard and month-scoped on /transactions, chip taps looked like silent failures because the row only updated after revalidation, every linked account row showed "$0.00 Opening", and a bank in `login_required` never surfaced anywhere the user looks; re-authenticating did not clear it because `triggerPlaidSync(itemRowId)` still filtered on `status in ('active','error')`.
+
+**Decision:**
+- The uncategorized pile is counted household-wide, across all months, and shown where the app opens: a "N to categorize" card under the dashboard greeting and a hoisted "To categorize" section at the top of /transactions, with `?scope=uncategorized` listing every month.
+A title is never required to categorize; `looksCryptic` no longer gates the queue.
+- Categorization is optimistic and row-local (`transactions/row.tsx`): the chip strip sits on every uncategorized row, the badge swaps on the tap, and only a rejected save reverts it.
+Quick-categorize revalidates three routes, not six.
+- Account rows show the derived current balance, never the opening balance; linked accounts carry a bank caption and a "Needs reconnecting" link, and the balance sheet only accepts typed balances for manual accounts.
+- A bank that needs attention is announced by `ReauthNotice` on the dashboard and /accounts, and "Reconnect" deep-links to `/transactions/import/plaid-setup?reauth=<id>`, which opens update-mode Link on load.
+A single-item sync ignores the item's status (`plaidSyncSelection`); only the bulk path filters, and it says "Your bank needs to be reconnected" instead of "No connected banks to sync." when every item is excluded.
+- Forms keep their primary action reachable with the keyboard open: `Sheet` sizes itself from `visualViewport`, `SheetActions` is the sticky footer for form sheets, and `html, body` use `overflow-x: clip` (not `hidden`) so `position: sticky` works against the viewport.
+- GST is one tap in the split editor ("Split out GST (5%)", `src/lib/gst.ts`, tax = round(total x 5 / 105)).
+- Onboarding's bank step "Skip for now" advances to the invite step; `canVisitStep` no longer requires an account to reach invite or budget.
+
+**Considered + rejected:**
+- *Keeping the one-by-one Review sheet as the primary path*: it is a review mode by definition; it stays as a secondary "Review one by one" link only.
+- *Fixing re-auth on the client by resetting `plaid_items.status` after Link*: the server would still skip the item on the next sync; the selection rule was the bug.
+- *`overflow-x: hidden` on a wrapper instead of `clip` on the root*: any `hidden` ancestor becomes the scroll container again and breaks sticky the same way.

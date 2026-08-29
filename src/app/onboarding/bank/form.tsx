@@ -6,6 +6,7 @@ import { Field } from '@/components/ui/field'
 import { Button } from '@/components/ui/button'
 import { MoneyInput } from '@/components/ui/money-input'
 import { createFirstAccount, type FirstAccountState } from './actions'
+import { StepFormActions } from '../step-form-actions'
 
 export function FirstAccountForm() {
   const [state, formAction, pending] = useActionState<FirstAccountState, FormData>(
@@ -44,6 +45,7 @@ export function FirstAccountForm() {
           placeholder="e.g. Chequing"
           className="maple-input"
           autoFocus
+          enterKeyHint="next"
         />
       </Field>
 
@@ -83,11 +85,13 @@ export function FirstAccountForm() {
         </div>
       )}
 
-      <div className="flex pt-1 sm:justify-end">
-        <Button type="submit" variant="secondary" size="md" disabled={pending || !ready} className="w-full sm:w-auto">
-          {pending ? 'Adding…' : 'Add account'}
-        </Button>
-      </div>
+      <StepFormActions>
+        <div className="flex sm:justify-end">
+          <Button type="submit" variant="secondary" size="md" disabled={pending || !ready} className="w-full sm:w-auto">
+            {pending ? 'Adding…' : 'Add account'}
+          </Button>
+        </div>
+      </StepFormActions>
     </form>
   )
 }

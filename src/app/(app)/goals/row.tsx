@@ -157,6 +157,7 @@ function EditCard({
   onDone: () => void
 }) {
   const [state, formAction, pending] = useActionState<GoalState, FormData>(updateGoal, undefined)
+  const [fundingAccountId, setFundingAccountId] = useState(goal.funding_account_id ?? '')
   // Close the editor once a submit completes without an error.
   const wasPending = useRef(false)
   useEffect(() => {
@@ -198,19 +199,31 @@ function EditCard({
             className="maple-input tabular-nums"
           />
         </Field>
-        <Field label="Current progress">
-          <input
-            name="current_amount"
-            type="text"
-            inputMode="decimal"
-            defaultValue={(goal.current_amount_cents / 100).toFixed(2)}
-            className="maple-input tabular-nums"
-          />
-        </Field>
+        {fundingAccountId ? (
+          <div className="flex flex-col gap-1">
+            <span className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink-3">
+              Current progress
+            </span>
+            <p className="rounded-md border border-hair bg-paper px-3 py-2.5 text-[12.5px] leading-snug text-ink-2">
+              Tracked automatically from the funding account&rsquo;s balance.
+            </p>
+          </div>
+        ) : (
+          <Field label="Current progress">
+            <input
+              name="current_amount"
+              type="text"
+              inputMode="decimal"
+              defaultValue={(goal.current_amount_cents / 100).toFixed(2)}
+              className="maple-input tabular-nums"
+            />
+          </Field>
+        )}
         <Field label="Funding account">
           <select
             name="funding_account_id"
-            defaultValue={goal.funding_account_id ?? ''}
+            value={fundingAccountId}
+            onChange={(e) => setFundingAccountId(e.target.value)}
             className="maple-select"
           >
             <option value="">-</option>

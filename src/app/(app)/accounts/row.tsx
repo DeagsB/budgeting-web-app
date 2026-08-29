@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useFormStatus } from 'react-dom'
 import { ACCOUNT_TYPES, ACCOUNT_OWNERSHIP, LIABILITY_TYPES, type AccountType } from '@/lib/domain'
 import { ownershipLabel } from '@/lib/tx-scope'
@@ -9,6 +10,16 @@ import { Button } from '@/components/ui/button'
 import { ConfirmButton } from '@/components/ui/confirm-button'
 import { updateAccount, archiveAccount, unarchiveAccount } from './actions'
 
+/** Bank-linked context for a Plaid account row - `null` for a manual account. */
+type BankInfo = {
+  /** Institution name, or "Bank" when Plaid hasn't reported one. */
+  label: string
+  /** "synced 2 h ago" / "not synced yet". */
+  syncedLabel: string
+  needsReconnect: boolean
+  reconnectHref: string
+}
+
 type Account = {
   id: string
   name: string
@@ -16,8 +27,13 @@ type Account = {
   typeLabel: string
   ownership: string
   opening_balance_cents: number
+  /** Current balance (opening + transactions, snapshot-anchored) - see src/lib/balances.ts. */
+  balance_cents: number
   last_four: string | null
   archived: boolean
+  /** True when this account is fed by a linked bank via Plaid. */
+  linked: boolean
+  bank: BankInfo | null
 }
 
 /**
@@ -51,6 +67,15 @@ function AccountIcon({ type }: { type: string }) {
     default:
       return (<svg {...common}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M7 9h10M7 13h6" /></svg>)
   }
+}
+
+/** Tiny bank glyph marking a row as fed by a linked Plaid connection. */
+function BankGlyph() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M3 10h18M5 10v8M9 10v8M15 10v8M19 10v8M3 18h18M12 3l9 5H3l9-5z" />
+    </svg>
+  )
 }
 
 export function AccountRow({ account }: { account: Account }) {
@@ -96,19 +121,25 @@ export function AccountRow({ account }: { account: Account }) {
                 ))}
               </select>
             </EditField>
-            <EditField label="Opening balance">
-              <div className="flex items-center rounded-md border border-hair bg-paper px-3 py-1.5 transition-colors focus-within:border-leaf">
-                <span className="text-[12px] text-ink-3">$</span>
-                <input
-                  name="opening_balance"
-                  type="text"
-                  inputMode="decimal"
-                  defaultValue={(account.opening_balance_cents / 100).toFixed(2)}
-                  aria-label="Opening balance in dollars"
-                  className="w-full bg-transparent pl-1 text-[13px] tabular-nums text-ink outline-none"
-                />
-              </div>
-            </EditField>
+            {/* Hidden for a linked account: its balance comes from the bank via
+                Plaid sync, never from a typed opening figure (src/lib/balances.ts
+                isManuallyEditableBalance). The server action leaves the stored
+                value untouched when this field isn't submitted. */}
+            {!account.linked && (
+              <EditField label="Opening balance">
+                <div className="flex items-center rounded-md border border-hair bg-paper px-3 py-1.5 transition-colors focus-within:border-leaf">
+                  <span className="text-[12px] text-ink-3">$</span>
+                  <input
+                    name="opening_balance"
+                    type="text"
+                    inputMode="decimal"
+                    defaultValue={(account.opening_balance_cents / 100).toFixed(2)}
+                    aria-label="Opening balance in dollars"
+                    className="w-full bg-transparent pl-1 text-[13px] tabular-nums text-ink outline-none"
+                  />
+                </div>
+              </EditField>
+            )}
             <EditField label="Last 4 digits (auto-routing)">
               <input
                 name="last_four"
@@ -143,41 +174,62 @@ export function AccountRow({ account }: { account: Account }) {
         (account.archived ? 'opacity-60' : 'hover:bg-cream-2/40')
       }
     >
-      <div className="flex min-w-0 flex-1 items-center gap-3">
+      <div className="flex min-w-0 flex-1 items-start gap-3">
         <div
           className={
-            'flex h-10 w-10 shrink-0 items-center justify-center rounded-full ' +
+            'mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full ' +
             (isLiability ? 'bg-maple-soft text-maple' : 'bg-leaf-soft text-leaf')
           }
         >
           <AccountIcon type={account.type} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate font-serif text-[16px] tracking-[-0.01em] text-ink">
-            {account.name}
+          {/* Line 1: name gets every pixel left after the balance. Long bank
+              names ("Home Equity Line of Credit") wrap to a second line
+              rather than ellipsize - the name is the one thing the user
+              must be able to read to pick the right account. */}
+          <div className="flex items-baseline gap-3">
+            <div className="line-clamp-2 min-w-0 flex-1 break-words font-medium text-[16px] leading-snug tracking-[-0.01em] text-ink">
+              {account.name}
+            </div>
+            <Amount
+              cents={isLiability ? -Math.abs(account.balance_cents) : account.balance_cents}
+              sign={isLiability ? 'auto' : 'none'}
+              tone={isLiability ? 'maple' : 'ink'}
+              className="shrink-0 text-[16px]"
+            />
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[12px] text-ink-3">
-            <span>{account.typeLabel}</span>
-            <span>·</span>
-            <span>{ownershipLabel(account.ownership)}</span>
-            {account.last_four && (
-              <>
-                <span>·</span>
-                <span className="tabular-nums">····{account.last_four}</span>
-              </>
-            )}
+          {/* Line 2: type · ownership · last four, always one line. */}
+          <div className="mt-0.5 truncate text-[12px] text-ink-3">
+            {[
+              account.typeLabel,
+              ownershipLabel(account.ownership),
+              account.last_four ? `····${account.last_four}` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
           </div>
-        </div>
-        <div className="text-right">
-          <Amount
-            cents={isLiability ? -Math.abs(account.opening_balance_cents) : account.opening_balance_cents}
-            sign={isLiability ? 'auto' : 'none'}
-            tone={isLiability ? 'maple' : 'ink'}
-            className="text-[16px]"
-          />
-          <div className="text-[10.5px] font-medium uppercase tracking-[0.06em] text-ink-3">
-            Opening
-          </div>
+          {/* Line 3 (linked accounts only): bank caption, or a 44px-tall
+              reconnect link when the item needs attention. */}
+          {account.bank && (
+            account.bank.needsReconnect ? (
+              <Link
+                href={account.bank.reconnectHref}
+                className="-ml-2 mt-0.5 inline-flex min-h-[44px] items-center px-2 text-[12px] font-semibold text-down hover:underline"
+              >
+                Needs reconnecting →
+              </Link>
+            ) : (
+              <div className="mt-0.5 flex items-center gap-1 truncate text-[12px] text-ink-3">
+                <BankGlyph />
+                {/* Time first: on a 390px row the tail gets clipped, and
+                    "synced 7 min ago" is the part the user came for. */}
+                <span className="truncate">
+                  {account.bank.syncedLabel} · {account.bank.label}
+                </span>
+              </div>
+            )
+          )}
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2 text-[12px] sm:gap-3">

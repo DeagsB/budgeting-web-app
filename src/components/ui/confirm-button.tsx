@@ -145,6 +145,7 @@ export function ConfirmModal({
   onConfirm: () => void
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
+  const confirmRef = useRef<HTMLButtonElement>(null)
   const restoreFocusRef = useRef<Element | null>(null)
 
   // Lock body scroll while open so the bottom sheet doesn't drag the page (iOS-safe).
@@ -162,8 +163,11 @@ export function ConfirmModal({
     }
   }, [open])
 
-  // Esc to cancel, Enter to confirm - matches OS dialogs. Tab is trapped
-  // within the modal so focus can't escape to the page behind it.
+  // Esc to cancel, Enter to confirm - matches OS dialogs. Enter only
+  // confirms when the confirm button (or the panel itself) has focus; when
+  // focus is on Cancel, Enter falls through to the browser's own default
+  // "activate the focused button" behavior, which cancels instead. Tab is
+  // trapped within the modal so focus can't escape to the page behind it.
   useEffect(() => {
     if (!open) return
     function onKey(e: KeyboardEvent) {
@@ -172,7 +176,16 @@ export function ConfirmModal({
         return
       }
       if (e.key === 'Enter' && !e.isComposing) {
-        onConfirm()
+        const active = document.activeElement
+        if (active === confirmRef.current || active === panelRef.current) {
+          // The browser's own default action for Enter on a focused <button>
+          // is to fire a click too - without this the confirm button would
+          // run twice (once here, once from that native click) and double-
+          // submit the form. Cancel is left alone: its own native Enter
+          // click is exactly the "cancel" behavior we want.
+          e.preventDefault()
+          onConfirm()
+        }
         return
       }
       if (e.key !== 'Tab') return
@@ -248,6 +261,7 @@ export function ConfirmModal({
               {cancelLabel}
             </button>
             <button
+              ref={confirmRef}
               type="button"
               autoFocus
               onClick={onConfirm}

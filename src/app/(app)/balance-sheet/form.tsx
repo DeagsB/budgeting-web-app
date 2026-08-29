@@ -16,8 +16,12 @@ export type AccountRow = {
   ownership: string
   opening_balance_cents: number
   current_balance_cents: number | null
+  /** Running balance through the selected month (opening + tx, snapshot-anchored) - see src/lib/balances.ts. */
+  derived_balance_cents: number
   previous_balance_cents: number | null
   is_liability: boolean
+  /** True when the account is fed by a linked bank - its balance is read-only here (lib/balances.ts isManuallyEditableBalance). */
+  is_linked: boolean
 }
 
 export function BalanceSheetForm({
@@ -33,6 +37,7 @@ export function BalanceSheetForm({
 }) {
   const assetAccounts = accounts.filter((a) => !a.is_liability)
   const liabilityAccounts = accounts.filter((a) => a.is_liability)
+  const hasManual = accounts.some((a) => !a.is_linked)
   const [pending, startTransition] = useTransition()
   const [saved, setSaved] = useState(false)
 
@@ -53,21 +58,30 @@ export function BalanceSheetForm({
       <input type="hidden" name="month" value={month} />
 
       <p className="text-[12.5px] leading-relaxed text-ink-2">
-        Enter each account&rsquo;s balance as of {monthName}. Leave a field blank to clear the
-        saved snapshot and fall back to the opening balance.
+        {hasManual ? (
+          <>
+            Linked accounts sync straight from your bank - nothing to type. Enter a manual
+            account&rsquo;s balance as of {monthName}; leave it blank to clear the saved snapshot
+            and fall back to the opening balance.
+          </>
+        ) : (
+          <>Every account here is linked to a bank, so balances sync automatically - nothing to enter.</>
+        )}
       </p>
 
       <Section title="Assets" monthName={monthName} accounts={assetAccounts} />
       <Section title="Liabilities" monthName={monthName} accounts={liabilityAccounts} />
 
-      <div className="flex items-center justify-end gap-3 pt-1">
-        <span aria-live="polite" className="text-[12.5px] font-semibold text-leaf">
-          {saved ? 'Saved.' : ''}
-        </span>
-        <Button type="submit" variant="primary" size="md" disabled={pending}>
-          {pending ? 'Saving…' : 'Save balances'}
-        </Button>
-      </div>
+      {hasManual && (
+        <div className="flex items-center justify-end gap-3 pt-1">
+          <span aria-live="polite" className="text-[12.5px] font-semibold text-leaf">
+            {saved ? 'Saved.' : ''}
+          </span>
+          <Button type="submit" variant="primary" size="md" disabled={pending}>
+            {pending ? 'Saving…' : 'Save manual balances'}
+          </Button>
+        </div>
+      )}
     </form>
   )
 }
@@ -83,7 +97,7 @@ function Section({
 }) {
   if (accounts.length === 0) return null
   const sum = accounts.reduce(
-    (s, a) => s + (a.current_balance_cents ?? a.opening_balance_cents),
+    (s, a) => s + (a.is_linked ? a.derived_balance_cents : (a.current_balance_cents ?? a.opening_balance_cents)),
     0,
   )
   return (
@@ -104,9 +118,11 @@ function Section({
         </thead>
         <tbody>
           {accounts.map((a) => {
-            const current = a.current_balance_cents
             const prev = a.previous_balance_cents ?? a.opening_balance_cents
-            const effective = current ?? a.opening_balance_cents
+            // A linked account's balance always comes from the bank (see
+            // lib/balances.ts isManuallyEditableBalance) - it's shown, never
+            // typed. A manual account keeps the editable snapshot input.
+            const effective = a.is_linked ? a.derived_balance_cents : (a.current_balance_cents ?? a.opening_balance_cents)
             const change = effective - prev
             const tone = change > 0 ? 'up' : change < 0 ? 'down' : 'ink'
             return (
@@ -123,15 +139,24 @@ function Section({
                   <Amount cents={prev} className="text-[13px] text-ink-3" />
                 </td>
                 <td className="px-3 py-2.5 text-right align-middle">
-                  <input
-                    name={`bal:${a.id}`}
-                    type="text"
-                    inputMode="decimal"
-                    aria-label={`${a.name} balance as of ${monthName}`}
-                    defaultValue={current !== null ? (current / 100).toFixed(2) : ''}
-                    placeholder={(a.opening_balance_cents / 100).toFixed(2)}
-                    className="maple-input tabular w-32 text-right"
-                  />
+                  {a.is_linked ? (
+                    <>
+                      <Amount cents={a.derived_balance_cents} className="text-[14px] text-ink" />
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-3">
+                        Bank
+                      </div>
+                    </>
+                  ) : (
+                    <input
+                      name={`bal:${a.id}`}
+                      type="text"
+                      inputMode="decimal"
+                      aria-label={`${a.name} balance as of ${monthName}`}
+                      defaultValue={a.current_balance_cents !== null ? (a.current_balance_cents / 100).toFixed(2) : ''}
+                      placeholder={(a.opening_balance_cents / 100).toFixed(2)}
+                      className="maple-input tabular w-32 text-right"
+                    />
+                  )}
                 </td>
                 <td className="px-3 py-2.5 text-right align-middle">
                   <Amount cents={change} sign="auto" tone={tone} className="text-[13px]" />

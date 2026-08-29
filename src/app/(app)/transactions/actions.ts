@@ -32,6 +32,19 @@ function revalidate() {
   revalidatePath('/shared')
 }
 
+// Quick in-place categorization (the chip tap on an uncategorized row) only
+// ever changes one split's category_id - it can't add/remove a transaction,
+// change an amount, or touch a share. That can only move the three surfaces
+// that sum by category: the list itself, the dashboard, and budgets. Every
+// other action above keeps the wider revalidate() set because create/delete/
+// full edits can change row counts and totals that p&l, contributions, and
+// shared also depend on. A narrower set here keeps every chip tap fast.
+function revalidateQuick() {
+  revalidatePath('/transactions')
+  revalidatePath('/dashboard')
+  revalidatePath('/budgets')
+}
+
 export async function createTransaction(
   _prev: TransactionState,
   fd: FormData,
@@ -232,23 +245,33 @@ async function setCategoryForTransactions(
   }
 }
 
+export type SetCategoryResult = { ok: true } | { error: string }
+
 /**
  * Lightweight single-transaction categorisation used by the inline
  * quick-categorize control on the transactions list. Just the category - no
- * full edit-form round trip. Throws on a DB failure so the client can surface
- * it instead of silently no-op'ing.
+ * full edit-form round trip. Returns `{ ok: true }` or `{ error }` instead of
+ * throwing so the row can show its result on the tap itself (see row.tsx) -
+ * an uncaught rejection from a Server Action isn't guaranteed to reach the
+ * caller's try/catch on every network condition, which is what made the
+ * chip tap look like it silently failed even on a 200.
  */
-export async function setTransactionCategory(fd: FormData): Promise<void> {
+export async function setTransactionCategory(fd: FormData): Promise<SetCategoryResult> {
   const id = String(fd.get('id') ?? '')
-  if (!id) return
+  if (!id) return { error: "Couldn't save. Try again." }
   const category_id = String(fd.get('category_id') ?? '').trim() || null
 
   const ctx = await getHouseholdContext()
-  if (!ctx) return
+  if (!ctx) return { error: 'Not authorized.' }
 
   const supabase = await createClient()
-  await setCategoryForTransactions(supabase, ctx.householdId, { primaryIds: [id], category_id })
-  revalidate()
+  try {
+    await setCategoryForTransactions(supabase, ctx.householdId, { primaryIds: [id], category_id })
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Couldn't save. Try again." }
+  }
+  revalidateQuick()
+  return { ok: true }
 }
 
 /**

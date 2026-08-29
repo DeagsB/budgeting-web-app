@@ -11,9 +11,18 @@ import { triggerGmailSync, type SyncNowState } from './import/auto-setup/actions
  * the hourly trigger.
  *
  * Disabled state when no sync URL is configured - the user is nudged to
- * the auto-setup page where they paste it.
+ * set one up. A household with a bank already linked via Plaid gets sent to
+ * manage that link instead of the Gmail email-alert tutorial: Plaid is
+ * already the live feed, so "set up sync" for them means fixing that
+ * connection, not starting a different one.
  */
-export function SyncNowButton({ hasSyncUrl }: { hasSyncUrl: boolean }) {
+export function SyncNowButton({
+  hasSyncUrl,
+  hasPlaidItem = false,
+}: {
+  hasSyncUrl: boolean
+  hasPlaidItem?: boolean
+}) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [state, setState] = useState<SyncNowState>(undefined)
@@ -28,7 +37,16 @@ export function SyncNowButton({ hasSyncUrl }: { hasSyncUrl: boolean }) {
   }
 
   if (!hasSyncUrl) {
-    return (
+    return hasPlaidItem ? (
+      <a
+        href="/transactions/import/plaid-setup"
+        className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-dashed border-hair bg-paper px-3.5 py-2 text-[12.5px] font-semibold text-ink-2 transition-colors hover:text-ink"
+        title="Manage your linked bank"
+      >
+        <RefreshIcon />
+        Manage bank sync
+      </a>
+    ) : (
       <a
         href="/transactions/import/auto-setup"
         className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-dashed border-hair bg-paper px-3.5 py-2 text-[12.5px] font-semibold text-ink-2 transition-colors hover:text-ink"

@@ -198,6 +198,26 @@ function titleCase(s: string): string {
     .join(' ')
 }
 
+export type RuleDuplicateKey = {
+  match_text: string
+  direction: RuleDirection
+  category_id: string | null
+}
+
+/**
+ * Two rules collide if they'd fire on the same normalised merchant text, in
+ * the same direction (the rule's "match type" - Spent / Received / Any), and
+ * land the same category. Amount range, account, and share settings are
+ * refinements, not what makes a rule a duplicate of another.
+ */
+export function isDuplicateRule(a: RuleDuplicateKey, b: RuleDuplicateKey): boolean {
+  return (
+    normalizeMerchant(a.match_text) === normalizeMerchant(b.match_text) &&
+    a.direction === b.direction &&
+    a.category_id === b.category_id
+  )
+}
+
 /** Short human summary for list rows: "NETFLIX · Spent · $15–$18 · Any account". */
 export function describeRuleMatch(rule: TransactionRule, formatMoney: (c: number) => string, accountName?: string | null): string {
   const parts = [normalizeMerchant(rule.match_text) || rule.match_text]

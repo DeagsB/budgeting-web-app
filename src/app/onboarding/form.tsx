@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react'
 import { createHousehold, type OnboardingState } from './actions'
+import { StepFormActions } from './step-form-actions'
 
 export function OnboardingForm() {
   const [state, formAction, pending] = useActionState<OnboardingState, FormData>(
@@ -48,6 +49,7 @@ export function OnboardingForm() {
           placeholder="Our household"
           className="maple-input"
           autoFocus
+          enterKeyHint="next"
         />
       </Field>
 
@@ -64,6 +66,7 @@ export function OnboardingForm() {
           onChange={(e) => setMember(e.target.value)}
           placeholder="Alex"
           className="maple-input"
+          enterKeyHint="done"
         />
       </Field>
 
@@ -77,23 +80,25 @@ export function OnboardingForm() {
         </div>
       )}
 
-      <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center sm:justify-between">
-        <div className="text-[12px] text-[var(--color-ink-3)]">
-          You can invite others after setup.
+      <StepFormActions>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-[12px] text-[var(--color-ink-3)]">
+            You can invite others after setup.
+          </div>
+          <button
+            type="submit"
+            disabled={pending || !ready}
+            className="inline-flex min-h-[46px] items-center justify-center gap-2 whitespace-nowrap rounded-full bg-[var(--color-ink)] px-5 py-3 text-[14px] font-semibold text-[var(--color-paper)] transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {pending ? 'Creating…' : 'Create household'}
+            {!pending && (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            )}
+          </button>
         </div>
-        <button
-          type="submit"
-          disabled={pending || !ready}
-          className="inline-flex min-h-[46px] items-center justify-center gap-2 whitespace-nowrap rounded-full bg-[var(--color-ink)] px-5 py-3 text-[14px] font-semibold text-[var(--color-paper)] transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {pending ? 'Creating…' : 'Create household'}
-          {!pending && (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M5 12h14M13 6l6 6-6 6" />
-            </svg>
-          )}
-        </button>
-      </div>
+      </StepFormActions>
     </form>
   )
 }

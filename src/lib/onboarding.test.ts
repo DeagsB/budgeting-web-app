@@ -67,9 +67,9 @@ describe('canVisitStep', () => {
     expect(canVisitStep(ownerWithAccounts, 'bank')).toBe(true)
     expect(canVisitStep(ownerDone, 'bank')).toBe(false)
   })
-  it('invite and budget need at least one account', () => {
+  it('invite and budget are reachable even with no accounts, so Skip on the bank step can advance to them', () => {
     for (const step of ['invite', 'budget'] as const) {
-      expect(canVisitStep(ownerNoAccounts, step)).toBe(false)
+      expect(canVisitStep(ownerNoAccounts, step)).toBe(true)
       expect(canVisitStep(ownerWithAccounts, step)).toBe(true)
       expect(canVisitStep(ownerDone, step)).toBe(false)
     }

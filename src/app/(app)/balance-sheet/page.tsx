@@ -40,7 +40,7 @@ export default async function BalanceSheetPage({
   const [{ data: accounts }, { data: snapshots }, { data: txData }] = await Promise.all([
     supabase
       .from('accounts')
-      .select('id, name, type, ownership, opening_balance_cents')
+      .select('id, name, type, ownership, opening_balance_cents, plaid_account_id')
       .eq('household_id', ctx.householdId)
       .is('archived_at', null)
       .order('name'),
@@ -135,7 +135,10 @@ export default async function BalanceSheetPage({
   const liabGroups = grp(liabRows)
 
   // Shape rows for the "Update balances" form: opening, the snapshot saved
-  // exactly at the selected month (editable), and the prior-month balance.
+  // exactly at the selected month (editable, manual accounts only), the
+  // derived running balance (read-only, linked accounts - the bank's figure
+  // always wins, see lib/balances.ts isManuallyEditableBalance), and the
+  // prior-month balance.
   const formAccounts = (accounts ?? []).map((a) => {
     const opening = Number(a.opening_balance_cents)
     return {
@@ -146,8 +149,10 @@ export default async function BalanceSheetPage({
       ownership: a.ownership as string,
       opening_balance_cents: opening,
       current_balance_cents: snapshotAt(a.id, month),
+      derived_balance_cents: balanceFor(a.id, a.type as AccountType, opening, month),
       previous_balance_cents: balanceFor(a.id, a.type as AccountType, opening, prevMonth),
       is_liability: LIABILITY_TYPES.has(a.type as AccountType),
+      is_linked: !!a.plaid_account_id,
     }
   })
 

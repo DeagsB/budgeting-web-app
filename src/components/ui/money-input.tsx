@@ -29,10 +29,16 @@ function toRaw(cents: number): string {
 
 /**
  * A free-typing money field. The user may type anything while focused
- * (commas, spaces, a partial "12." etc.); parsing happens on blur so a value
- * like "25" stays "25" until committed instead of being re-rendered as "2.05"
- * on every keystroke. Invalid text is flagged with `aria-invalid` + a red
- * ring and reported upward as `null` so the parent can block submission.
+ * (commas, spaces, a partial "12." etc.) - the displayed text is never
+ * reformatted mid-edit, so a value like "25" stays "25" instead of being
+ * re-rendered as "2.05" on every keystroke. Parsing still runs on every
+ * keystroke that already reads as a valid amount, so callers relying on
+ * `cents` (a running total, a "Balanced" badge, an "Apply remainder"
+ * shortcut) see live values instead of stale ones from the last blur.
+ * `aria-invalid` + the red ring are reserved for blur/submit: a value that
+ * doesn't parse *yet* (e.g. a bare "-" or a trailing ".") is never flagged
+ * while the user is still typing it, only once they leave the field or try
+ * to submit with it unfinished.
  */
 export function MoneyInput({
   cents,
@@ -100,7 +106,24 @@ export function MoneyInput({
         onFocus={() => {
           focused.current = true
         }}
-        onChange={(e) => setRaw(e.target.value)}
+        onChange={(e) => {
+          const text = e.target.value
+          setRaw(text)
+          // Never flag invalid while typing - only clear an existing flag,
+          // so a value that now reads as valid loses its red ring
+          // immediately instead of waiting for blur.
+          setInvalid(false)
+          const parsed = parseMoneyToCents(text)
+          const ok = parsed !== null && (allowNegative || parsed >= 0)
+          if (ok) {
+            onCents(parsed)
+          } else if (text.trim() === '') {
+            // Empty is a deliberate zero, not (yet) an error.
+            onCents(0)
+          }
+          // Otherwise the text doesn't parse yet (e.g. a bare "-" or ".") -
+          // keep the last committed `cents` and wait for blur.
+        }}
         onBlur={(e) => {
           focused.current = false
           commit(e.target.value)

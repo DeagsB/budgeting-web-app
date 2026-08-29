@@ -22,10 +22,15 @@ export type TriageTxn = {
 }
 
 /**
- * "N transactions need a category" banner + a focused triage queue that steps
- * through every uncategorized transaction in the current month. Each card lets
- * the user set the category and description in one save, and optionally fan
- * the category out to other transactions from the same merchant.
+ * Secondary path into the same one-by-one triage flow as before, now reduced
+ * to a plain text link - the primary way to clear the pile is the inline chip
+ * strip on each row (row.tsx) plus the "N to categorize" header
+ * (uncategorized-count.tsx). This never renders its own count or banner.
+ *
+ * The trigger hides once nothing is left, but the Sheet itself stays mounted
+ * unconditionally so an in-progress queue can finish on its "All caught up"
+ * screen even after the last transaction's save shrinks `transactions` to
+ * zero via revalidation.
  */
 export function UncategorizedReview({
   transactions,
@@ -41,66 +46,14 @@ export function UncategorizedReview({
 
   return (
     <>
-      {/* Banner - hidden once nothing is left, but the Sheet stays mounted so an
-          in-progress queue can finish on its success screen even after the last
-          transaction's save revalidates this list down to zero. */}
       {count > 0 && (
-        <>
-          {/* Mobile: slim single-line pill. */}
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="flex min-h-[44px] w-full items-center gap-2.5 rounded-full border border-butter bg-butter/40 pl-4 pr-3 text-left transition-colors active:bg-butter/60 md:hidden"
-          >
-            <span aria-hidden className="shrink-0 text-ink">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z" />
-                <circle cx="7" cy="7" r="1.2" fill="currentColor" />
-              </svg>
-            </span>
-            <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-ink">
-              {count} need{count === 1 ? 's' : ''} a category or title
-            </span>
-            <span className="shrink-0 text-[11.5px] font-semibold text-ink-2">Review</span>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="shrink-0 text-ink-3">
-              <path d="M9 6l6 6-6 6" />
-            </svg>
-          </button>
-
-          {/* md+: full banner. */}
-          <div className="hidden flex-row items-center justify-between gap-3 rounded-lg border border-butter bg-butter/40 px-4 py-3.5 md:flex">
-          <div className="flex items-start gap-3">
-            <span
-              aria-hidden
-              className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-paper text-ink"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z" />
-                <circle cx="7" cy="7" r="1.2" fill="currentColor" />
-              </svg>
-            </span>
-            <div className="min-w-0">
-              <p className="text-[14px] font-semibold text-ink">
-                {count} transaction{count === 1 ? '' : 's'} need{count === 1 ? 's' : ''} a category or title
-              </p>
-              <p className="text-[12.5px] text-ink-2">
-                Review them one by one - set a title, category, owner, and more.
-              </p>
-            </div>
-          </div>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setOpen(true)}
-            className="shrink-0"
-          >
-            Review
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
-              <path d="M5 12h14M13 6l6 6-6 6" />
-            </svg>
-          </Button>
-          </div>
-        </>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-ink-2 underline underline-offset-2 transition-colors hover:text-ink"
+        >
+          Review one by one
+        </button>
       )}
 
       <Sheet open={open} onClose={() => setOpen(false)} title="Categorize transactions">

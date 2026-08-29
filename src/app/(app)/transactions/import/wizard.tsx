@@ -93,9 +93,22 @@ type PreviewRow = {
   categoryId: string | null
   accountId: string
   direction: 'out' | 'in'
+  /** True when a mapped Debit/Credit column said so; that beats any sign rule. */
+  directionExplicit?: boolean
   externalId?: string | null
   error?: string
 }
+
+/**
+ * How a CSV amount's sign maps to money in / money out.
+ * - `auto`: a minus sign means money out, the way bank exports write it; in a
+ *   file with no minus signs at all, every row is money out (an expense-only
+ *   export). A mapped Debit/Credit column always wins.
+ * - `flipped`: a minus sign means money in (some card statements list charges
+ *   positive and payments negative).
+ * - `out` / `in`: ignore the sign, every row is money out / money in.
+ */
+type SignConvention = 'auto' | 'flipped' | 'out' | 'in'
 
 export function ImportWizard({
   accounts,
@@ -110,7 +123,7 @@ export function ImportWizard({
   const [fileError, setFileError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [defaultAccountId, setDefaultAccountId] = useState(accounts[0]?.id ?? '')
-  const [defaultDirection, setDefaultDirection] = useState<'auto' | 'out' | 'in'>('auto')
+  const [defaultDirection, setDefaultDirection] = useState<SignConvention>('auto')
 
   const inputMode: 'csv' | 'ofx' = ofxRows ? 'ofx' : 'csv'
 
@@ -205,6 +218,13 @@ export function ImportWizard({
         })
       : []
 
+  // A file that never writes a minus sign is an unsigned export (usually
+  // expenses only); one that does is signed, and its unsigned rows are the
+  // credits. Decided once per file so every row reads the same way.
+  const amountCol = mapping.indexOf('amount')
+  const fileIsSigned =
+    amountCol >= 0 && bodyRows.some((cells) => /^\s*-/.test((cells[amountCol] ?? '').trim()))
+
   const csvPreviewRows: PreviewRow[] = inputMode === 'ofx' ? [] : bodyRows.map((cells) => {
     const vm: PreviewRow = {
       date: '',
@@ -231,14 +251,18 @@ export function ImportWizard({
         if (aid) vm.accountId = aid
       } else if (key === 'direction') {
         const v = value.toLowerCase()
-        if (v.startsWith('in') || v.startsWith('cr') || v === 'deposit') vm.direction = 'in'
-        else if (
+        if (v.startsWith('in') || v.startsWith('cr') || v === 'deposit') {
+          vm.direction = 'in'
+          vm.directionExplicit = true
+        } else if (
           v.startsWith('out') ||
           v.startsWith('db') ||
           v.startsWith('dr') ||
           v === 'withdrawal'
-        )
+        ) {
           vm.direction = 'out'
+          vm.directionExplicit = true
+        }
       }
     }
 
@@ -249,14 +273,21 @@ export function ImportWizard({
     if (!vm.accountId) vm.error = vm.error ?? 'Account missing.'
 
     vm.date = iso ?? vm.date
+    // Resolve money in / money out, then store in Maple's convention
+    // (positive cents = money out, negative = money in). A mapped
+    // Debit/Credit column beats the sign rule; otherwise the sign rule is the
+    // one the user picked in step 1 (see `SignConvention`).
     let signed: number | null = null
     if (amountAbs !== null) {
       const wasNegative = /^\s*-/.test(vm.amountRaw)
-      if (defaultDirection === 'auto') {
-        signed = wasNegative ? -Math.abs(amountAbs) : Math.abs(amountAbs)
-      } else {
-        signed = vm.direction === 'in' ? -Math.abs(amountAbs) : Math.abs(amountAbs)
+      if (!vm.directionExplicit) {
+        if (defaultDirection === 'auto') {
+          vm.direction = fileIsSigned ? (wasNegative ? 'out' : 'in') : 'out'
+        } else if (defaultDirection === 'flipped') {
+          vm.direction = wasNegative ? 'in' : 'out'
+        }
       }
+      signed = vm.direction === 'in' ? -Math.abs(amountAbs) : Math.abs(amountAbs)
     }
     vm.amountCents = signed
     return vm
@@ -474,14 +505,15 @@ export function ImportWizard({
           <Field label="Sign convention">
             <select
               value={defaultDirection}
-              onChange={(e) => setDefaultDirection(e.target.value as 'auto' | 'out' | 'in')}
+              onChange={(e) => setDefaultDirection(e.target.value as SignConvention)}
               className="maple-select"
               disabled={inputMode === 'ofx'}
               title={inputMode === 'ofx' ? 'OFX files include a sign - this is ignored.' : undefined}
             >
-              <option value="auto">Auto (respect minus sign)</option>
-              <option value="out">All rows are outflows</option>
-              <option value="in">All rows are inflows</option>
+              <option value="auto">Minus sign means money out (most bank exports)</option>
+              <option value="flipped">Minus sign means money in (some card statements)</option>
+              <option value="out">Every row is money out</option>
+              <option value="in">Every row is money in</option>
             </select>
           </Field>
         </div>
@@ -574,12 +606,19 @@ export function ImportWizard({
                     <div className="flex items-center justify-between gap-3">
                       <StatusChip error={r.error} matched={d.matched} />
                       {d.amt !== null ? (
-                        <Amount
-                          cents={d.amt}
-                          sign="auto"
-                          tone={d.isIncome ? 'leaf' : 'maple'}
-                          className="font-mono text-[14px]"
-                        />
+                        <span className="inline-flex items-baseline gap-1.5">
+                          {/* Say it in words too: the sign rule is the one
+                              thing a wrong import cannot recover from. */}
+                          <span className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-ink-3">
+                            {d.isIncome ? 'In' : 'Out'}
+                          </span>
+                          <Amount
+                            cents={Math.abs(d.amt)}
+                            sign="none"
+                            tone={d.isIncome ? 'leaf' : 'maple'}
+                            className="font-mono text-[14px]"
+                          />
+                        </span>
                       ) : (
                         <span className="font-mono text-[14px] tabular-nums text-ink-3">
                           {r.amountRaw}
@@ -637,7 +676,12 @@ export function ImportWizard({
                         </Td>
                         <Td align="right" mono>
                           {d.amt !== null ? (
-                            <Amount cents={d.amt} sign="auto" tone={d.isIncome ? 'leaf' : 'maple'} />
+                            <span className="inline-flex items-baseline gap-1.5">
+                              <span className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-ink-3">
+                                {d.isIncome ? 'In' : 'Out'}
+                              </span>
+                              <Amount cents={Math.abs(d.amt)} sign="none" tone={d.isIncome ? 'leaf' : 'maple'} />
+                            </span>
                           ) : (
                             <span className="text-ink-3">{r.amountRaw}</span>
                           )}

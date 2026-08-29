@@ -1,16 +1,9 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 const DISMISS_KEY = 'maple.iosInstallHint.dismissedAt'
 const DISMISS_TTL_MS = 14 * 24 * 60 * 60 * 1000
-
-/**
- * Height the hint currently occupies above the tab bar, published on <html>
- * so the app shell can pad the page bottom by the same amount. 0 (unset) when
- * the hint is hidden. Includes the gap between the card and the tab bar.
- */
-export const INSTALL_HINT_HEIGHT_VAR = '--maple-hint-h'
 
 function persistDismiss() {
   try {
@@ -19,17 +12,17 @@ function persistDismiss() {
 }
 
 /**
- * Bottom hint shown to iPhone users browsing in Safari (not yet installed)
- * telling them to tap Share then Add to Home Screen. iOS doesn't surface a
+ * Hint shown to iPhone users browsing in Safari (not yet installed) telling
+ * them to tap Share then Add to Home Screen. iOS doesn't surface a
  * beforeinstallprompt event - Safari requires the user to do it manually -
  * so this is the closest we get to an "Install" CTA.
  *
  * Rendered by the app shell only (signed-in pages with the tab bar), never on
- * auth or onboarding screens, so it can assume the tab bar is there and sit
- * just above it. It reserves its own space: while visible it publishes its
- * height as a CSS variable on <html>, and the shell adds that to the page's
- * bottom padding, so scrolled-to-bottom content stays reachable instead of
- * hiding under the card.
+ * auth or onboarding screens. It renders in normal document flow (not
+ * `position: fixed`), so it never floats over scrolling content - it simply
+ * becomes the last block on the page, and the page grows to make room for it
+ * the way any other in-flow element would. That also means it never needs to
+ * publish its own height for something else to reserve space around.
  *
  * Hidden if: not iOS, already installed (display-mode: standalone), or the
  * user dismissed it within the last 14 days. Won't show server-side or
@@ -37,7 +30,6 @@ function persistDismiss() {
  */
 export function IOSInstallHint() {
   const [show, setShow] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -56,22 +48,6 @@ export function IOSInstallHint() {
     const t = setTimeout(() => setShow(true), 1200)
     return () => clearTimeout(t)
   }, [])
-
-  // Publish the occupied height while visible; clear it on hide/unmount.
-  useEffect(() => {
-    if (!show) return
-    const el = ref.current
-    const root = document.documentElement
-    if (!el) return
-    const publish = () => root.style.setProperty(INSTALL_HINT_HEIGHT_VAR, `${Math.ceil(el.offsetHeight)}px`)
-    publish()
-    const ro = new ResizeObserver(publish)
-    ro.observe(el)
-    return () => {
-      ro.disconnect()
-      root.style.removeProperty(INSTALL_HINT_HEIGHT_VAR)
-    }
-  }, [show])
 
   // Escape dismisses, like any transient notice.
   useEffect(() => {
@@ -94,16 +70,11 @@ export function IOSInstallHint() {
 
   return (
     <div
-      ref={ref}
       role="status"
       aria-label="Install Maple to your home screen"
-      // Below the tab bar (z-30) and every sheet/overlay (z-40+), above page
-      // content. The wrapper's padding is the gap to the tab bar, so the
-      // measured height already includes it.
-      className="maple-chrome fixed inset-x-0 z-20 px-3 pb-3 md:hidden"
-      style={{ bottom: 'calc(72px + env(safe-area-inset-bottom))' }}
+      className="maple-chrome px-4 pb-4 pt-1 md:hidden"
     >
-      <div className="mx-auto max-w-[420px] rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-4 shadow-[var(--shadow-float)]">
+      <div className="mx-auto max-w-[420px] rounded-[18px] border border-[var(--color-hair)] bg-[var(--color-paper)] p-4 shadow-[var(--shadow-card)]">
         <div className="flex items-start gap-3">
           <div
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] font-serif text-[20px]"

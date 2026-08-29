@@ -20,7 +20,8 @@ function nameList(names: string[], max = 4): string {
  * (accounts are created from the mapping, transactions sync in) or add one
  * account by hand. Linking or adding an account never navigates away: the
  * step re-renders so a second bank can be connected, and the reader moves on
- * with Continue. Revisitable from later steps; "Skip for now" ends the flow.
+ * with Continue. Revisitable from later steps; "Skip for now" advances to
+ * invite, same as Continue - it just doesn't require an account first.
  */
 export default async function OnboardingBankPage() {
   const { ctx, state } = await requireOnboardingStep('bank')
@@ -65,7 +66,7 @@ export default async function OnboardingBankPage() {
       footer={
         <StepFooter
           continueHref={hasAccounts ? '/onboarding/invite' : undefined}
-          skip="finish"
+          skip={{ href: '/onboarding/invite' }}
         />
       }
       footnote="Balances stay private to your household. Nothing here is shared with anyone you haven't invited."

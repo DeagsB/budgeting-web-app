@@ -22,9 +22,15 @@ type ParseResult = { error: string; ok?: never } | { ok: GoalInput; error?: neve
 function parseForm(fd: FormData): ParseResult {
   const name = String(fd.get('name') ?? '').trim().slice(0, 120)
   const target = parseMoneyToCents(String(fd.get('target_amount') ?? ''))
-  const current = parseMoneyToCents(String(fd.get('current_amount') ?? '0')) ?? 0
   const target_date = String(fd.get('target_date') ?? '').trim() || null
   const funding_account_id = String(fd.get('funding_account_id') ?? '').trim() || null
+  // A goal with a funding account tracks progress from that account's real
+  // balance (see goals/page.tsx) rather than a typed figure - the form hides
+  // the "Current progress" field in that case, so ignore any typed value
+  // here too rather than trust a stray one from outside the read-only UI.
+  const current = funding_account_id
+    ? 0
+    : (parseMoneyToCents(String(fd.get('current_amount') ?? '0')) ?? 0)
   const note = String(fd.get('note') ?? '').trim().slice(0, 1000) || null
 
   if (!name) return { error: 'Name is required.' }

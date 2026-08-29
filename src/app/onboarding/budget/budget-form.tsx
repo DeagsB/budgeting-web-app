@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
 import { saveBudgets } from '@/app/(app)/budgets/actions'
 import { completeOnboarding } from '../complete-actions'
+import { StepFormActions } from '../step-form-actions'
 
 export type BudgetCategory = { id: string; name: string; parentName: string | null }
 
@@ -60,6 +61,7 @@ export function BudgetForm({ month, categories }: { month: string; categories: B
                       name={`budget:${c.id}`}
                       type="text"
                       inputMode="decimal"
+                      enterKeyHint="done"
                       placeholder="0"
                       aria-label={`Monthly budget for ${c.name} in dollars`}
                       className="w-[88px] bg-transparent py-2 text-right text-[16px] font-semibold text-ink outline-none placeholder:text-ink-3"
@@ -78,16 +80,18 @@ export function BudgetForm({ month, categories }: { month: string; categories: B
         </div>
       )}
 
-      <div className="flex pt-1 sm:justify-end">
-        <Button type="submit" variant="primary" size="md" disabled={pending} className="w-full sm:w-auto">
-          {pending ? 'Saving…' : 'Save & finish'}
-          {!pending && (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-              <path d="M5 12h14M13 6l6 6-6 6" />
-            </svg>
-          )}
-        </Button>
-      </div>
+      <StepFormActions>
+        <div className="flex sm:justify-end">
+          <Button type="submit" variant="primary" size="md" disabled={pending} className="w-full sm:w-auto">
+            {pending ? 'Saving…' : 'Save & finish'}
+            {!pending && (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            )}
+          </Button>
+        </div>
+      </StepFormActions>
     </form>
   )
 }

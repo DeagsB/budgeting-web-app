@@ -74,6 +74,13 @@
   --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-ios-in: cubic-bezier(0.17, 0.84, 0.44, 1);
   --ease-ios-out: cubic-bezier(0.4, 0, 0.68, 0);
+
+  /* layout - mirrors the `72px` mobile bottom-tab-bar height that is
+     inlined in src/app/(app)/shell.tsx (nav slot height + row padding) and
+     echoed in src/components/pwa/update-toast.tsx. Not a color, so it
+     isn't re-declared under `.dark` - one source of truth for anything
+     else that needs to sit above the tab bar. */
+  --maple-tabbar-h: 72px;
 }
 
 .dark {
@@ -358,9 +365,18 @@ html:active-view-transition .vt-solid {
   view-transition-name: maple-statusbar;
 }
 
+/* Horizontal overflow protection without becoming a scroll container: an
+   `overflow-x: hidden` value forces the *other* axis's computed overflow to
+   `auto` too (per the CSS Overflow spec's paired-axis rule) whenever it
+   isn't set explicitly - which silently turns <body> into the page's
+   vertical scroll container instead of the viewport, and that defeats
+   every `position: sticky` element on the page (a sticky bar bottom-0
+   inside body just sits at body's own bottom, not the visible viewport's).
+   `clip` clips the same way but is exempt from that pairing rule, so the
+   viewport stays the sole scroll container and sticky positioning works. */
 html,
 body {
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 /* iOS standalone mode: the html element should fill the viewport so swipe

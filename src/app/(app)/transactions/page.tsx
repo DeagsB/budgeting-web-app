@@ -12,7 +12,8 @@ import { TransactionRow } from './row'
 import { SyncNowButton } from './sync-button'
 import { TxControls } from './tx-controls'
 import { UncategorizedReview, type TriageTxn } from './uncategorized-review'
-import { looksCryptic } from '@/lib/title'
+import { UncategorizedCountProvider, UncategorizedCountLine } from './uncategorized-count'
+import { isUncategorizedSplitSet } from '@/lib/tx-uncategorized'
 import { classifyTx, isTxEditable, parseScope } from '@/lib/tx-scope'
 
 type Txn = {
@@ -31,6 +32,15 @@ type Split = {
   sort_order: number
 }
 
+/** Minimal shape used only to compute the household-wide uncategorized counts. */
+type TxLite = {
+  id: string
+  occurred_on: string
+  account_id: string
+  member_id: string | null
+  transaction_splits: { category_id: string | null }[] | null
+}
+
 export default async function TransactionsPage({
   searchParams,
 }: {
@@ -41,62 +51,136 @@ export default async function TransactionsPage({
   const nextMonth = addMonths(month, 1)
   const search = (params.q ?? '').trim()
   const scope = parseScope(params.scope)
+  // "Uncategorized" is a view mode, not a mine/shared/with-me scope, so it
+  // isn't part of TX_SCOPES / parseScope (owned outside this feature) - it's
+  // handled entirely in this file instead.
+  const isUncategorizedScope = params.scope === 'uncategorized'
 
   const ctx = await getHouseholdContext()
   if (!ctx) return null
 
   const supabase = await createClient()
 
-  const [{ data: accounts }, { data: categories }, { data: members }, { data: household }, { data: recentSplits }] =
-    await Promise.all([
-      supabase
-        .from('accounts')
-        .select('id, name, type')
-        .eq('household_id', ctx.householdId)
-        .is('archived_at', null)
-        .order('name'),
-      supabase
-        .from('categories')
-        .select('id, parent_id, name, code')
-        .eq('household_id', ctx.householdId)
-        .is('archived_at', null)
-        .order('sort_order'),
-      supabase
-        .from('members')
-        .select('id, display_name, split_weight')
-        .eq('household_id', ctx.householdId)
-        .order('sort_order'),
-      supabase
-        .from('households')
-        .select('gmail_sync_url')
-        .eq('id', ctx.householdId)
-        .single(),
-      // Recent categorised splits → "most-used categories" for the quick-pick
-      // chips on uncategorized rows and in the triage queue.
-      supabase
-        .from('transaction_splits')
-        .select('category_id')
-        .eq('household_id', ctx.householdId)
-        .not('category_id', 'is', null)
-        .order('created_at', { ascending: false })
-        .limit(400),
-    ])
+  const [
+    { data: accounts },
+    { data: categories },
+    { data: members },
+    { data: household },
+    { data: recentSplits },
+    { data: allTxLite },
+    { count: plaidItemCount },
+  ] = await Promise.all([
+    supabase
+      .from('accounts')
+      .select('id, name, type')
+      .eq('household_id', ctx.householdId)
+      .is('archived_at', null)
+      .order('name'),
+    supabase
+      .from('categories')
+      .select('id, parent_id, name, code')
+      .eq('household_id', ctx.householdId)
+      .is('archived_at', null)
+      .order('sort_order'),
+    supabase
+      .from('members')
+      .select('id, display_name, split_weight')
+      .eq('household_id', ctx.householdId)
+      .order('sort_order'),
+    supabase
+      .from('households')
+      .select('gmail_sync_url')
+      .eq('id', ctx.householdId)
+      .single(),
+    // Recent categorised splits → "most-used categories" for the quick-pick
+    // chips on uncategorized rows and in the triage queue.
+    supabase
+      .from('transaction_splits')
+      .select('category_id')
+      .eq('household_id', ctx.householdId)
+      .not('category_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(400),
+    // Household-wide, every month - just enough columns to count the pile
+    // (see isUncategorizedSplitSet below) and, for the `?scope=uncategorized`
+    // view, to know which ids to fetch in full.
+    supabase
+      .from('transactions')
+      .select('id, occurred_on, account_id, member_id, transaction_splits(category_id)')
+      .eq('household_id', ctx.householdId),
+    // Does this household have a bank linked via Plaid at all? Drives which
+    // "set up sync" destination SyncNowButton points to (task 5).
+    supabase
+      .from('plaid_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('household_id', ctx.householdId)
+      .neq('status', 'removed'),
+  ])
   const hasSyncUrl = !!household?.gmail_sync_url
+  const hasPlaidItem = (plaidItemCount ?? 0) > 0
 
-  let q = supabase
-    .from('transactions')
-    .select('id, occurred_on, amount_cents, description, account_id, member_id')
-    .eq('household_id', ctx.householdId)
-    .gte('occurred_on', month)
-    .lt('occurred_on', nextMonth)
-    .order('occurred_on', { ascending: false })
-    .order('created_at', { ascending: false })
+  const accountName = new Map((accounts ?? []).map((a) => [a.id, a.name]))
+  const categoryName = new Map((categories ?? []).map((c) => [c.id, c.name]))
+  const memberName = new Map((members ?? []).map((m) => [m.id, m.display_name]))
 
-  if (params.account) q = q.eq('account_id', params.account)
-  if (search) q = q.ilike('description', `%${search}%`)
+  // Mirror of the `tx_editable` RLS helper: a row is writable when its account
+  // is visible to this login (the accounts query is itself RLS-filtered: own
+  // and joint accounts) or the signed-in member paid it. Share-only rows
+  // (visible because we owe part of them) are read-only; hide the write
+  // affordances instead of letting the server action bounce.
+  const canEditRow = (accountId: string, memberId: string | null) =>
+    isTxEditable({ accountVisible: accountName.has(accountId), payerId: memberId, myMemberId: ctx.memberId })
 
-  const { data: rows } = await q
-  let transactions = (rows ?? []) as Txn[]
+  // ── Household-wide uncategorized pile (task 3): every month, not just the
+  // one in view, so the count in front of the user is honest about the whole
+  // backlog. A transaction is uncategorized when it has at most one split and
+  // that split's category is null - reused from `@/lib/tx-uncategorized` so
+  // this can never drift from the per-row check below. A title is never
+  // required to clear the queue.
+  const allUncategorizedIds = new Set<string>()
+  let uncategorizedThisMonth = 0
+  let uncategorizedEarlier = 0
+  for (const t of (allTxLite ?? []) as unknown as TxLite[]) {
+    if (!canEditRow(t.account_id, t.member_id)) continue
+    if (!isUncategorizedSplitSet(t.transaction_splits ?? [])) continue
+    allUncategorizedIds.add(t.id)
+    if (t.occurred_on >= month && t.occurred_on < nextMonth) uncategorizedThisMonth++
+    else uncategorizedEarlier++
+  }
+
+  // ── Main list query ──
+  // Normally this month only; for `?scope=uncategorized` it's every
+  // uncategorized+editable id from every month, fetched in full so the view
+  // can render normally (day-grouped, newest first) alongside the rest of
+  // the page.
+  const baseTxQuery = () => {
+    let q = supabase
+      .from('transactions')
+      .select('id, occurred_on, amount_cents, description, account_id, member_id')
+      .eq('household_id', ctx.householdId)
+    if (params.account) q = q.eq('account_id', params.account)
+    if (search) q = q.ilike('description', `%${search}%`)
+    return q
+  }
+
+  let transactions: Txn[] = []
+  if (isUncategorizedScope) {
+    const ids = Array.from(allUncategorizedIds)
+    if (ids.length > 0) {
+      const { data: rows } = await baseTxQuery()
+        .in('id', ids)
+        .order('occurred_on', { ascending: false })
+        .order('created_at', { ascending: false })
+      transactions = (rows ?? []) as Txn[]
+    }
+  } else {
+    const { data: rows } = await baseTxQuery()
+      .gte('occurred_on', month)
+      .lt('occurred_on', nextMonth)
+      .order('occurred_on', { ascending: false })
+      .order('created_at', { ascending: false })
+    transactions = (rows ?? []) as Txn[]
+  }
 
   const txIds = transactions.map((t) => t.id)
   let splitsList: Split[] = []
@@ -118,17 +202,7 @@ export default async function TransactionsPage({
     }
   }
 
-  const accountName = new Map((accounts ?? []).map((a) => [a.id, a.name]))
-  const categoryName = new Map((categories ?? []).map((c) => [c.id, c.name]))
-  const memberName = new Map((members ?? []).map((m) => [m.id, m.display_name]))
-
-  // Mirror of the `tx_editable` RLS helper: a row is writable when its account
-  // is visible to this login (the accounts query is itself RLS-filtered: own
-  // and joint accounts) or the signed-in member paid it. Share-only rows
-  // (visible because we owe part of them) are read-only; hide the write
-  // affordances instead of letting the server action bounce.
-  const canEdit = (t: Txn) =>
-    isTxEditable({ accountVisible: accountName.has(t.account_id), payerId: t.member_id, myMemberId: ctx.memberId })
+  const canEdit = (t: Txn) => canEditRow(t.account_id, t.member_id)
   const accountLabel = (t: Txn) => accountName.get(t.account_id) ?? 'Private account'
   const scopeOf = (t: Txn) => classifyTx({ editable: canEdit(t), shareCount: shareCountByTx.get(t.id) ?? 0 })
 
@@ -146,16 +220,34 @@ export default async function TransactionsPage({
     splitsByTx.get(s.transaction_id)!.push(s)
   }
 
+  // Which of the currently-displayed rows are uncategorized. In the default
+  // view this is a subset of `transactions` (used to hoist a "To categorize"
+  // section, below); in `?scope=uncategorized` it's all of them, since that's
+  // exactly what was fetched.
+  const uncategorizedIds = new Set<string>()
+  for (const t of transactions) {
+    if (!canEdit(t)) continue
+    if (isUncategorizedSplitSet(splitsByTx.get(t.id) ?? [])) uncategorizedIds.add(t.id)
+  }
+
   // Totals computed from the *filtered* set (account + search applied in the
   // query, category + scope applied above) so the summary always matches the
   // visible list. Sign convention: positive cents = outflow, negative = inflow.
   const outflow = transactions.filter((t) => t.amount_cents > 0).reduce((s, t) => s + t.amount_cents, 0)
   const inflow = transactions.filter((t) => t.amount_cents < 0).reduce((s, t) => s - t.amount_cents, 0)
-  const net = outflow - inflow
+  const net = inflow - outflow
 
-  // Group transactions by day for section-style rendering.
+  // "To categorize" - this month's uncategorized rows, hoisted to the top of
+  // the list with their day shown inline (row.tsx's `dayLabel`) instead of a
+  // day header of their own. Not used in `?scope=uncategorized`, where every
+  // row is already uncategorized and day-grouping alone already reads as
+  // "every month, newest first".
+  const toCategorizeTxs = isUncategorizedScope ? [] : transactions.filter((t) => uncategorizedIds.has(t.id))
+  const restTxs = isUncategorizedScope ? transactions : transactions.filter((t) => !uncategorizedIds.has(t.id))
+
+  // Group the "rest" by day for section-style rendering.
   const byDay = new Map<string, Txn[]>()
-  for (const t of transactions) {
+  for (const t of restTxs) {
     const key = t.occurred_on
     if (!byDay.has(key)) byDay.set(key, [])
     byDay.get(key)!.push(t)
@@ -187,33 +279,21 @@ export default async function TransactionsPage({
     return ranked.slice(0, 6)
   })()
 
-  // A transaction is "uncategorized" when it has at most one split and that
-  // split has no category. Multi-split transactions are always categorized.
-  // It "needs a title" when its description is missing or still looks like a
-  // raw bank descriptor. Either condition surfaces it in the triage queue.
-  const uncategorizedIds = new Set<string>()
-  const attentionIds = new Set<string>()
-  for (const t of transactions) {
-    if (!canEdit(t)) continue // triage actions write; read-only rows never queue
+  // Row VMs for the secondary "Review one by one" sheet - whatever's
+  // currently uncategorized and visible (this month's hoisted set normally,
+  // or the whole list in `?scope=uncategorized`).
+  const uncategorizedSourceTxs = isUncategorizedScope ? transactions : toCategorizeTxs
+  const uncategorizedVMs: TriageTxn[] = uncategorizedSourceTxs.map((t) => {
     const splits = splitsByTx.get(t.id) ?? []
-    const isUncat = splits.length <= 1 && (splits[0]?.category_id ?? null) === null
-    if (isUncat) uncategorizedIds.add(t.id)
-    if (isUncat || looksCryptic(t.description)) attentionIds.add(t.id)
-  }
-
-  const attentionVMs: TriageTxn[] = transactions
-    .filter((t) => attentionIds.has(t.id))
-    .map((t) => {
-      const splits = splitsByTx.get(t.id) ?? []
-      return {
-        id: t.id,
-        occurredLabel: formatDate(t.occurred_on),
-        amount_cents: t.amount_cents,
-        description: t.description,
-        accountName: accountLabel(t),
-        category_id: splits[0]?.category_id ?? null,
-      }
-    })
+    return {
+      id: t.id,
+      occurredLabel: formatDate(t.occurred_on),
+      amount_cents: t.amount_cents,
+      description: t.description,
+      accountName: accountLabel(t),
+      category_id: splits[0]?.category_id ?? null,
+    }
+  })
 
   const monthHref = (iso: string) => {
     const qs = new URLSearchParams()
@@ -224,6 +304,13 @@ export default async function TransactionsPage({
     if (search) qs.set('q', search)
     return `/transactions?${qs.toString()}`
   }
+
+  const uncategorizedHref = (() => {
+    const qs = new URLSearchParams()
+    qs.set('scope', 'uncategorized')
+    if (params.account) qs.set('account', params.account)
+    return `/transactions?${qs.toString()}`
+  })()
 
   const importLink = (
     <Link
@@ -239,6 +326,52 @@ export default async function TransactionsPage({
     </Link>
   )
 
+  // One row renderer shared by the hoisted "To categorize" section and the
+  // day-grouped list below it, so the two never build the row VM differently.
+  const renderRow = (t: Txn, dayLabel?: string) => {
+    const splits = splitsByTx.get(t.id) ?? []
+    const splitCategories = splits
+      .map((s) => (s.category_id ? (categoryName.get(s.category_id) ?? '-') : 'Uncategorized'))
+      .filter((s, i, arr) => arr.indexOf(s) === i)
+    const categorySummary =
+      splits.length <= 1
+        ? splits[0]?.category_id
+          ? (categoryName.get(splits[0].category_id!) ?? '-')
+          : 'Uncategorized'
+        : `Split: ${splitCategories.join(' + ')}`
+    const primaryCategoryId = splits[0]?.category_id ?? null
+    return (
+      <TransactionRow
+        key={t.id}
+        transaction={{
+          id: t.id,
+          occurred_on: t.occurred_on,
+          occurredLabel: formatDate(t.occurred_on),
+          amount_cents: t.amount_cents,
+          description: t.description,
+          account_id: t.account_id,
+          accountName: accountLabel(t),
+          canEdit: canEdit(t),
+          primary_category_id: primaryCategoryId,
+          categorySummary,
+          isSplit: splits.length > 1,
+          isShared: (shareCountByTx.get(t.id) ?? 0) > 0,
+          isRuleShared: ruleSharedTxIds.has(t.id),
+          splits: splits.map((s) => ({ category_id: s.category_id, amount_cents: s.amount_cents })),
+          member_id: t.member_id,
+          payerName: t.member_id ? (memberName.get(t.member_id) ?? null) : null,
+          isMine: t.member_id !== null && t.member_id === ctx.memberId,
+        }}
+        accounts={accountOptions}
+        categories={categoryOptions}
+        memberWeights={memberWeights}
+        isUncategorized={uncategorizedIds.has(t.id)}
+        topCategoryIds={topCategoryIds}
+        dayLabel={dayLabel}
+      />
+    )
+  }
+
   return (
     <div className="flex flex-col gap-5 pb-10 md:gap-6">
       {/* Desktop-only: the shell's top bar carries the title on mobile, and
@@ -247,173 +380,207 @@ export default async function TransactionsPage({
       <PageHeader
         eyebrow="Transactions"
         title="Transactions"
-        subtitle={monthLabel(month)}
+        subtitle={isUncategorizedScope ? 'To categorize - every month' : monthLabel(month)}
         className="max-md:hidden"
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <SyncNowButton hasSyncUrl={hasSyncUrl} />
+            <SyncNowButton hasSyncUrl={hasSyncUrl} hasPlaidItem={hasPlaidItem} />
             {importLink}
           </div>
         }
       />
 
-      {/* Month nav - link-based; "This month" pill only shows off the current month. */}
-      <MonthNav monthISO={month} makeHref={monthHref} className="-ml-2" />
-
-      {/* Triage - slim pill (mobile) / banner (md+) + step-through queue for
-          transactions that need a category and/or a real title. */}
-      <UncategorizedReview
-        transactions={attentionVMs}
-        categories={categoryOptions}
-        topCategoryIds={topCategoryIds}
-      />
-
-      {/* Stats - reflect the active filter set. Compact three-up on mobile
-          (whole dollars so three fit a 375px screen), full tiles on md+. */}
-      <section className="grid grid-cols-3 gap-2 md:hidden">
-        <StatTile compact label="Outflow" value={<Amount cents={outflow} tone="maple" compact />} tone="maple" />
-        <StatTile compact label="Inflow" value={<Amount cents={inflow} tone="leaf" compact />} tone="leaf" />
-        <StatTile
-          compact
-          label="Net"
-          value={<Amount cents={net} tone={net >= 0 ? 'leaf' : 'maple'} compact />}
-          tone={net >= 0 ? 'leaf' : 'maple'}
-        />
-      </section>
-      <section className="hidden grid-cols-3 gap-3 md:grid">
-        <StatTile label="Outflow" value={<Amount cents={outflow} tone="maple" />} tone="maple" />
-        <StatTile label="Inflow" value={<Amount cents={inflow} tone="leaf" />} tone="leaf" />
-        <StatTile
-          label="Net"
-          value={<Amount cents={net} tone={net >= 0 ? 'leaf' : 'maple'} />}
-          tone={net >= 0 ? 'leaf' : 'maple'}
-        />
-      </section>
-
-      {/* Controls - search + chip filters + add (always visible). */}
-      {accountOptions.length === 0 ? (
-        <EmptyState
-          title="Add an account first"
-          body="Transactions need to live somewhere. Create at least one account and you’re ready to log spending."
-          action={
-            <Link
-              href="/accounts"
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-full bg-leaf px-4 text-[13px] font-semibold text-paper shadow-[var(--shadow-card)]"
-            >
-              Go to accounts
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <path d="M5 12h14M13 6l6 6-6 6" />
-              </svg>
-            </Link>
-          }
-        />
+      {/* Month nav - link-based; "This month" pill only shows off the current
+          month. Swapped for a plain "back" link while viewing the household-
+          wide uncategorized pile, since that view ignores the month bound. */}
+      {isUncategorizedScope ? (
+        <div className="-ml-2 flex items-center gap-2">
+          <Link
+            href={monthHref(month)}
+            className="inline-flex min-h-[44px] items-center gap-1 rounded-full px-2 text-[13px] font-semibold text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
+          >
+            ← Back to {monthLabel(month)}
+          </Link>
+          <span className="text-[12px] text-ink-3">Every month, newest first</span>
+        </div>
       ) : (
-        <TxControls
-          month={month}
-          search={search}
-          accountId={params.account}
-          categoryId={params.category}
-          scope={scope ?? undefined}
-          accounts={accountOptions}
-          categories={categoryOptions}
-          overflowActions={
-            <>
-              <div className="flex min-h-[44px] items-center">
-                <SyncNowButton hasSyncUrl={hasSyncUrl} />
-              </div>
-              <div className="flex min-h-[44px] items-center">{importLink}</div>
-            </>
-          }
-        />
+        <MonthNav monthISO={month} makeHref={monthHref} className="-ml-2" />
       )}
 
-      {/* Transactions list */}
-      <section className="overflow-hidden rounded-lg border border-hair bg-paper">
-        <header className="flex items-baseline justify-between border-b border-hair px-5 py-3.5">
-          <MapleLabel>
-            {transactions.length} transaction{transactions.length === 1 ? '' : 's'}
-          </MapleLabel>
-          {transactions.length > 0 && (
-            <span className="text-[11px] text-ink-3">Newest first</span>
-          )}
-        </header>
-        {transactions.length === 0 ? (
-          <p className="px-5 py-16 text-center text-[14px] text-ink-2">
-            No transactions in {monthLabel(month)}.
-            {hasFilter && (
-              <>
-                {' '}
-                <Link href={{ pathname: '/transactions', query: clearQuery }} className="font-semibold text-leaf underline">
-                  Clear filters
-                </Link>
-              </>
-            )}
-          </p>
-        ) : (
-          <div>
-            {Array.from(byDay.entries()).map(([day, dayTxs]) => {
-              const dayTotal = dayTxs.reduce((s, t) => s + t.amount_cents, 0)
-              return (
-                <div key={day}>
-                  <div className="flex items-baseline justify-between bg-cream-2/60 px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
-                    <span>{formatDate(day)}</span>
-                    <span className="tabular-nums">
-                      {dayTotal >= 0 ? '-' : '+'}
-                      <Amount cents={Math.abs(dayTotal)} className="text-[11px] font-semibold" />
-                    </span>
-                  </div>
-                  <ul className="divide-y divide-hair">
-                    {dayTxs.map((t) => {
-                      const splits = splitsByTx.get(t.id) ?? []
-                      const splitCategories = splits
-                        .map((s) =>
-                          s.category_id ? (categoryName.get(s.category_id) ?? '-') : 'Uncategorized',
-                        )
-                        .filter((s, i, arr) => arr.indexOf(s) === i)
-                      const categorySummary =
-                        splits.length <= 1
-                          ? splits[0]?.category_id
-                            ? (categoryName.get(splits[0].category_id!) ?? '-')
-                            : 'Uncategorized'
-                          : `Split: ${splitCategories.join(' + ')}`
-                      const primaryCategoryId = splits[0]?.category_id ?? null
-                      return (
-                        <TransactionRow
-                          key={t.id}
-                          transaction={{
-                            id: t.id,
-                            occurred_on: t.occurred_on,
-                            occurredLabel: formatDate(t.occurred_on),
-                            amount_cents: t.amount_cents,
-                            description: t.description,
-                            account_id: t.account_id,
-                            accountName: accountLabel(t),
-                            canEdit: canEdit(t),
-                            primary_category_id: primaryCategoryId,
-                            categorySummary,
-                            isSplit: splits.length > 1,
-                            isShared: (shareCountByTx.get(t.id) ?? 0) > 0,
-                            isRuleShared: ruleSharedTxIds.has(t.id),
-                            splits: splits.map((s) => ({ category_id: s.category_id, amount_cents: s.amount_cents })),
-                            member_id: t.member_id,
-                            payerName: t.member_id ? (memberName.get(t.member_id) ?? null) : null,
-                            isMine: t.member_id !== null && t.member_id === ctx.memberId,
-                          }}
-                          accounts={accountOptions}
-                          categories={categoryOptions}
-                          memberWeights={memberWeights}
-                          isUncategorized={uncategorizedIds.has(t.id)}
-                          topCategoryIds={topCategoryIds}
-                        />
-                      )
-                    })}
-                  </ul>
-                </div>
-              )
-            })}
+      {/* Owns the client-side "still uncategorized" count so it can keep pace
+          with in-place chip taps without a server round trip - see
+          uncategorized-count.tsx. Wraps the rest of the page unconditionally
+          (harmless when there's nothing to count) so every row underneath can
+          reach it. Keyed by month so switching months resets the baseline
+          instead of carrying stale local state across it. */}
+      <UncategorizedCountProvider
+        key={month}
+        initialThisMonth={uncategorizedThisMonth}
+        earlier={uncategorizedEarlier}
+        earlierHref={uncategorizedHref}
+      >
+        {/* Household-wide "to categorize" count + secondary one-by-one review
+            - hidden on the uncategorized-scope view itself, since its own
+            list header already says how many are shown. */}
+        {!isUncategorizedScope && (uncategorizedThisMonth > 0 || uncategorizedEarlier > 0) && (
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-lg border border-butter bg-butter/40 px-4 py-3">
+            <UncategorizedCountLine />
+            <UncategorizedReview
+              transactions={uncategorizedVMs}
+              categories={categoryOptions}
+              topCategoryIds={topCategoryIds}
+            />
           </div>
         )}
-      </section>
+
+        {/* Stats - reflect the active filter set. Compact three-up on mobile
+            (whole dollars so three fit a 375px screen), full tiles on md+.
+            Net = inflow - outflow; every tile carries an explicit sign so
+            direction never depends on tint alone. */}
+        <section className="grid grid-cols-3 gap-2 md:hidden">
+          <StatTile compact label="Outflow" value={<SignedStatAmount cents={-outflow} tone="maple" compact />} tone="maple" />
+          <StatTile compact label="Inflow" value={<SignedStatAmount cents={inflow} tone="leaf" compact />} tone="leaf" />
+          <StatTile
+            compact
+            label="Net"
+            value={<SignedStatAmount cents={net} tone={net >= 0 ? 'leaf' : 'maple'} compact />}
+            tone={net >= 0 ? 'leaf' : 'maple'}
+          />
+        </section>
+        <section className="hidden grid-cols-3 gap-3 md:grid">
+          <StatTile label="Outflow" value={<SignedStatAmount cents={-outflow} tone="maple" />} tone="maple" />
+          <StatTile label="Inflow" value={<SignedStatAmount cents={inflow} tone="leaf" />} tone="leaf" />
+          <StatTile
+            label="Net"
+            value={<SignedStatAmount cents={net} tone={net >= 0 ? 'leaf' : 'maple'} />}
+            tone={net >= 0 ? 'leaf' : 'maple'}
+          />
+        </section>
+
+        {/* Controls - search + chip filters + add (always visible). */}
+        {accountOptions.length === 0 ? (
+          <EmptyState
+            title="Add an account first"
+            body="Transactions need to live somewhere. Create at least one account and you’re ready to log spending."
+            action={
+              <Link
+                href="/accounts"
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-full bg-leaf px-4 text-[13px] font-semibold text-paper shadow-[var(--shadow-card)]"
+              >
+                Go to accounts
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </Link>
+            }
+          />
+        ) : (
+          <TxControls
+            month={month}
+            search={search}
+            accountId={params.account}
+            categoryId={params.category}
+            scope={scope ?? undefined}
+            accounts={accountOptions}
+            categories={categoryOptions}
+            overflowActions={
+              <>
+                <div className="flex min-h-[44px] items-center">
+                  <SyncNowButton hasSyncUrl={hasSyncUrl} hasPlaidItem={hasPlaidItem} />
+                </div>
+                <div className="flex min-h-[44px] items-center">{importLink}</div>
+              </>
+            }
+          />
+        )}
+
+        {/* Transactions list */}
+        <section className="overflow-hidden rounded-lg border border-hair bg-paper">
+          <header className="flex items-baseline justify-between border-b border-hair px-5 py-3.5">
+            <MapleLabel>
+              {isUncategorizedScope
+                ? `${transactions.length} to categorize`
+                : `${transactions.length} transaction${transactions.length === 1 ? '' : 's'}`}
+            </MapleLabel>
+            {transactions.length > 0 && (
+              <span className="text-[11px] text-ink-3">Newest first</span>
+            )}
+          </header>
+          {transactions.length === 0 ? (
+            <p className="px-5 py-16 text-center text-[14px] text-ink-2">
+              {isUncategorizedScope ? 'Nothing to categorize.' : `No transactions in ${monthLabel(month)}.`}
+              {(isUncategorizedScope || hasFilter) && (
+                <>
+                  {' '}
+                  <Link href={{ pathname: '/transactions', query: clearQuery }} className="font-semibold text-leaf underline">
+                    {isUncategorizedScope ? 'Back to transactions' : 'Clear filters'}
+                  </Link>
+                </>
+              )}
+            </p>
+          ) : (
+            <div>
+              {/* "To categorize" - this month's uncategorized rows, pulled to
+                  the top with their day shown inline on each row instead of a
+                  day header of their own (task 3 of the mobile audit). */}
+              {toCategorizeTxs.length > 0 && (
+                <div>
+                  <div className="bg-butter/40 px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink">
+                    To categorize
+                  </div>
+                  <ul className="divide-y divide-hair">
+                    {toCategorizeTxs.map((t) => renderRow(t, formatDate(t.occurred_on)))}
+                  </ul>
+                </div>
+              )}
+              {Array.from(byDay.entries()).map(([day, dayTxs]) => {
+                const dayTotal = dayTxs.reduce((s, t) => s + t.amount_cents, 0)
+                return (
+                  <div key={day}>
+                    <div className="flex items-baseline justify-between bg-cream-2/60 px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
+                      <span>{formatDate(day)}</span>
+                      <span className="tabular-nums">
+                        {dayTotal >= 0 ? '-' : '+'}
+                        <Amount cents={Math.abs(dayTotal)} className="text-[11px] font-semibold" />
+                      </span>
+                    </div>
+                    <ul className="divide-y divide-hair">{dayTxs.map((t) => renderRow(t))}</ul>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </section>
+      </UncategorizedCountProvider>
     </div>
+  )
+}
+
+/**
+ * Outflow/Inflow/Net all follow one sign rule: outflow shows a leading minus,
+ * inflow a leading plus, net whichever applies. `Amount`'s own `sign` prop is
+ * ignored in `compact` mode (it always defers to `formatMoneyCompact`, which
+ * only ever prefixes "-"), so the three stat tiles - compact on mobile to fit
+ * 375px - prefix the sign themselves and hand `Amount` the magnitude.
+ */
+function SignedStatAmount({
+  cents,
+  tone,
+  compact,
+}: {
+  cents: number
+  tone: 'leaf' | 'maple'
+  compact?: boolean
+}) {
+  const sign = cents > 0 ? '+' : cents < 0 ? '-' : ''
+  return (
+    <span className="inline-flex items-baseline">
+      {sign && (
+        <span aria-hidden className={tone === 'leaf' ? 'text-leaf' : 'text-maple'}>
+          {sign}
+        </span>
+      )}
+      <Amount cents={Math.abs(cents)} tone={tone} compact={compact} />
+    </span>
   )
 }

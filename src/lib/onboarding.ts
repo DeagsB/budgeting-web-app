@@ -102,7 +102,10 @@ export function canVisitStep(s: OnboardingState, step: OnboardingStep): boolean 
       return s.hasHousehold && isOwnerTrack(s) && !isDone(s)
     case 'invite':
     case 'budget':
-      return s.hasHousehold && isOwnerTrack(s) && !isDone(s) && s.accountCount > 0
+      // No accountCount gate: the owner can reach these by Skipping the bank
+      // step with nothing linked yet - they just won't have anything to show
+      // in the "so far" summary until an account exists.
+      return s.hasHousehold && isOwnerTrack(s) && !isDone(s)
     // The member track is three screens with Back and Continue between them,
     // so any of them is reachable until the member finishes.
     case 'welcome':

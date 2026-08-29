@@ -6,6 +6,7 @@ import {
   planSplitUpdate,
   planSyncBatch,
   plaidErrorCode,
+  plaidSyncSelection,
 } from './plaid-sync-plan'
 
 const tx = (over: Partial<Transaction> & { transaction_id: string }): Transaction =>
@@ -145,5 +146,18 @@ describe('plaidErrorCode / isUniqueViolation', () => {
     expect(isUniqueViolation({ code: '23505' })).toBe(true)
     expect(isUniqueViolation({ code: '23503' })).toBe(false)
     expect(isUniqueViolation(null)).toBe(false)
+  })
+})
+
+describe('plaidSyncSelection', () => {
+  it('targets exactly the given item, regardless of its status', () => {
+    expect(plaidSyncSelection('item-1')).toEqual({ byId: 'item-1' })
+  })
+
+  it('falls back to active/error items for the bulk sync when no id is given', () => {
+    expect(plaidSyncSelection()).toEqual({ statuses: ['active', 'error'] })
+    expect(plaidSyncSelection(undefined)).toEqual({ statuses: ['active', 'error'] })
+    expect(plaidSyncSelection(null)).toEqual({ statuses: ['active', 'error'] })
+    expect(plaidSyncSelection('')).toEqual({ statuses: ['active', 'error'] })
   })
 })

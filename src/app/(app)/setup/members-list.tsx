@@ -138,6 +138,7 @@ function InviteForm() {
               type="email"
               inputMode="email"
               autoComplete="off"
+              enterKeyHint="send"
               required
               placeholder="them@domain.ca"
               className="maple-input"
@@ -152,15 +153,27 @@ function InviteForm() {
             </select>
           </Field>
         </div>
-        <Button type="submit" variant="primary" size="md" disabled={pending} className="shrink-0 sm:mb-[1px]">
-          {pending ? 'Sending…' : 'Invite'}
-        </Button>
       </div>
       {state && 'error' in state && (
         <p role="alert" className="rounded-[12px] bg-maple-soft px-3 py-2 text-[13px] font-medium text-maple">
           {state.error}
         </p>
       )}
+      {/* Sticky footer so the primary action never lands behind the on-screen
+          keyboard - same treatment as SheetActions (components/ui/sheet.tsx),
+          bled to the Card's edges (-mx-6 matches Card's padding="lg" p-6).
+          The bottom offset clears the fixed mobile tab bar too (Invite must
+          never sit under it), not just the safe-area inset SheetActions
+          accounts for - this form isn't inside a modal that already sits
+          above the tab bar. */}
+      <div
+        className="sticky z-10 -mx-6 border-t border-hair bg-cream px-6 py-3 md:static md:z-auto md:mx-0 md:border-0 md:bg-transparent md:px-0 md:py-0"
+        style={{ bottom: 'calc(var(--maple-tabbar-h, 72px) + env(safe-area-inset-bottom))' }}
+      >
+        <Button type="submit" variant="primary" size="md" disabled={pending} className="w-full md:w-auto">
+          {pending ? 'Sending…' : 'Invite'}
+        </Button>
+      </div>
     </form>
   )
 }

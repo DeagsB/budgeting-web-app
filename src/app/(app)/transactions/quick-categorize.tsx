@@ -1,81 +1,55 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { setTransactionCategory } from './actions'
-import { CategorySelect } from './category-select'
+import { useState } from 'react'
+import { CategoryPicker } from './category-picker'
 import { NewCategoryInline } from './new-category-inline'
-import { Button } from '@/components/ui/button'
 
 type Category = { id: string; parent_id: string | null; name: string }
 
 /**
- * Inline one-tap categorizer for an uncategorized transaction row. Surfaces the
- * household's most-used categories as chips (one tap assigns + revalidates),
- * with the full hierarchical select tucked behind "More…" for the long tail.
+ * Inline one-tap categorizer shown directly under every uncategorized row -
+ * no toggle to open it. Renders the household's up-to-6 most-used categories
+ * as chips, then "More…" (a type-ahead over every category) and "+ New" as
+ * the last two chips.
  *
- * Stays deliberately small: category only. Owner / description / splits live in
- * the full edit form and the triage queue.
+ * The chips render as a single horizontal rail that scrolls under the
+ * thumb (`overflow-x-auto` + `.hide-scroll`) instead of wrapping - a
+ * wrapping strip runs 3-4 lines deep at 390px, which made every
+ * uncategorized row balloon to ~400px tall. The rail bleeds past the row's
+ * own horizontal padding (`-mx-5 px-5`) so it scrolls edge to edge while
+ * the rest of the row content stays put.
+ *
+ * Purely presentational: picking a category - by chip, by the type-ahead, or
+ * by creating a new one - just calls `onPick`. The row above owns the actual
+ * save, the optimistic badge swap, and the error state (see row.tsx), so a
+ * rejected save can restore this strip without QuickCategorize knowing why.
  */
 export function QuickCategorize({
-  transactionId,
   categories,
   topCategoryIds,
-  onDone,
+  onPick,
+  pending = false,
 }: {
-  transactionId: string
   categories: Category[]
   topCategoryIds: string[]
-  onDone?: () => void
+  onPick: (categoryId: string) => void
+  pending?: boolean
 }) {
-  const [pending, startTransition] = useTransition()
-  const [showAll, setShowAll] = useState(false)
-  const [value, setValue] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   const byId = new Map(categories.map((c) => [c.id, c]))
   const topCats = topCategoryIds.map((id) => byId.get(id)).filter(Boolean) as Category[]
 
-  function apply(categoryId: string) {
-    const fd = new FormData()
-    fd.set('id', transactionId)
-    fd.set('category_id', categoryId)
-    setError(null)
-    startTransition(async () => {
-      try {
-        await setTransactionCategory(fd)
-        onDone?.()
-      } catch {
-        setError('Couldn’t save that category. Try again.')
-      }
-    })
-  }
-
   return (
-    <div className="rounded-lg border border-hair bg-paper p-3">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-ink-3">
-          Quick category
-        </span>
-        {onDone && (
-          <button
-            type="button"
-            onClick={onDone}
-            className="inline-flex min-h-[44px] items-center rounded-md px-2 text-[12px] font-semibold text-ink-2 hover:text-ink"
-          >
-            Cancel
-          </button>
-        )}
-      </div>
-
-      {/* Most-used categories - one tap to assign */}
-      <div className="-mx-1 flex flex-wrap gap-1.5 px-1">
+    <div className="flex flex-col gap-1.5">
+      <div className="hide-scroll -mx-5 flex flex-nowrap items-center gap-1.5 overflow-x-auto overflow-y-hidden px-5 snap-x">
         {topCats.map((c) => (
           <button
             key={c.id}
             type="button"
             disabled={pending}
-            onClick={() => apply(c.id)}
-            className="inline-flex min-h-[44px] items-center rounded-full border border-hair bg-cream px-3 text-[12.5px] font-semibold text-ink transition-colors hover:border-leaf hover:bg-leaf-soft disabled:opacity-50"
+            onClick={() => onPick(c.id)}
+            className="inline-flex min-h-[44px] shrink-0 items-center whitespace-nowrap rounded-full border border-hair bg-cream px-3 text-[13px] font-semibold text-ink transition-colors hover:border-leaf hover:bg-leaf-soft disabled:opacity-50 snap-start"
           >
             {c.parent_id ? `↳ ${c.name}` : c.name}
           </button>
@@ -83,45 +57,26 @@ export function QuickCategorize({
         <button
           type="button"
           disabled={pending}
-          onClick={() => setShowAll((v) => !v)}
-          aria-expanded={showAll}
-          className="inline-flex min-h-[44px] items-center rounded-full border border-dashed border-hair px-3 text-[12.5px] font-semibold text-ink-2 transition-colors hover:text-ink disabled:opacity-50"
+          onClick={() => setPickerOpen((v) => !v)}
+          aria-expanded={pickerOpen}
+          className="inline-flex min-h-[44px] shrink-0 items-center whitespace-nowrap rounded-full border border-dashed border-hair px-3 text-[13px] font-semibold text-ink-2 transition-colors hover:text-ink disabled:opacity-50 snap-start"
         >
-          {showAll ? 'Less' : 'More…'}
+          {pickerOpen ? 'Close' : 'More…'}
         </button>
-        <NewCategoryInline categories={categories} onCreated={(id) => apply(id)} variant="sheet" />
+        <div className="shrink-0 whitespace-nowrap snap-start">
+          <NewCategoryInline categories={categories} onCreated={(id) => onPick(id)} variant="sheet" />
+        </div>
       </div>
 
-      {error && (
-        <p role="alert" className="mt-2 rounded-md bg-maple-soft px-2.5 py-1.5 text-[12px] font-medium text-maple">
-          {error}
-        </p>
-      )}
-
-      {/* Full hierarchical picker for anything not in the quick set */}
-      {showAll && (
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
-          <label className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-ink-3">
-              All categories
-            </span>
-            <CategorySelect
-              categories={categories}
-              value={value}
-              onChange={setValue}
-              compact
-            />
-          </label>
-          <Button
-            type="button"
-            variant="primary"
-            size="sm"
-            disabled={pending || !value}
-            onClick={() => value && apply(value)}
-          >
-            {pending ? 'Saving…' : 'Apply'}
-          </Button>
-        </div>
+      {pickerOpen && (
+        <CategoryPicker
+          categories={categories}
+          onPick={(id) => {
+            setPickerOpen(false)
+            onPick(id)
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
       )}
     </div>
   )

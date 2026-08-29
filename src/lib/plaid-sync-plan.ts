@@ -131,3 +131,20 @@ export function isUniqueViolation(err: { code?: string | null } | null | undefin
 export function isSameCursor(a: string | null | undefined, b: string | null | undefined): boolean {
   return (a ?? null) === (b ?? null)
 }
+
+// ─── Which items a sync run targets ────────────────────────────────────────
+
+export type PlaidSyncSelection = { byId: string } | { statuses: string[] }
+
+/**
+ * A single item (a "Sync now" tap on one bank, or the sync that follows
+ * re-authentication) is synced whatever its current status - that status is
+ * exactly what the sync is trying to clear, so filtering it out would make
+ * the item impossible to ever recover. Only the bulk "sync everything" path
+ * (no item given) restricts itself to items still healthy enough to be worth
+ * trying automatically.
+ */
+export function plaidSyncSelection(itemRowId?: string | null): PlaidSyncSelection {
+  if (itemRowId) return { byId: itemRowId }
+  return { statuses: ['active', 'error'] }
+}

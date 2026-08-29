@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isDuplicateRule,
   planCategoryChange,
   planShareChanges,
   prefillRuleFromTransaction,
@@ -140,6 +141,32 @@ describe('planCategoryChange', () => {
         'c',
       ),
     ).toEqual({ kind: 'skip' })
+  })
+})
+
+describe('isDuplicateRule', () => {
+  it('same normalised text, direction and category → duplicate', () => {
+    expect(
+      isDuplicateRule(
+        { match_text: 'Netflix', direction: 'outflow', category_id: 'c1' },
+        { match_text: '  netflix!!', direction: 'outflow', category_id: 'c1' },
+      ),
+    ).toBe(true)
+  })
+  it('different direction, category, or merchant → not a duplicate', () => {
+    const base = { match_text: 'Netflix', direction: 'outflow' as const, category_id: 'c1' }
+    expect(isDuplicateRule(base, { ...base, direction: 'inflow' })).toBe(false)
+    expect(isDuplicateRule(base, { ...base, category_id: 'c2' })).toBe(false)
+    expect(isDuplicateRule(base, { ...base, category_id: null })).toBe(false)
+    expect(isDuplicateRule(base, { ...base, match_text: 'Spotify' })).toBe(false)
+  })
+  it('null categories match each other', () => {
+    expect(
+      isDuplicateRule(
+        { match_text: 'Netflix', direction: 'any', category_id: null },
+        { match_text: 'netflix', direction: 'any', category_id: null },
+      ),
+    ).toBe(true)
   })
 })
 

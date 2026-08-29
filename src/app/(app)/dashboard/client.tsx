@@ -17,6 +17,8 @@ import { useCountUp } from '@/components/ui/count-up'
 import { useQuickAddTarget } from '@/lib/quick-add'
 import { AddTransactionForm } from '@/app/(app)/transactions/add-form'
 import { colorForCategory } from '@/lib/category-colors'
+import { ReauthNotice } from '@/components/plaid/reauth-notice'
+import type { PlaidAttentionItem } from '@/lib/plaid-attention'
 
 // Fixed brand gradient for the net-worth hero. Uses the light-mode leaf values
 // directly (not tokens) so the surface stays deep green in BOTH light and dark
@@ -34,8 +36,10 @@ const HERO_CHART = '#9ad8b4'
 
 const WIDGETS = [
   { id: 'greeting',        label: 'Greeting',        description: 'Month + name + member chips' },
+  { id: 'inbox',           label: 'To categorize',   description: 'Uncategorized transactions across every account' },
   { id: 'net-worth',       label: 'Net worth',       description: 'Hero number + chart + range selector' },
   { id: 'month-stats',     label: 'Month stats',     description: 'Income, Spent, Saved tiles' },
+  { id: 'budget-left',     label: 'Left to spend',   description: 'Per-category budget remaining, worst first' },
   { id: 'budget-progress', label: 'Budget progress', description: 'This month spent vs budgeted' },
   { id: 'pace',            label: 'Pace',            description: 'Daily spend + projected month-end' },
   { id: 'accounts',        label: 'Accounts',        description: 'Horizontal scroll of flippable cards' },
@@ -45,8 +49,17 @@ const WIDGETS = [
   { id: 'recent-activity', label: 'Recent activity', description: 'Latest transactions across all accounts' },
 ] as const
 type WidgetId = (typeof WIDGETS)[number]['id']
-const DEFAULT_LAYOUT: WidgetId[] = ['greeting', 'net-worth', 'month-stats', 'accounts', 'spending']
+const DEFAULT_LAYOUT: WidgetId[] = [
+  'greeting',
+  'inbox',
+  'net-worth',
+  'month-stats',
+  'budget-left',
+  'accounts',
+  'spending',
+]
 const LAYOUT_KEY = 'maple.dashboardLayout.v1'
+const HIDE_BALANCES_KEY = 'maple.hideBalances.v1'
 
 function loadLayout(): WidgetId[] {
   if (typeof window === 'undefined') return DEFAULT_LAYOUT
@@ -61,6 +74,15 @@ function loadLayout(): WidgetId[] {
     return valid.length > 0 ? valid : DEFAULT_LAYOUT
   } catch {
     return DEFAULT_LAYOUT
+  }
+}
+
+function loadHideBalances(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return localStorage.getItem(HIDE_BALANCES_KEY) === '1'
+  } catch {
+    return false
   }
 }
 
@@ -89,6 +111,8 @@ type RecentTxVM = {
 }
 type PaceVM = { dailyPace: number; projectedMonth: number; daysElapsed: number; daysInMonth: number }
 type CategoryVM = { id: string; parent_id: string | null; name: string }
+type CategoryBudgetVM = { id: string; name: string; budget: number; spent: number; left: number }
+type InboxVM = { count: number; amountCents: number; accountCount: number; hasEarlierMonths: boolean }
 
 const RANGES = [
   { id: '1M', months: 1 },
@@ -113,6 +137,7 @@ export function DashboardClient({
   accounts,
   spendingBreakdown,
   totalBudget,
+  categoryBudgets,
   goals,
   recurring,
   recurringTotal,
@@ -120,6 +145,8 @@ export function DashboardClient({
   pace,
   categories,
   hasError = false,
+  inbox,
+  plaidAttention,
 }: {
   householdName: string
   members: MemberVM[]
@@ -135,6 +162,8 @@ export function DashboardClient({
   accounts: AccountVM[]
   spendingBreakdown: SpendBucket[]
   totalBudget: number
+  /** Top-level categories with an effective budget this month, worst-off first. */
+  categoryBudgets: CategoryBudgetVM[]
   goals: GoalVM[]
   recurring: RecurringVM[]
   recurringTotal: number
@@ -143,7 +172,14 @@ export function DashboardClient({
   /** Category list for the add-transaction sheet opened from the FAB. */
   categories: CategoryVM[]
   hasError?: boolean
+  /** Household-wide uncategorized-transaction summary for the "to categorize" card. */
+  inbox: InboxVM
+  /** Linked banks that need reconnecting, rendered under the greeting. */
+  plaidAttention: PlaidAttentionItem[]
 }) {
+  // Hide-balances state: SSR + first paint default to shown; the persisted
+  // choice swaps in after mount so hydration stays clean (same pattern as
+  // the layout below).
   const [hidden, setHidden] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   // The tab bar's centre "+" opens this sheet while the dashboard is mounted.
@@ -158,10 +194,18 @@ export function DashboardClient({
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLayout(loadLayout())
+    setHidden(loadHideBalances())
   }, [])
   function saveLayout(next: WidgetId[]) {
     setLayout(next)
     try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(next)) } catch {}
+  }
+  function toggleHidden() {
+    setHidden((h) => {
+      const next = !h
+      try { localStorage.setItem(HIDE_BALANCES_KEY, next ? '1' : '0') } catch {}
+      return next
+    })
   }
 
   // Count up from last month's figure so the first frame is a real number,
@@ -212,52 +256,87 @@ export function DashboardClient({
   // statement just iterates `layout` - that's what makes reorder work.
   const widgets: Record<WidgetId, ReactNode> = {
     greeting: (
-      <header key="greeting" className="flex items-end justify-between gap-4">
-        <div className="min-w-0">
-          <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-3">
-            {monthLabel(currentMonthISO)}
+      <Fragment key="greeting">
+        <header className="flex items-end justify-between gap-4">
+          <div className="min-w-0">
+            <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-3">
+              {monthLabel(currentMonthISO)}
+            </div>
+            <h1 className="mt-1 font-serif text-[34px] leading-[1.05] tracking-[-0.02em] text-ink md:text-[40px]">
+              Bonjour, {firstName}.
+            </h1>
+            {/* Edit dashboard demoted here: a small ghost control in the greeting
+                row instead of a floating pill competing with the primary action. */}
+            <button
+              type="button"
+              onClick={() => setEditOpen(true)}
+              className="mt-2 inline-flex min-h-[44px] items-center gap-1.5 text-[12.5px] font-semibold text-ink-2 transition-colors hover:text-ink"
+            >
+              <PencilIcon />
+              Edit dashboard
+            </button>
           </div>
-          <h1 className="mt-1 font-serif text-[34px] leading-[1.05] tracking-[-0.02em] text-ink md:text-[40px]">
-            Bonjour, {firstName}.
-          </h1>
-          {/* Edit dashboard demoted here: a small ghost control in the greeting
-              row instead of a floating pill competing with the primary action. */}
-          <button
-            type="button"
-            onClick={() => setEditOpen(true)}
-            className="mt-2 inline-flex min-h-[44px] items-center gap-1.5 text-[12.5px] font-semibold text-ink-2 transition-colors hover:text-ink"
-          >
-            <PencilIcon />
-            Edit dashboard
-          </button>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setHidden((h) => !h)}
-            aria-label={hidden ? 'Show balances' : 'Hide balances'}
-            className="flex h-11 w-11 items-center justify-center rounded-full border border-hair bg-paper text-ink-2 transition-all active:scale-95"
-          >
-            {hidden ? <EyeOffIcon /> : <EyeIcon />}
-          </button>
-          <div className="flex">
-            {members.slice(0, 3).map((m, i) => (
-              <div
-                key={m.id}
-                className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-cream font-serif text-[15px] text-ink"
-                style={{
-                  background: ['var(--color-leaf-soft)', 'var(--color-maple-soft)', 'var(--color-butter)'][i] ?? 'var(--color-butter)',
-                  marginLeft: i === 0 ? 0 : -10,
-                  zIndex: 10 - i,
-                }}
-              >
-                {m.initial.toUpperCase()}
-              </div>
-            ))}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleHidden}
+              aria-label={hidden ? 'Show balances' : 'Hide balances'}
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-hair bg-paper text-ink-2 transition-all active:scale-95"
+            >
+              {hidden ? <EyeOffIcon /> : <EyeIcon />}
+            </button>
+            <div className="flex">
+              {members.slice(0, 3).map((m, i) => (
+                <div
+                  key={m.id}
+                  className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-cream font-serif text-[15px] text-ink"
+                  style={{
+                    background: ['var(--color-leaf-soft)', 'var(--color-maple-soft)', 'var(--color-butter)'][i] ?? 'var(--color-butter)',
+                    marginLeft: i === 0 ? 0 : -10,
+                    zIndex: 10 - i,
+                  }}
+                >
+                  {m.initial.toUpperCase()}
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
+        {/* Bank attention - rendered as part of the greeting widget's slot so
+            it stays directly under the greeting and above "to categorize"
+            regardless of how the user reorders the rest of the layout. */}
+        {plaidAttention.length > 0 && <ReauthNotice items={plaidAttention} />}
+      </Fragment>
     ),
+    inbox: (() => {
+      if (inbox.count === 0) {
+        return (
+          <p key="inbox" className="text-center text-[13px] text-ink-2">
+            Everything is categorized
+          </p>
+        )
+      }
+      const href = inbox.hasEarlierMonths ? '/transactions?scope=uncategorized' : '/transactions'
+      return (
+        <Card key="inbox" padding="lg">
+          <div className="font-serif text-[24px] leading-tight text-ink md:text-[28px]">
+            {inbox.count} to categorize
+          </div>
+          <div className="mt-1 text-[13.5px] text-ink-2">
+            <PrivacyBlur hidden={hidden}>
+              {formatMoney(inbox.amountCents)} across {inbox.accountCount} account
+              {inbox.accountCount === 1 ? '' : 's'}
+            </PrivacyBlur>
+          </div>
+          <Link
+            href={href}
+            className="mt-4 flex min-h-[44px] w-full items-center justify-center rounded-full bg-leaf text-[14px] font-semibold text-paper shadow-[var(--shadow-card)] transition-transform active:scale-[0.97]"
+          >
+            Categorize
+          </Link>
+        </Card>
+      )
+    })(),
     'net-worth': (
       <Reveal key="net-worth">
         {/* Signature brand surface: a fixed deep-green gradient (not tokens, so
@@ -445,6 +524,66 @@ export function DashboardClient({
         ))}
       </section>
     ),
+    'budget-left': (
+      <Card key="budget-left" padding="none">
+        <div className="p-6">
+          <MapleLabel>Left to spend</MapleLabel>
+          {categoryBudgets.length === 0 ? (
+            <div className="mt-2 text-[13.5px] text-ink-2">
+              No budgets yet.{' '}
+              <Link href="/budgets" className="font-semibold text-leaf underline">
+                Add some
+              </Link>
+              .
+            </div>
+          ) : (
+            <ul className="mt-3 flex flex-col gap-3">
+              {categoryBudgets.map((c) => {
+                const over = c.left < 0
+                const pct = c.budget > 0 ? Math.min(1, c.spent / c.budget) : 0
+                return (
+                  <li key={c.id}>
+                    <div className="flex items-baseline justify-between gap-2 text-[13px]">
+                      <span className="min-w-0 flex-1 truncate font-medium text-ink">{c.name}</span>
+                      <span className={`shrink-0 font-semibold ${over ? 'text-maple' : 'text-leaf'}`}>
+                        <PrivacyBlur hidden={hidden}>
+                          {over ? `${formatMoney(-c.left)} over` : `${formatMoney(c.left)} left`}
+                        </PrivacyBlur>
+                      </span>
+                    </div>
+                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-paper-2">
+                      <div
+                        role="progressbar"
+                        aria-label={`${c.name} spent`}
+                        aria-valuenow={Math.round(pct * 100)}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        className="h-full rounded-full transition-all duration-300"
+                        style={{
+                          width: `${Math.round(pct * 100)}%`,
+                          background: over ? 'var(--color-maple)' : 'var(--color-leaf)',
+                        }}
+                      />
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+        {/* Footer link - a full-width tap target under a divider, distinct
+            from the header-row "See all →" pattern the other widgets use.
+            Skipped when empty: the "Add some" link above already covers it. */}
+        {categoryBudgets.length > 0 && (
+          <Link
+            href="/budgets"
+            className="flex min-h-[44px] items-center justify-center border-t border-hair text-[12.5px] font-semibold text-leaf transition-colors hover:bg-cream-2"
+          >
+            See all budgets →
+          </Link>
+        )}
+      </Card>
+    ),
     accounts: (
       <section key="accounts">
         <div className="mb-3 flex items-baseline justify-between">
@@ -466,8 +605,10 @@ export function DashboardClient({
             {accounts.slice(0, 6).map((a, i) => {
               const isFlipped = !!flipped[a.id]
               const isLiability = LIABILITY_TYPES.has(a.type)
-              const display = Math.abs(a.balance_cents)
               const negative = a.balance_cents < 0 || isLiability
+              // Explicit minus for anything owing, matching /accounts: a
+              // liability reads "-$4,321.00", never a bare red positive.
+              const displayCents = negative ? -Math.abs(a.balance_cents) : a.balance_cents
               // Month-stat helpers for the card-flip back face. Net change
               // is positive when more money came in than went out.
               const monthNet = a.month_inflow_cents - a.month_outflow_cents
@@ -505,7 +646,11 @@ export function DashboardClient({
                         <div className="mt-2 text-[14px] font-medium text-ink">{a.name}</div>
                         <div className="mt-1 text-[26px] leading-tight">
                           <PrivacyBlur hidden={hidden}>
-                            <Amount cents={display} tone={negative ? 'maple' : 'ink'} />
+                            <Amount
+                              cents={displayCents}
+                              tone={negative ? 'maple' : 'ink'}
+                              sign={negative ? 'auto' : 'none'}
+                            />
                           </PrivacyBlur>
                         </div>
                         <div className="flex-1" />

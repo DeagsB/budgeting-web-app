@@ -1,14 +1,14 @@
 /** Plaid item / sync-log status as a small tone-coded pill. Server-safe. */
 export function StatusPill({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
-    active: { label: 'Active', cls: 'bg-leaf-soft text-leaf-deep' },
+    active: { label: 'Connected', cls: 'bg-leaf-soft text-leaf-deep' },
     ok: { label: 'OK', cls: 'bg-leaf-soft text-leaf-deep' },
-    login_required: { label: 'Re-auth needed', cls: 'bg-paper-2 text-down' },
+    login_required: { label: 'Needs reconnecting', cls: 'bg-paper-2 text-down' },
     pending_disconnect: { label: 'Disconnecting soon', cls: 'bg-paper-2 text-down' },
-    revoked: { label: 'Access revoked', cls: 'bg-maple-soft text-maple' },
+    revoked: { label: 'Disconnected', cls: 'bg-maple-soft text-maple' },
     transient: { label: 'Bank busy', cls: 'bg-paper-2 text-ink-3' },
     skipped_locked: { label: 'Already running', cls: 'bg-paper-2 text-ink-3' },
-    error: { label: 'Error', cls: 'bg-maple-soft text-maple' },
+    error: { label: 'Sync error', cls: 'bg-maple-soft text-maple' },
     webhook_rejected: { label: 'Rejected', cls: 'bg-maple-soft text-maple' },
     new_accounts: { label: 'New accounts', cls: 'bg-paper-2 text-down' },
   }

@@ -6,7 +6,7 @@ import { getHouseholdContext } from '@/lib/household'
 import { parseMoneyToCents } from '@/lib/format'
 import { normalizeMerchant } from '@/lib/statement-reconcile'
 import { applyRulesToTransactions, recentTransactionIds } from '@/lib/transaction-rules-apply'
-import type { RuleDirection, ShareMode } from '@/lib/transaction-rules'
+import { isDuplicateRule, type RuleDirection, type ShareMode } from '@/lib/transaction-rules'
 import { humanizeDbError } from '@/lib/errors'
 import { addMonthsISO, todayISO } from '@/lib/dates'
 
@@ -136,6 +136,20 @@ export async function saveRule(_prev: SaveRuleState, fd: FormData): Promise<Save
     const { error } = await supabase.from('transaction_rules').update(parsed).eq('id', id).eq('household_id', ctx.householdId)
     if (error) return { error: humanizeDbError(error, { entity: 'rule name' }) }
   } else {
+    // Creating, not editing: reject a rule that would fire on the exact same
+    // merchant text, direction and category as one that already exists.
+    const { data: existing } = await supabase
+      .from('transaction_rules')
+      .select('match_text, direction, category_id')
+      .eq('household_id', ctx.householdId)
+    const dup = (existing ?? []).some((r) =>
+      isDuplicateRule(
+        { match_text: r.match_text as string, direction: r.direction as RuleDirection, category_id: (r.category_id as string | null) ?? null },
+        parsed,
+      ),
+    )
+    if (dup) return { error: 'A rule for that already exists.' }
+
     const { data: last } = await supabase
       .from('transaction_rules')
       .select('sort_order')

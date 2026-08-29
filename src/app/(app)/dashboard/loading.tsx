@@ -1,8 +1,8 @@
 /**
  * Dashboard-specific skeleton. Mirrors the default widget layout - greeting,
- * the green net-worth hero, the three-up month-stats row, and the horizontal
- * accounts strip - so navigating to Home gives instant, shape-accurate
- * feedback while the queries resolve.
+ * the "to categorize" card, the green net-worth hero, the three-up
+ * month-stats row, and the horizontal accounts strip - so navigating to
+ * Home gives instant, shape-accurate feedback while the queries resolve.
  *
  * The hero uses the same fixed deep-green gradient as the real surface (a fixed
  * green, not a token, so it never inverts in dark mode).
@@ -27,6 +27,13 @@ export default function Loading() {
           <div className="h-11 w-11 rounded-full bg-paper-2 animate-pulse" />
           <div className="h-11 w-11 rounded-full bg-paper-2 animate-pulse" />
         </div>
+      </div>
+
+      {/* To categorize card */}
+      <div className="rounded-lg border border-hair bg-paper p-6">
+        <div className="h-7 w-32 rounded-md bg-paper-2 animate-pulse" />
+        <div className="mt-2 h-4 w-40 rounded-full bg-paper-2 animate-pulse" />
+        <div className="mt-4 h-11 w-full rounded-full bg-paper-2 animate-pulse" />
       </div>
 
       {/* Net-worth hero */}

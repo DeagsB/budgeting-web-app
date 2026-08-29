@@ -402,16 +402,27 @@ export function AccountMappingForm({
 
 /**
  * Update-mode Link for an item whose login expired. `start(itemId)` opens
- * Link; on success the item is synced and `onDone` fires. Also resumes an
- * update-mode OAuth bounce on mount.
+ * Link; on success the item is synced (whatever its status - it doesn't
+ * matter that it still says login_required, that's what the sync is about
+ * to clear) and `onDone` fires with the sync's added/reconciled counts. A
+ * sync error, or the bank still reporting login-required after re-auth,
+ * goes to `onError` instead - `onDone` only fires once the bank is actually
+ * caught up. Also resumes an update-mode OAuth bounce on mount.
  */
 export function usePlaidReauth({
   returnTo,
+  onSyncStart,
   onDone,
   onError,
 }: {
   returnTo: string
-  onDone: (itemId: string | null, resumedReturnTo: string | null) => void
+  /** Fires once Link succeeds, right before the follow-up sync starts. */
+  onSyncStart?: (itemId: string | null) => void
+  onDone: (
+    itemId: string | null,
+    resumedReturnTo: string | null,
+    result?: { added: number; reconciled: number } | null,
+  ) => void
   onError: (message: string) => void
 }) {
   const [pending, startTransition] = useTransition()
@@ -424,11 +435,24 @@ export function usePlaidReauth({
   const onSuccess = useCallback(() => {
     finishOAuth()
     const id = itemRef.current
+    if (!id) {
+      onDone(id, resumedReturnTo, null)
+      return
+    }
+    onSyncStart?.(id)
     startTransition(async () => {
-      if (id) await triggerPlaidSync(id)
-      onDone(id, resumedReturnTo)
+      const res = await triggerPlaidSync(id)
+      if (res && 'error' in res) {
+        onError(res.error)
+        return
+      }
+      if (res && res.loginRequired) {
+        onError('The bank still needs reconnecting. Try again.')
+        return
+      }
+      onDone(id, resumedReturnTo, res && 'ok' in res ? { added: res.added, reconciled: res.reconciled } : null)
     })
-  }, [onDone, resumedReturnTo])
+  }, [onDone, onError, onSyncStart, resumedReturnTo])
 
   const onExit = useCallback(() => finishOAuth(), [])
 
