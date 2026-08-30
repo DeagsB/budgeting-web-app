@@ -570,12 +570,7 @@ function AppShellInner({
               view-transition-name so it is snapshotted apart from the page
               and held still - see "Shell chrome" in globals.css. */}
           <PullToSync>
-            {/* enter/exit "none": the loading.tsx fallback -> page swap on a
-                cold load is an enter+exit pair; snapshotting the whole page
-                for it costs a long task during hydration (and crashes the
-                Windows WebKit build). Route changes swap children inside this
-                same boundary - an update - so the cross-fade stays. */}
-            <ViewTransition default="maple-fade" enter="none" exit="none">{children}</ViewTransition>
+            <ViewTransition default="maple-fade">{children}</ViewTransition>
           </PullToSync>
         </div>
       </main>
