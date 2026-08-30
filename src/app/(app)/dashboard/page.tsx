@@ -26,6 +26,7 @@ import {
   SpendingWidget,
 } from './widgets'
 import { computeInboxSummary } from './inbox'
+import { factsToBalanceTx, type BalanceFact } from '@/lib/balance-facts'
 import { categoryBudgetsLeftToSpend } from './category-budgets'
 
 export const dynamic = 'force-dynamic'
@@ -75,8 +76,8 @@ export default async function DashboardPage() {
     goalsRes,
     recurringTxRes,
     recentTxRes,
-    balanceTxRes,
-    allSplitsRes,
+    balanceFactsRes,
+    inboxRes,
     plaidAttentionItems,
     legIds,
   ] = await withTimeout(Promise.all([
@@ -148,22 +149,14 @@ export default async function DashboardPage() {
       .order('occurred_on', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(8),
-    // All transactions up to the end of the current month - drives the
-    // cashflow-derived running balances + the net-worth trail, and (via `id`
-    // + `member_id` below) the household-wide "to categorize" count so that
-    // doesn't need its own round trip.
-    supabase
-      .from('transactions')
-      .select('id, account_id, member_id, occurred_on, amount_cents')
-      .eq('household_id', ctx.householdId)
-      .lt('occurred_on', currentMonthEnd)
-      .limit(20000),
-    // Every split ever recorded (not just this month, unlike `splitsRes`
-    // above) - the "to categorize" count spans the whole history.
-    supabase
-      .from('transaction_splits')
-      .select('transaction_id, category_id')
-      .eq('household_id', ctx.householdId),
+    // Per-account monthly net effect of every transaction up to the end of
+    // the current month (see supabase/migrations/20260830000002) - the
+    // aggregate that replaces shipping up to 20k raw rows for the running
+    // balances + net-worth trail.
+    supabase.rpc('dashboard_balance_facts', { h_id: ctx.householdId, up_to: currentMonthEnd }),
+    // Household-wide "to categorize" summary, aggregated in the database
+    // under the caller's own RLS (mirrors ./inbox.ts).
+    supabase.rpc('dashboard_inbox_summary', { h_id: ctx.householdId, current_month: currentMonth }),
     // Linked banks that have stopped feeding transactions/balances and need
     // reconnecting - rendered as a notice under the greeting.
     getPlaidAttention(supabase, ctx.householdId, ctx.userId),
@@ -191,8 +184,6 @@ export default async function DashboardPage() {
     goalsRes,
     recurringTxRes,
     recentTxRes,
-    balanceTxRes,
-    allSplitsRes,
   ].some((r) => r.error)
 
   const household = householdRes.data ?? { name: 'Household' }
@@ -222,20 +213,52 @@ export default async function DashboardPage() {
   // transaction through the month (snapshots, if any, anchor it). Makes the
   // net-worth trail + card balances track real spending/income instead of
   // sitting flat on opening balances.
-  const balanceTx = ((balanceTxRes.data ?? []) as Array<{
-    id: string
+  // The balance facts + inbox aggregates arrived in migration
+  // 20260830000002. Until it is applied the RPCs error; fall back to the
+  // raw-row queries they replaced so the dashboard stays correct either way.
+  const aggregatesDeployed = !balanceFactsRes.error && !inboxRes.error
+  let legacyTx: { id: string; account_id: string; member_id: string | null; occurred_on: string; amount_cents: number }[] = []
+  let legacySplits: { transaction_id: string; category_id: string | null }[] = []
+  if (!aggregatesDeployed) {
+    const [txRes, spRes] = await Promise.all([
+      supabase
+        .from('transactions')
+        .select('id, account_id, member_id, occurred_on, amount_cents')
+        .eq('household_id', ctx.householdId)
+        .lt('occurred_on', currentMonthEnd)
+        .limit(20000),
+      supabase
+        .from('transaction_splits')
+        .select('transaction_id, category_id')
+        .eq('household_id', ctx.householdId),
+    ])
+    legacyTx = ((txRes.data ?? []) as Array<{
+      id: string
+      account_id: string
+      member_id: string | null
+      occurred_on: string
+      amount_cents: number | string
+    }>).map((t) => ({
+      id: t.id,
+      account_id: t.account_id,
+      member_id: t.member_id,
+      occurred_on: t.occurred_on,
+      amount_cents: Number(t.amount_cents),
+    }))
+    legacySplits = (spRes.data ?? []) as { transaction_id: string; category_id: string | null }[]
+  }
+  const balanceFacts: BalanceFact[] = ((balanceFactsRes.data ?? []) as Array<{
     account_id: string
-    member_id: string | null
-    occurred_on: string
-    amount_cents: number | string
-  }>).map((t) => ({
-    id: t.id,
-    account_id: t.account_id,
-    member_id: t.member_id,
-    occurred_on: t.occurred_on,
-    amount_cents: Number(t.amount_cents),
+    month: string
+    net_cents: number | string
+    first_day_net_cents: number | string
+  }>).map((r) => ({
+    account_id: r.account_id,
+    month: r.month,
+    net_cents: Number(r.net_cents),
+    first_day_net_cents: Number(r.first_day_net_cents),
   }))
-  const txByAccount = groupTxByAccount(balanceTx)
+  const txByAccount = groupTxByAccount(aggregatesDeployed ? factsToBalanceTx(balanceFacts) : legacyTx)
   const snapsByAccount = groupSnapsByAccount(snapshots)
 
   const months: string[] = []
@@ -292,9 +315,20 @@ export default async function DashboardPage() {
   // "To categorize" - editable transactions, household-wide across every
   // month, that still need a category (see ./inbox.ts for the rule, which
   // mirrors transactions/page.tsx exactly).
-  const accountVisibleIds = new Set(accounts.map((a) => a.id))
-  const allSplits = (allSplitsRes.data ?? []) as Array<{ transaction_id: string; category_id: string | null }>
-  const inbox = computeInboxSummary(balanceTx, allSplits, accountVisibleIds, ctx.memberId, currentMonth, legIds)
+  const inboxRow = (inboxRes.data as Array<{
+    tx_count: number | string
+    amount_cents: number | string
+    account_count: number | string
+    has_earlier_months: boolean
+  }> | null)?.[0]
+  const inbox = aggregatesDeployed && inboxRow
+    ? {
+        count: Number(inboxRow.tx_count),
+        amountCents: Number(inboxRow.amount_cents),
+        accountCount: Number(inboxRow.account_count),
+        hasEarlierMonths: inboxRow.has_earlier_months,
+      }
+    : computeInboxSummary(legacyTx, legacySplits, new Set(accounts.map((a) => a.id)), ctx.memberId, currentMonth, legIds)
 
   // Spending breakdown by category. Splits only on positive amounts (outflows).
   // Roll child category spend into the parent so the breakdown bar shows
