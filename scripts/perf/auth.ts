@@ -16,7 +16,8 @@ export async function ensureState(browserType: BrowserType = webkit, force = fal
   const browser = await browserType.launch()
   const context = await browser.newContext(DEVICE)
   const page = await context.newPage()
-  await page.goto(`${BASE_URL}/sign-in`, { waitUntil: 'domcontentloaded', timeout: 60_000 })
+  // networkidle: the form is a server action, so the click must land after hydration.
+  await page.goto(`${BASE_URL}/sign-in`, { waitUntil: 'networkidle', timeout: 60_000 })
   await page.fill('input[name=email]', CREDS.email)
   await page.fill('input[name=password]', CREDS.password)
   await Promise.all([
