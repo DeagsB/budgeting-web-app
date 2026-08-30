@@ -21,6 +21,7 @@ export function ServiceWorkerRegistrar() {
   const [waiting, setWaiting] = useState<ServiceWorker | null>(null)
   const [busy, setBusy] = useState(false)
   const reloadingRef = useRef(false)
+  const reloadRequestedRef = useRef(false)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -44,7 +45,11 @@ export function ServiceWorkerRegistrar() {
     }
 
     const onControllerChange = () => {
-      if (reloadingRef.current) return
+      // Only reload for an update the user accepted via the toast. The
+      // worker also calls clients.claim() on its very first activation,
+      // which fires controllerchange too; reloading there loaded every
+      // first launch twice.
+      if (!reloadRequestedRef.current || reloadingRef.current) return
       reloadingRef.current = true
       window.location.reload()
     }
@@ -77,6 +82,7 @@ export function ServiceWorkerRegistrar() {
   const reload = useCallback(() => {
     if (!waiting) return
     setBusy(true)
+    reloadRequestedRef.current = true
     waiting.postMessage({ type: 'SKIP_WAITING' })
     // controllerchange (above) performs the actual reload once the new
     // worker has claimed the page.
