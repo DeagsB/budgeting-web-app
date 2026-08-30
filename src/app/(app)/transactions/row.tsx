@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { updateTransaction, deleteTransaction, setTransactionCategory, unlinkTransfer } from './actions'
 import { toggleShared } from '@/app/(app)/shared/actions'
 import { transferNoun } from '@/lib/transfer-label'
@@ -12,9 +12,10 @@ import { SplitEditor } from './split-editor'
 import { ConfirmButton } from '@/components/ui/confirm-button'
 import { Amount } from '@/components/ui/amount'
 import { Button } from '@/components/ui/button'
-import { RuleSheet, type RuleSheetMember } from '@/app/(app)/rules/rule-sheet'
+import { RuleSheet } from '@/app/(app)/rules/rule-sheet'
 import { prefillRuleFromTransaction } from '@/lib/transaction-rules'
 import { useUncategorizedCount } from './uncategorized-count'
+import { useTransactionList } from './list-context'
 
 type TransactionVM = {
   id: string
@@ -52,20 +53,11 @@ type TransactionVM = {
 
 export function TransactionRow({
   transaction: t,
-  accounts,
-  categories,
-  memberWeights,
   isUncategorized = false,
-  topCategoryIds = [],
   dayLabel,
 }: {
   transaction: TransactionVM
-  accounts: { id: string; name: string }[]
-  categories: { id: string; parent_id: string | null; name: string }[]
-  /** Members with household split weights, for the "Always share" rule sheet. */
-  memberWeights: RuleSheetMember[]
   isUncategorized?: boolean
-  topCategoryIds?: string[]
   /**
    * When set, renders this row's date inline in the meta line. Used by the
    * "To categorize" section at the top of the list, which pulls rows out of
@@ -91,7 +83,9 @@ export function TransactionRow({
   const [categorizeError, setCategorizeError] = useState<string | null>(null)
   const [categorizePending, startCategorize] = useTransition()
   const uncategorizedCount = useUncategorizedCount()
-  const categoryById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories])
+  // Shared reference data - provided once above the list instead of being
+  // serialized into every row (see list-context.tsx).
+  const { accounts, categories, memberWeights, topCategoryIds, categoryById } = useTransactionList()
 
   // Once the server confirms this row is no longer uncategorized (or a fresh
   // row lands under a reused key), drop any optimistic override so it can't

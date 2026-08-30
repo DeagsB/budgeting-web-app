@@ -9,6 +9,7 @@ import { MonthNav } from '@/components/ui/month-nav'
 import { EmptyState } from '@/components/ui/empty-state'
 import { MapleLabel } from '@/components/ui/label'
 import { TransactionRow } from './row'
+import { TransactionListProvider } from './list-context'
 import { SyncNowButton } from './sync-button'
 import { TxControls } from './tx-controls'
 import { UncategorizedReview, type TriageTxn } from './uncategorized-review'
@@ -46,7 +47,7 @@ type TxLite = {
 export default async function TransactionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; account?: string; category?: string; scope?: string; q?: string }>
+  searchParams: Promise<{ month?: string; account?: string; category?: string; scope?: string; q?: string; limit?: string }>
 }) {
   const params = await searchParams
   const month = params.month && /^\d{4}-\d{2}-01$/.test(params.month) ? params.month : monthStartISO()
@@ -57,6 +58,10 @@ export default async function TransactionsPage({
   // isn't part of TX_SCOPES / parseScope (owned outside this feature) - it's
   // handled entirely in this file instead.
   const isUncategorizedScope = params.scope === 'uncategorized'
+  // Rows fetched per view. 200 covers a busy month; "Show more" doubles it
+  // via the URL so the server render stays the single source of truth.
+  const DEFAULT_LIMIT = 200
+  const limit = Math.min(5000, Math.max(25, Number(params.limit) || DEFAULT_LIMIT))
 
   const ctx = await getHouseholdContext()
   if (!ctx) return null
@@ -183,6 +188,7 @@ export default async function TransactionsPage({
         .in('id', ids)
         .order('occurred_on', { ascending: false })
         .order('created_at', { ascending: false })
+        .limit(limit + 1)
       transactions = (rows ?? []) as Txn[]
     }
   } else {
@@ -191,8 +197,12 @@ export default async function TransactionsPage({
       .lt('occurred_on', nextMonth)
       .order('occurred_on', { ascending: false })
       .order('created_at', { ascending: false })
+      .limit(limit + 1)
     transactions = (rows ?? []) as Txn[]
   }
+  // limit+1 probes for more without a count query; the extra row is dropped.
+  const hasMore = transactions.length > limit
+  if (hasMore) transactions = transactions.slice(0, limit)
 
   const txIds = transactions.map((t) => t.id)
   // The other leg of every listed transfer leg, so the label can name the
@@ -411,11 +421,7 @@ export default async function TransactionsPage({
           isMine: t.member_id !== null && t.member_id === ctx.memberId,
           transfer: transferFor(t),
         }}
-        accounts={accountOptions}
-        categories={categoryOptions}
-        memberWeights={memberWeights}
         isUncategorized={uncategorizedIds.has(t.id)}
-        topCategoryIds={topCategoryIds}
         dayLabel={dayLabel}
       />
     )
@@ -469,6 +475,12 @@ export default async function TransactionsPage({
         earlier={uncategorizedEarlier}
         earlierHref={uncategorizedHref}
         countedIds={Array.from(allUncategorizedIds)}
+      >
+      <TransactionListProvider
+        accounts={accountOptions}
+        categories={categoryOptions}
+        memberWeights={memberWeights}
+        topCategoryIds={topCategoryIds}
       >
         {/* Household-wide "to categorize" count + secondary one-by-one review
             - hidden on the uncategorized-scope view itself, since its own
@@ -601,7 +613,25 @@ export default async function TransactionsPage({
               })}
             </div>
           )}
+          {hasMore && (
+            <Link
+              href={{
+                pathname: '/transactions',
+                query: {
+                  ...(params.month ? { month: params.month } : {}),
+                  ...(params.account ? { account: params.account } : {}),
+                  ...(params.q ? { q: params.q } : {}),
+                  ...(params.scope ? { scope: params.scope } : {}),
+                  limit: String(limit * 2),
+                },
+              }}
+              className="flex min-h-[48px] items-center justify-center border-t border-hair text-[13px] font-semibold text-leaf transition-colors hover:bg-cream-2"
+            >
+              Showing the latest {limit} - show more
+            </Link>
+          )}
         </section>
+      </TransactionListProvider>
       </UncategorizedCountProvider>
     </div>
   )
