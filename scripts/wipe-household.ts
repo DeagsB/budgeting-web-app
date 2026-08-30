@@ -79,6 +79,7 @@ const HOUSEHOLD_TABLES = [
   'transactions',
   'transaction_splits',
   'transaction_shares',
+  'transfers',
   'accounts',
   'account_balance_snapshots',
   'plaid_items',

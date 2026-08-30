@@ -588,3 +588,38 @@ When Plaid cannot be reached, a webhook's claim is applied and everything else i
 - *Keeping the one-by-one Review sheet as the primary path*: it is a review mode by definition; it stays as a secondary "Review one by one" link only.
 - *Fixing re-auth on the client by resetting `plaid_items.status` after Link*: the server would still skip the item on the next sync; the selection rule was the bug.
 - *`overflow-x: hidden` on a wrapper instead of `clip` on the root*: any `hidden` ancestor becomes the scroll container again and breaks sticky the same way.
+
+## 2026-08-29 - Transfers between own accounts are detected from both legs
+
+**Context:** money moving between two of the household's own accounts (chequing -> Visa, chequing -> TFSA) lands as two ledger rows, an outflow and an inflow, because the sign of `amount_cents` is the only direction there is.
+Both rows sat in the "to categorize" pile, the outflow counted as an expense and the inflow as income on P&L, the dashboard and budgets, while the card's own purchases were already the real expenses.
+Moves into savings and registered accounts were being categorized as "Savings contribution" expenses even though the money never left the household.
+The product model says the user's only daily job is to categorize what arrived, so pairing the two legs has to happen on its own.
+
+**Decision:**
+- A `transfers` table holds one row per pair with two NOT NULL unique FKs (`out_transaction_id` is the `> 0` leg, `in_transaction_id` the `< 0` leg) that cascade on delete.
+Not a `transactions.transfer_id` column: under per-member RLS a login that can edit only one leg could never clear a flag on the partner's private leg, whereas deleting one `transfers` row is atomic for both legs and only needs edit rights on one of them.
+- The out/in orientation is a DB invariant (`transfers_check_legs`, definer, because service-role inserts bypass the insert policy), and a second trigger drops a pair whose leg amount or account changed so it no longer nets to zero.
+The date window lives app-side only: posting dates drift, and that is not an integrity fault.
+- Detection is a pure matcher (`src/lib/transfer-match.ts`) plus an I/O module (`src/lib/transfer-detect.ts`) that runs inside `applyRulesToTransactions`, so Plaid, email, CSV/OFX and manual entry all get it, including a household with zero rules.
+Retro-applying one rule and rule previews leave the ledger alone; they only consult the existing legs so a settlement rule never claims one.
+- The window is tiered: 7 days when either leg carries a transfer signal (Plaid `TRANSFER_*` / `LOAN_PAYMENTS*` category, a description keyword, or the inflow landing on a credit card or loan), 3 days for bare CSV/manual rows, to cut equal-and-opposite coincidences.
+When both legs carry a Plaid category and neither is transfer-like, the pair is vetoed: both banks said "purchase" or "income".
+- Settlement precedence: a row matched by an `is_settlement` rule is never paired with a leg on a different member's personal account, so the e-Transfer settlement path keeps member-to-member payments.
+The same owner on both sides, or a joint account on either side, means transfer wins, and the settlement branch skips transfer legs.
+- "Not a transfer" sets `transfer_ignored` on the legs the caller can edit and then deletes the pair; the matcher skips a pair when either leg is ignored, so one flag is enough even when the other leg is a partner's private row.
+A wrong "Not a transfer" is permanent until a manual "Link as transfer" ships.
+- The detector prefers the service client (`transferDb`) and falls back to the caller's session, because a CSV or manual ingest under one login would otherwise never see the partner's private leg.
+Every query it makes is household-scoped.
+- Before an amount change or a delete the app looks up the partner leg (`transferPartnerIds`) and re-runs detection on the survivors afterwards: the DB trigger drops the pair on its own but cannot re-pair a freed row.
+- Reporting pages skip transfer legs in their in-memory loops (`loadTransferLegIds`), and a leg counts as categorized without writing a category, so unlinking restores the old state.
+Balances, net worth and contributions are untouched: the money really moved.
+The per-account Out / In figures on the dashboard card backs stay as cashflow, because the Visa's "Paid" is the inflow leg.
+- The daily cron runs one whole-ledger pass per household (`runTransferBackfill`), stamped in `households.transfers_backfilled_at`, within a 40 s budget so it resumes the next day if it runs out.
+
+**Considered + rejected:**
+- *`transactions.transfer_id`*: a login editing one leg cannot clear the partner's private leg under RLS, and a pair is two rows that must change together.
+- *A "Transfer" category or a category kind*: every report site is pure sign, so a category on a leg would still count as an expense on one side and income on the other, and writing it would overwrite whatever the user had picked.
+- *A review queue for candidate pairs*: the product rule is no review modes; pairs auto-apply and "Not a transfer" on the row is the escape hatch.
+- *Excluding legs from balances*: the money really moved, so balances, net worth and contributions must see both legs.
+
