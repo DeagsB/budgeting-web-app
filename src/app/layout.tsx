@@ -4,10 +4,12 @@ import './globals.css'
 import { ServiceWorkerRegistrar } from '@/components/pwa/sw-registrar'
 import { SPLASH_DEVICES, splashFileName, splashMedia } from './splash/brand'
 
+// Weights are the set actually rendered across the app (scripts/perf/font-audit.ts);
+// every unused face is a preloaded file on the cold-start critical path.
 const interTight = Inter_Tight({
   subsets: ['latin'],
   variable: '--font-sans',
-  weight: ['400', '500', '600', '700', '800'],
+  weight: ['400', '500', '600', '700'],
 })
 
 const instrumentSerif = Instrument_Serif({
@@ -19,7 +21,7 @@ const instrumentSerif = Instrument_Serif({
 const jetBrainsMono = JetBrains_Mono({
   subsets: ['latin'],
   variable: '--font-mono',
-  weight: ['400', '500'],
+  weight: '400',
 })
 
 export const metadata: Metadata = {
