@@ -3,6 +3,7 @@ import { verifyCronAuth } from '@/lib/cron/auth'
 import { createServiceClient } from '@/lib/supabase/service'
 import { runPlaidHealthSweep, runPlaidSweep } from '@/lib/cron/plaid-sweep'
 import { runSettlementAutoClose } from '@/lib/cron/settlement-close'
+import { runTransferBackfill } from '@/lib/cron/transfer-backfill'
 // Household close days are civil dates; todayISO() is America/Toronto so "the
 // 28th" means the 28th for a Canadian household, not UTC's version of it.
 import { todayISO } from '@/lib/dates'
@@ -13,6 +14,8 @@ import { todayISO } from '@/lib/dates'
 // vercel.json). Runs the jobs that must happen even when nobody opens the app:
 //   1. Plaid safety-net sweep (webhooks are primary, this catches misses).
 //   2. Settlement period auto-close on each household's close day.
+//   3. Transfer backfill: one whole-ledger detection pass per household,
+//      stamped so it runs once and resumes next day when the budget runs out.
 // Authenticated by CRON_SECRET; each job is idempotent so re-runs are safe.
 
 export const maxDuration = 300
@@ -37,5 +40,10 @@ export async function GET(request: NextRequest) {
   const settle = await runSettlementAutoClose(service, { todayISO: todayISO() })
   console.log('[cron/daily] settlement auto-close', settle)
 
-  return NextResponse.json({ ok: true, ms: Date.now() - started, plaid, health, settle })
+  // Pairs transfers that landed before detection existed; a no-op once every
+  // household carries its stamp.
+  const backfill = await runTransferBackfill(service, { budgetMs: 40_000 })
+  console.log('[cron/daily] transfer backfill', backfill)
+
+  return NextResponse.json({ ok: true, ms: Date.now() - started, plaid, health, settle, backfill })
 }

@@ -17,6 +17,8 @@ import {
   persistSettlementMatch,
   type SettlementMatchContext,
 } from '@/lib/settlement-detect'
+import { detectTransfersForTransactions, transferDb } from '@/lib/transfer-detect'
+import { loadTransferLegIds } from '@/lib/transfer-legs'
 
 /**
  * Persist rule effects for a set of transactions. Works with either the
@@ -36,6 +38,10 @@ export type ApplyRulesResult = {
   settled: number
   /** Payment candidates that need a person to confirm the counterparty. */
   paymentPrompts: number
+  /** Transfer pairs written between the household's own accounts. */
+  transfersPaired: number
+  /** Which of the given ids are transfer legs after this run (callers skip pushes / settlements for them). */
+  transferLegIds: Set<string>
 }
 
 export type RuleContext = { rules: TransactionRule[]; members: WeightedMember[] }
@@ -80,12 +86,38 @@ export async function applyRulesToTransactions(
   opts: ApplyRulesOptions = {},
   ctx?: RuleContext,
 ): Promise<ApplyRulesResult> {
-  const result: ApplyRulesResult = { considered: 0, matched: 0, shared: 0, categorized: 0, skippedManual: 0, settled: 0, paymentPrompts: 0 }
+  const result: ApplyRulesResult = {
+    considered: 0,
+    matched: 0,
+    shared: 0,
+    categorized: 0,
+    skippedManual: 0,
+    settled: 0,
+    paymentPrompts: 0,
+    transfersPaired: 0,
+    transferLegIds: new Set(),
+  }
   const ids = Array.from(new Set(txIds.filter(Boolean)))
   if (ids.length === 0) return result
 
   const context = ctx ?? (await loadRuleContext(db, householdId))
   const rules = opts.onlyRuleIds ? context.rules.filter((r) => opts.onlyRuleIds!.includes(r.id)) : context.rules
+
+  // Transfers between the household's own accounts are paired first, and
+  // whether or not the household has any rules: a leg is never a payment
+  // between members (settlement branch below) and never notified as new
+  // spending. Retro-applying one rule and previews leave the ledger alone
+  // but still need to know which rows are legs.
+  const transferPass = !opts.dryRun && !opts.onlyRuleIds
+  let transferLegs: Set<string>
+  if (transferPass) {
+    const detect = await detectTransfersForTransactions(transferDb(db), householdId, ids, { rules: context.rules })
+    result.transfersPaired = detect.paired
+    transferLegs = detect.legIds
+  } else {
+    transferLegs = rules.some((r) => r.is_settlement) ? await loadTransferLegIds(transferDb(db), householdId) : new Set()
+  }
+  result.transferLegIds = transferLegs
   if (rules.length === 0) return result
 
   // Settlement matching needs the whole statement; load it once, only if a
@@ -139,11 +171,12 @@ export async function applyRulesToTransactions(
       if (!fx.shareRule && !fx.categoryRule && !fx.settlementRule) continue
       result.matched += 1
 
-      if (fx.settlementRule) {
+      if (fx.settlementRule && !transferLegs.has(tx.id)) {
         // A payment between members: link it to a settlement already on the
         // books, record it against the line it pays off, or leave it for a
-        // person to confirm. Rows someone marked "not a payment" and rows
-        // already evidencing a settlement are never touched again.
+        // person to confirm. Rows someone marked "not a payment", rows
+        // already evidencing a settlement, and the legs of a transfer
+        // between the household's own accounts are never touched.
         const member = candidateMember(tx, accountOwner)
         if (member && !row.settlement_ignored) {
           settlementCtx ??= await loadSettlementMatchContext(db, householdId)

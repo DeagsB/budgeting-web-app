@@ -4,6 +4,9 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { applyRulesToTransactions } from '@/lib/transaction-rules-apply'
+import { detectTransfersForTransactions, transferDb, transferPartnerIds } from '@/lib/transfer-detect'
+import { isUncategorizedSplitSet } from '@/lib/tx-uncategorized'
+import { isTxEditable } from '@/lib/tx-scope'
 import { parseMoneyToCents } from '@/lib/format'
 import { humanizeDbError } from '@/lib/errors'
 
@@ -101,6 +104,14 @@ export async function updateTransaction(fd: FormData): Promise<void> {
   if (!ctx) return
 
   const supabase = await createClient()
+
+  // A transfer partner has to be found BEFORE the write: the DB drops the
+  // pair on its own the moment this leg's amount or account stops netting to
+  // zero with it, and the freed partner then needs a fresh detect below.
+  // Service client where available, since the partner may sit on another
+  // member's private account this session cannot see.
+  const partners = await transferPartnerIds(transferDb(supabase), ctx.householdId, [id])
+
   await supabase
     .from('transactions')
     .update({
@@ -140,8 +151,10 @@ export async function updateTransaction(fd: FormData): Promise<void> {
   }
 
   // Re-evaluate rules: a renamed merchant or changed amount may now match (or
-  // stop matching). Manual shares are never touched by this.
-  await applyRulesToTransactions(supabase, ctx.householdId, [id])
+  // stop matching). Manual shares are never touched by this. The former
+  // partner rides along so the transfer pass can re-pair it (or pair it with
+  // a different leg) now that this row may have moved.
+  await applyRulesToTransactions(supabase, ctx.householdId, [id, ...partners])
 
   revalidate()
 }
@@ -331,9 +344,108 @@ export async function deleteTransaction(fd: FormData): Promise<void> {
   if (!ctx) return
 
   const supabase = await createClient()
+
+  // The cascade removes the pair with the row, but it leaves the other leg
+  // unpaired and silently back in the income / expense figures. Look the
+  // partner up first (the pair is gone once the delete lands) and re-detect
+  // it afterwards so it can find a new counterpart when one exists.
+  const partners = await transferPartnerIds(transferDb(supabase), ctx.householdId, [id])
+
   await supabase.from('transactions').delete().eq('id', id).eq('household_id', ctx.householdId)
 
+  if (partners.length > 0) {
+    await detectTransfersForTransactions(transferDb(supabase), ctx.householdId, partners)
+  }
+
   revalidate()
+}
+
+export type UnlinkTransferResult =
+  | { ok: true; requeued: { id: string; occurred_on: string }[] }
+  | { error: string }
+
+/**
+ * "Not a transfer": break a pair for good. Both legs go back to being a
+ * normal outflow and inflow, and the matcher will not pair them again.
+ *
+ * Session client only - RLS is the whole authorization story here. The
+ * ignore flag is written FIRST so a sync landing in the gap between the
+ * flag and the delete cannot re-pair the legs; RLS silently limits that
+ * update to the legs this login can edit, and the matcher skips a pair when
+ * EITHER leg is ignored, so one flag is enough. The delete is what the
+ * caller actually asked for: zero rows means the pair is visible but this
+ * login can edit neither leg (a partner's private accounts on both sides).
+ *
+ * Returns the legs that are uncategorized after the unlink so the row can
+ * bump the client-side "to categorize" count without a round trip.
+ */
+export async function unlinkTransfer(fd: FormData): Promise<UnlinkTransferResult> {
+  const transferId = String(fd.get('transfer_id') ?? '')
+  if (!transferId) return { error: "Couldn't save that. Refresh and try again." }
+
+  const ctx = await getHouseholdContext()
+  if (!ctx) return { error: 'Not authorized.' }
+
+  const supabase = await createClient()
+  const { data: pair, error: pairError } = await supabase
+    .from('transfers')
+    .select('id, out_transaction_id, in_transaction_id')
+    .eq('id', transferId)
+    .eq('household_id', ctx.householdId)
+    .maybeSingle()
+  if (pairError) return { error: humanizeDbError(pairError) }
+  if (!pair) return { error: 'That transfer is no longer here. Refresh and try again.' }
+
+  const legIds = [pair.out_transaction_id as string, pair.in_transaction_id as string]
+
+  const { error: flagError } = await supabase
+    .from('transactions')
+    .update({ transfer_ignored: true })
+    .in('id', legIds)
+    .eq('household_id', ctx.householdId)
+  if (flagError) return { error: humanizeDbError(flagError) }
+
+  const { data: deleted, error: deleteError } = await supabase
+    .from('transfers')
+    .delete()
+    .eq('id', transferId)
+    .eq('household_id', ctx.householdId)
+    .select('id')
+  if (deleteError) return { error: humanizeDbError(deleteError) }
+  if (!deleted || deleted.length === 0) return { error: 'Only the member who owns this row can change it.' }
+
+  // Now that neither row is a leg, a settlement rule may claim them (an
+  // e-Transfer between members that was mistaken for an own-account move).
+  // The transfer pass itself skips ignored rows, so this cannot re-pair.
+  await applyRulesToTransactions(supabase, ctx.householdId, legIds)
+
+  // Same rule as the page's counts: only rows this login can edit are in the
+  // pile, so a share-only leg (visible, not editable) must not be reported
+  // back or the client count would drift above the list.
+  const [{ data: rows }, { data: visibleAccounts }] = await Promise.all([
+    supabase
+      .from('transactions')
+      .select('id, occurred_on, account_id, member_id, transaction_splits(category_id)')
+      .in('id', legIds)
+      .eq('household_id', ctx.householdId),
+    supabase.from('accounts').select('id').eq('household_id', ctx.householdId).is('archived_at', null),
+  ])
+  const visibleAccountIds = new Set((visibleAccounts ?? []).map((a) => a.id as string))
+  const requeued = ((rows ?? []) as unknown as {
+    id: string
+    occurred_on: string
+    account_id: string
+    member_id: string | null
+    transaction_splits: { category_id: string | null }[] | null
+  }[])
+    .filter((r) =>
+      isTxEditable({ accountVisible: visibleAccountIds.has(r.account_id), payerId: r.member_id, myMemberId: ctx.memberId }),
+    )
+    .filter((r) => isUncategorizedSplitSet(r.transaction_splits ?? []))
+    .map((r) => ({ id: r.id, occurred_on: r.occurred_on }))
+
+  revalidate()
+  return { ok: true, requeued }
 }
 
 export type SplitsState = { error: string } | { ok: true } | undefined

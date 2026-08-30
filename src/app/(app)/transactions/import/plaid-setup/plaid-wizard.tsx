@@ -136,7 +136,11 @@ export function PlaidWizard({
             ? 'A bank needs re-authentication.'
             : res.skipped
               ? 'Nothing to sync right now.'
-              : `Synced - ${res.added} new, ${res.reconciled} enriched.`,
+              : `Synced - ${res.added} new, ${res.reconciled} enriched${
+                  res.transfersPaired > 0
+                    ? `, ${res.transfersPaired} transfer${res.transfersPaired === 1 ? '' : 's'} matched`
+                    : ''
+                }.`,
         )
         router.refresh()
       } else {

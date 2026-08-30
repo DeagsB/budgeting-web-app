@@ -54,7 +54,7 @@ export type AccountMapping = {
 
 export type MapState = { ok: true } | { error: string } | undefined
 export type PlaidSyncNowState =
-  | { ok: true; added: number; reconciled: number; loginRequired: boolean; skipped: boolean }
+  | { ok: true; added: number; reconciled: number; transfersPaired: number; loginRequired: boolean; skipped: boolean }
   | { error: string; loginRequired?: boolean }
   | undefined
 
@@ -417,7 +417,7 @@ export async function triggerPlaidSync(
 ): Promise<PlaidSyncNowState> {
   const trigger = opts.trigger ?? 'manual'
   const quiet = trigger === 'pull'
-  const noop: PlaidSyncNowState = { ok: true, added: 0, reconciled: 0, loginRequired: false, skipped: true }
+  const noop: PlaidSyncNowState = { ok: true, added: 0, reconciled: 0, transfersPaired: 0, loginRequired: false, skipped: true }
 
   const ctx = await getHouseholdContext()
   if (!ctx) return quiet ? noop : { error: 'Not authorized.' }
@@ -456,6 +456,7 @@ export async function triggerPlaidSync(
   const cutoff = opts.minIntervalMs ? Date.now() - opts.minIntervalMs : null
   let added = 0
   let reconciled = 0
+  let transfersPaired = 0
   let loginRequired = false
   let ran = 0
   for (const it of items) {
@@ -475,13 +476,14 @@ export async function triggerPlaidSync(
     )
     added += res.added
     reconciled += res.reconciled
+    transfersPaired += res.transfersPaired
     if (res.status === 'login_required') loginRequired = true
   }
 
   revalidatePath('/transactions/import/plaid-setup')
   revalidatePath('/transactions')
   revalidatePath('/dashboard')
-  return { ok: true, added, reconciled, loginRequired, skipped: ran === 0 }
+  return { ok: true, added, reconciled, transfersPaired, loginRequired, skipped: ran === 0 }
 }
 
 /**
@@ -512,6 +514,7 @@ export async function completeReauth(itemRowId: string | null): Promise<PlaidSyn
 
   let added = 0
   let reconciled = 0
+  let transfersPaired = 0
   let loginRequired = false
   let ran = 0
   for (const it of items) {
@@ -532,6 +535,7 @@ export async function completeReauth(itemRowId: string | null): Promise<PlaidSyn
     const res = await syncPlaidItem(service, plaid, row, { trigger: 'manual' })
     added += res.added
     reconciled += res.reconciled
+    transfersPaired += res.transfersPaired
     if (res.status === 'login_required') loginRequired = true
   }
 
@@ -539,5 +543,5 @@ export async function completeReauth(itemRowId: string | null): Promise<PlaidSyn
   revalidatePath('/transactions')
   revalidatePath('/dashboard')
   revalidatePath('/accounts')
-  return { ok: true, added, reconciled, loginRequired, skipped: ran === 0 }
+  return { ok: true, added, reconciled, transfersPaired, loginRequired, skipped: ran === 0 }
 }

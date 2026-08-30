@@ -14,6 +14,7 @@ import {
 import { cleanTitle } from '@/lib/title'
 import { notifyTransactionInserted, notifyBudgetOverspendIfCrossed } from '@/lib/push'
 import { applyRulesToTransactions, loadRuleContext } from '@/lib/transaction-rules-apply'
+import { detectTransfersForTransactions, transferPartnerIds } from '@/lib/transfer-detect'
 import {
   classifyPlaidError,
   isUniqueViolation,
@@ -63,6 +64,8 @@ export type PlaidSyncResult = {
   migrated: number
   skippedUnmapped: number
   insertFailed: number
+  /** Transfer pairs written between the household's own accounts during this run. */
+  transfersPaired: number
   status: PlaidSyncStatus
   error?: string
 }
@@ -84,6 +87,7 @@ const EMPTY: Omit<PlaidSyncResult, 'status'> = {
   migrated: 0,
   skippedUnmapped: 0,
   insertFailed: 0,
+  transfersPaired: 0,
 }
 
 function shiftISO(iso: string, days: number): string {
@@ -105,6 +109,9 @@ type StagedRow = {
   description: string | null
   pending: boolean
   pending_external_id: string | null
+  /** Plaid's personal_finance_category; the transfer matcher's strongest signal. */
+  pfc_primary: string | null
+  pfc_detailed: string | null
   accountName: string | null
 }
 
@@ -263,6 +270,8 @@ export async function syncPlaidItem(
       description: raw ? (cleanTitle(raw) ?? raw) : null,
       pending: t.pending === true,
       pending_external_id: t.pending_transaction_id ?? null,
+      pfc_primary: t.personal_finance_category?.primary ?? null,
+      pfc_detailed: t.personal_finance_category?.detailed ?? null,
       accountName: acct.name,
     }
   }
@@ -272,6 +281,11 @@ export async function syncPlaidItem(
   // 4. MIGRATIONS: pending → posted. Update the row we already hold so the
   //    user's category/splits/shares survive; only the identity + money move.
   let migrated = 0
+  const migratedIds: string[] = []
+  // Transfer legs whose partner's amount changed under them. The DB drops such
+  // a pair on its own (transactions_transfer_leg_change), so the partner has
+  // to be looked up BEFORE the write and re-detected with the batch below.
+  const freedIds: string[] = []
   for (const mig of plan.migrations) {
     const r = toStaged(mig.posted)
     if (!r) continue
@@ -286,7 +300,9 @@ export async function syncPlaidItem(
       plan.inserts.push(mig.posted)
       continue
     }
+    const rowId = row.id as string
     const amountChanged = Number(row.amount_cents) !== r.amount_cents
+    if (amountChanged) freedIds.push(...(await transferPartnerIds(db, item.household_id, [rowId])))
     await db
       .from('transactions')
       .update({
@@ -298,9 +314,12 @@ export async function syncPlaidItem(
         // Keep an existing description: the pending name is usually the same
         // merchant and the user may have retitled it.
         description: (row.description as string | null) ?? r.description,
+        plaid_pfc_primary: r.pfc_primary,
+        plaid_pfc_detailed: r.pfc_detailed,
       })
-      .eq('id', row.id as string)
-    if (amountChanged) await applyAmountChange(db, item.household_id, row.id as string, r.amount_cents)
+      .eq('id', rowId)
+    if (amountChanged) await applyAmountChange(db, item.household_id, rowId, r.amount_cents)
+    migratedIds.push(rowId)
     migrated += 1
   }
 
@@ -378,6 +397,8 @@ export async function syncPlaidItem(
             external_id: r.external_id,
             pending: r.pending,
             plaid_pending_transaction_id: r.pending_external_id,
+            plaid_pfc_primary: r.pfc_primary,
+            plaid_pfc_detailed: r.pfc_detailed,
           })
           .eq('id', m.matchedTxId)
           .eq('household_id', item.household_id)
@@ -408,6 +429,8 @@ export async function syncPlaidItem(
           external_id: r.external_id,
           pending: r.pending,
           plaid_pending_transaction_id: r.pending_external_id,
+          plaid_pfc_primary: r.pfc_primary,
+          plaid_pfc_detailed: r.pfc_detailed,
         })
         .select('id')
         .single()
@@ -447,11 +470,18 @@ export async function syncPlaidItem(
     }
   }
 
-  // 5b. Household rules on everything new or newly-titled.
+  // 5b. Household rules on everything new, newly-titled, just posted or
+  //     freed from a transfer pair. Runs even with zero rules: the transfer
+  //     pass inside pairs a card payment with its counterpart, and the
+  //     resulting leg ids keep step 9 from announcing a transfer as spending.
   const ruleCtx = await loadRuleContext(db, item.household_id)
-  const ruleTargets = [...inserted.map((row) => row.id), ...reconciledIds]
-  if (ruleTargets.length > 0 && ruleCtx.rules.length > 0) {
-    await applyRulesToTransactions(db, item.household_id, ruleTargets, {}, ruleCtx)
+  const ruleTargets = [...inserted.map((row) => row.id), ...reconciledIds, ...migratedIds, ...freedIds]
+  const transferLegs = new Set<string>()
+  let transfersPaired = 0
+  if (ruleTargets.length > 0) {
+    const applied = await applyRulesToTransactions(db, item.household_id, ruleTargets, {}, ruleCtx)
+    for (const id of applied.transferLegIds) transferLegs.add(id)
+    transfersPaired += applied.transfersPaired
   }
 
   // 6. UPDATES (Plaid `modified`): money/date/title follow the bank; splits
@@ -467,7 +497,11 @@ export async function syncPlaidItem(
       .eq('external_id', r.external_id)
       .maybeSingle()
     if (!row) continue
+    const rowId = row.id as string
     const amountChanged = Number(row.amount_cents) !== r.amount_cents
+    // Same as the migration loop: a partner the DB is about to unlink gets
+    // re-detected alongside the row that changed.
+    const partners = amountChanged ? await transferPartnerIds(db, item.household_id, [rowId]) : []
     await db
       .from('transactions')
       .update({
@@ -475,23 +509,45 @@ export async function syncPlaidItem(
         occurred_on: r.occurred_on,
         description: r.description,
         pending: r.pending,
+        plaid_pfc_primary: r.pfc_primary,
+        plaid_pfc_detailed: r.pfc_detailed,
       })
-      .eq('id', row.id as string)
-    if (amountChanged) await applyAmountChange(db, item.household_id, row.id as string, r.amount_cents)
-    modifiedIds.push(row.id as string)
+      .eq('id', rowId)
+    if (amountChanged) await applyAmountChange(db, item.household_id, rowId, r.amount_cents)
+    modifiedIds.push(rowId, ...partners)
   }
-  if (modifiedIds.length > 0 && ruleCtx.rules.length > 0) {
-    await applyRulesToTransactions(db, item.household_id, modifiedIds, {}, ruleCtx)
+  if (modifiedIds.length > 0) {
+    const applied = await applyRulesToTransactions(db, item.household_id, modifiedIds, {}, ruleCtx)
+    for (const id of applied.transferLegIds) transferLegs.add(id)
+    transfersPaired += applied.transfersPaired
   }
 
   // 7. DELETES: whatever Plaid removed that was not a migrated pending id.
+  //    The cascade drops any pair a removed row was a leg of, but 5b has
+  //    already run, so the surviving partner would stay unpaired until the
+  //    next batch touched it: find it first and re-detect it after.
   if (plan.deletes.length > 0) {
+    const { data: doomedRows } = await db
+      .from('transactions')
+      .select('id')
+      .eq('household_id', item.household_id)
+      .eq('source', 'plaid')
+      .in('external_id', plan.deletes)
+    const doomed = (doomedRows ?? []).map((r) => r.id as string)
+    const survivors = doomed.length > 0 ? await transferPartnerIds(db, item.household_id, doomed) : []
     await db
       .from('transactions')
       .delete()
       .eq('household_id', item.household_id)
       .eq('source', 'plaid')
       .in('external_id', plan.deletes)
+    if (survivors.length > 0) {
+      const redetect = await detectTransfersForTransactions(db, item.household_id, survivors, { rules: ruleCtx.rules })
+      transfersPaired += redetect.paired
+      // A survivor may have claimed a row inserted in THIS batch (its posted
+      // replacement, typically); that row is a leg now and must not be pushed.
+      for (const id of redetect.legIds) transferLegs.add(id)
+    }
   }
 
   // 7b. Balances: every transaction from this batch is now written, so the
@@ -527,9 +583,11 @@ export async function syncPlaidItem(
   }
 
   // 9. Push for genuinely-new, posted rows (pending rows get their turn when
-  //    they post; reconciled upgrades were notified by the alert).
+  //    they post; reconciled upgrades were notified by the alert; a transfer
+  //    leg is money moving between the household's own accounts, not new
+  //    spending, so it neither pings anyone nor counts against a budget).
   for (const row of inserted) {
-    if (row.pending) continue
+    if (row.pending || transferLegs.has(row.id)) continue
     await notifyTransactionInserted(item.household_id, {
       amountCents: row.amount_cents,
       accountName: row.accountName,
@@ -551,6 +609,7 @@ export async function syncPlaidItem(
     migrated,
     skippedUnmapped,
     insertFailed,
+    transfersPaired,
     status: cursorError ? 'error' : 'ok',
     error: cursorError,
   })

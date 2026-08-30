@@ -181,9 +181,9 @@ export async function POST(request: NextRequest) {
     sort_order: 0,
   })
 
-  // Household rules (auto-share / auto-categorise) - same engine as every
-  // other ingest path.
-  await applyRulesToTransactions(service, householdId, [inserted!.id as string])
+  // Household rules (auto-share / auto-categorise / transfer pairing) - same
+  // engine as every other ingest path.
+  const applied = await applyRulesToTransactions(service, householdId, [inserted!.id as string])
 
   await service.from('email_ingestion_log').insert({
     household_id: householdId,
@@ -196,19 +196,23 @@ export async function POST(request: NextRequest) {
     raw_excerpt: rawExcerpt,
   })
 
-  // Push notifications (best-effort; gated by household prefs).
-  const accountName = accounts.find((a) => a.id === tx.account_id)?.name ?? null
-  await notifyTransactionInserted(householdId, {
-    amountCents: tx.amount_cents,
-    accountName,
-    description: tx.description,
-    ownerMemberId: tx.member_id ?? null,
-  })
-  await notifyBudgetOverspendIfCrossed(householdId, {
-    amountCents: tx.amount_cents,
-    categoryId: tx.category_id,
-    occurredOn: tx.occurred_on,
-  })
+  // Push notifications (best-effort; gated by household prefs). A row that
+  // just paired as a transfer between the household's own accounts is not
+  // new spending: nobody is pinged and no budget is charged for it.
+  if (!applied.transferLegIds.has(inserted!.id as string)) {
+    const accountName = accounts.find((a) => a.id === tx.account_id)?.name ?? null
+    await notifyTransactionInserted(householdId, {
+      amountCents: tx.amount_cents,
+      accountName,
+      description: tx.description,
+      ownerMemberId: tx.member_id ?? null,
+    })
+    await notifyBudgetOverspendIfCrossed(householdId, {
+      amountCents: tx.amount_cents,
+      categoryId: tx.category_id,
+      occurredOn: tx.occurred_on,
+    })
+  }
 
   return NextResponse.json({ status: 'inserted', transaction_id: inserted!.id }, { status: 200 })
 }
