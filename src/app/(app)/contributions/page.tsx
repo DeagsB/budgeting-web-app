@@ -104,8 +104,13 @@ export default async function ContributionsPage({
     for (const tx of rows) {
       const amt = Number(tx.amount_cents)
       const entry = out.get(tx.account_id) ?? { contributed: 0, withdrawn: 0 }
-      if (amt > 0) entry.contributed += amt
-      else entry.withdrawn += -amt
+      // Schema convention (initial_schema.sql, transactions.amount_cents):
+      // positive = outflow from the account, negative = inflow. A deposit
+      // into the TFSA is therefore the negative row, and a transfer from
+      // chequing counts here just like a payroll deposit would: the money
+      // really arrived in the registered account.
+      if (amt < 0) entry.contributed += -amt
+      else entry.withdrawn += amt
       out.set(tx.account_id, entry)
     }
     return out

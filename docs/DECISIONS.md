@@ -623,3 +623,14 @@ The per-account Out / In figures on the dashboard card backs stay as cashflow, b
 - *A review queue for candidate pairs*: the product rule is no review modes; pairs auto-apply and "Not a transfer" on the row is the escape hatch.
 - *Excluding legs from balances*: the money really moved, so balances, net worth and contributions must see both legs.
 
+## 2026-08-29 - Contributions count the inflow as the deposit
+
+**Context:** the contributions tracker read `amount_cents > 0` on TFSA / RRSP / FHSA rows as money contributed, but positive is money leaving the account (`transactions.amount_cents` comment in `20260419000001_initial_schema.sql`, `src/lib/plaid.ts`, `src/lib/balances.ts`).
+A chequing -> TFSA transfer lands on the TFSA as a negative row and was reported as a withdrawal; transfer detection made that visible.
+
+**Decision:**
+- `netsByAccount` in `src/app/(app)/contributions/page.tsx` counts `amt < 0` as contributed and `amt > 0` as withdrawn, the same convention every other report uses.
+- Transfer legs are not excluded there: a deposit into a registered account is a contribution whether or not Maple paired it with the chequing leg.
+
+**Considered + rejected:**
+- *Keeping the inverted reading for rows entered by hand under the old page*: one sign convention across the app is worth more than preserving a number that was already wrong for every Plaid-fed row.
