@@ -11,6 +11,10 @@ export type BankConnection = {
   lastSyncedAt: string | null
   needsAccountReview: boolean
   accountNames: string[]
+  /** False when someone else linked this bank: only they can sign in again. */
+  canReconnect: boolean
+  /** Display name of the member who linked it, when it is not you. */
+  ownerName: string | null
 }
 
 /** Setup card: linked banks at a glance, with a link to the full sync page. */
@@ -58,17 +62,26 @@ export function BankConnections({ items }: { items: BankConnection[] }) {
                 </div>
                 {needsReconnect && (
                   <div className="flex items-center justify-between gap-3 rounded-md bg-paper-2 px-2.5 py-1">
-                    <span className="text-[12px] font-medium text-down">
-                      {it.status === 'pending_disconnect'
-                        ? 'About to disconnect. Reconnect to keep syncing.'
-                        : 'Needs reconnecting to keep syncing.'}
-                    </span>
-                    <Link
-                      href={plaidReconnectHref(it.id)}
-                      className="inline-flex min-h-[44px] shrink-0 items-center rounded-full bg-ink px-4 text-[12.5px] font-semibold text-cream transition-colors hover:bg-ink-2"
+                    {/* Reconnecting needs the bank's own credentials, so a
+                        member who did not link it is told who to ask rather
+                        than handed a button that cannot work for them. */}
+                    <span
+                      className={`text-[12px] font-medium ${it.canReconnect ? 'text-down' : 'text-ink-2'}`}
                     >
-                      Reconnect
-                    </Link>
+                      {!it.canReconnect
+                        ? `${it.ownerName ?? 'Whoever linked this bank'} needs to reconnect it.`
+                        : it.status === 'pending_disconnect'
+                          ? 'About to disconnect. Reconnect to keep syncing.'
+                          : 'Needs reconnecting to keep syncing.'}
+                    </span>
+                    {it.canReconnect && (
+                      <Link
+                        href={plaidReconnectHref(it.id)}
+                        className="inline-flex min-h-[44px] shrink-0 items-center rounded-full bg-ink px-4 text-[12.5px] font-semibold text-cream transition-colors hover:bg-ink-2"
+                      >
+                        Reconnect
+                      </Link>
+                    )}
                   </div>
                 )}
               </li>

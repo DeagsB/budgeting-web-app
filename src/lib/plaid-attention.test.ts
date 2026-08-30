@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { plaidAttentionAction, plaidAttentionKind, plaidAttentionTitle } from './plaid-attention'
+import {
+  plaidAttentionAction,
+  plaidAttentionKind,
+  plaidAttentionTitle,
+  plaidAttentionVisibleTo,
+} from './plaid-attention'
 
 describe('plaidAttentionKind', () => {
   it('asks for a reconnect whenever the bank dropped the connection', () => {
@@ -32,5 +37,26 @@ describe('copy and action', () => {
     const reconnect = { id: 'i2', kind: 'reconnect' as const, status: 'login_required' }
     expect(plaidAttentionTitle(reconnect)).toBe('needs you to sign in again')
     expect(plaidAttentionAction(reconnect)).toEqual({ label: 'Reconnect', href: '/transactions/import/plaid-setup?reauth=i2' })
+  })
+})
+
+describe('plaidAttentionVisibleTo', () => {
+  it('prompts the member who linked the bank', () => {
+    expect(plaidAttentionVisibleTo({ linked_by_user_id: 'u1' }, 'u1')).toBe(true)
+  })
+
+  it('stays quiet for everyone else in the household', () => {
+    // The reported bug: a shared CIBC card linked by one partner nagged the
+    // other, who cannot complete update-mode Link without the bank's own
+    // credentials.
+    expect(plaidAttentionVisibleTo({ linked_by_user_id: 'u1' }, 'u2')).toBe(false)
+  })
+
+  it('falls back to prompting everyone when no owner is recorded', () => {
+    // Items linked before the column existed, and items whose linker's login
+    // was deleted. Better a nag the wrong person can ignore than a broken
+    // bank nobody is ever told about.
+    expect(plaidAttentionVisibleTo({ linked_by_user_id: null }, 'u1')).toBe(true)
+    expect(plaidAttentionVisibleTo({ linked_by_user_id: null }, 'u2')).toBe(true)
   })
 })

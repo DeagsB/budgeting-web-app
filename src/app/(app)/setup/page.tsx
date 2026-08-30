@@ -11,6 +11,7 @@ import { CategoriesList } from './categories-list'
 import { NotificationSettings } from './notifications'
 import { BankConnections } from './bank-connections'
 import { DEFAULT_PREFS, type NotificationPrefs } from './notification-prefs'
+import { plaidAttentionVisibleTo } from '@/lib/plaid-attention'
 
 /**
  * Setup - the canonical home for household name, members, and categories.
@@ -49,7 +50,7 @@ export default async function SetupPage() {
       .gt('expires_at', new Date().toISOString()),
     supabase
       .from('plaid_items')
-      .select('id, institution_name, status, last_synced_at, needs_account_review')
+      .select('id, institution_name, status, last_synced_at, needs_account_review, linked_by_user_id')
       .eq('household_id', ctx.householdId)
       .neq('status', 'removed')
       .order('created_at', { ascending: true }),
@@ -61,6 +62,13 @@ export default async function SetupPage() {
       .is('archived_at', null)
       .order('name'),
   ])
+
+  // Who to name when a bank someone else linked needs reconnecting.
+  const memberNameByUserId = new Map(
+    (members ?? [])
+      .filter((m) => m.user_id)
+      .map((m) => [m.user_id as string, m.display_name as string]),
+  )
 
   return (
     <div className="flex flex-col gap-6 pb-10">
@@ -104,16 +112,21 @@ export default async function SetupPage() {
 
       <Card padding="lg">
         <BankConnections
-          items={(plaidItems ?? []).map((it) => ({
-            id: it.id as string,
-            institutionName: (it.institution_name as string | null) ?? 'Bank',
-            status: it.status as string,
-            lastSyncedAt: (it.last_synced_at as string | null) ?? null,
-            needsAccountReview: it.needs_account_review === true,
-            accountNames: (plaidAccounts ?? [])
-              .filter((a) => a.plaid_item_id === it.id)
-              .map((a) => a.name as string),
-          }))}
+          items={(plaidItems ?? []).map((it) => {
+            const linkedBy = (it.linked_by_user_id as string | null) ?? null
+            return {
+              id: it.id as string,
+              institutionName: (it.institution_name as string | null) ?? 'Bank',
+              status: it.status as string,
+              lastSyncedAt: (it.last_synced_at as string | null) ?? null,
+              needsAccountReview: it.needs_account_review === true,
+              accountNames: (plaidAccounts ?? [])
+                .filter((a) => a.plaid_item_id === it.id)
+                .map((a) => a.name as string),
+              canReconnect: plaidAttentionVisibleTo({ linked_by_user_id: linkedBy }, ctx.userId),
+              ownerName: linkedBy ? (memberNameByUserId.get(linkedBy) ?? null) : null,
+            }
+          })}
         />
       </Card>
 

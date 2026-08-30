@@ -17,6 +17,8 @@ export type PlaidAttentionItem = {
   institution_name: string | null
   status: string
   last_synced_at: string | null
+  /** Login that linked the bank; null for items linked before we recorded it. */
+  linked_by_user_id: string | null
   kind: PlaidAttentionKind
 }
 
@@ -32,17 +34,37 @@ export function plaidAttentionKind(
 }
 
 /**
- * Linked banks in this household that need the user's attention. Read
- * through the caller's own client so RLS applies; every member may see this.
+ * Pure: is this bank's prompt THIS user's to act on?
+ *
+ * Reconnecting runs update-mode Link, which asks for the bank's own
+ * credentials - only the person who linked the item can finish it. Everyone
+ * else gets a nag they cannot clear, so they are not shown one.
+ *
+ * A null owner (every item linked before the column existed, or one whose
+ * linker's login was deleted) stays visible to the whole household: an
+ * unowned broken connection nobody is told about would just rot.
+ */
+export function plaidAttentionVisibleTo(
+  item: { linked_by_user_id: string | null },
+  userId: string,
+): boolean {
+  return item.linked_by_user_id === null || item.linked_by_user_id === userId
+}
+
+/**
+ * Linked banks that need THIS user's attention. Read through the caller's own
+ * client so RLS applies; the result is then narrowed to the items this user
+ * linked (plus unowned ones) - see `plaidAttentionVisibleTo`.
  */
 export async function getPlaidAttention(
   supabase: SupabaseClient,
   householdId: string,
+  userId: string,
 ): Promise<PlaidAttentionItem[]> {
   const [{ data: items }, { data: mapped }] = await Promise.all([
     supabase
       .from('plaid_items')
-      .select('id, institution_name, status, last_synced_at')
+      .select('id, institution_name, status, last_synced_at, linked_by_user_id')
       .eq('household_id', householdId)
       .neq('status', 'removed')
       .order('institution_name'),
@@ -60,6 +82,7 @@ export async function getPlaidAttention(
   }
   const out: PlaidAttentionItem[] = []
   for (const it of (items ?? []) as Array<Omit<PlaidAttentionItem, 'kind'>>) {
+    if (!plaidAttentionVisibleTo(it, userId)) continue
     const kind = plaidAttentionKind(it, mappedCount.get(it.id) ?? 0)
     if (kind) out.push({ ...it, kind })
   }

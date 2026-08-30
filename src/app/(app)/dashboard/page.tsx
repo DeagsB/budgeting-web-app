@@ -147,7 +147,7 @@ export default async function DashboardPage() {
       .eq('household_id', ctx.householdId),
     // Linked banks that have stopped feeding transactions/balances and need
     // reconnecting - rendered as a notice under the greeting.
-    getPlaidAttention(supabase, ctx.householdId),
+    getPlaidAttention(supabase, ctx.householdId, ctx.userId),
     // Legs of own-account transfers. Income / Spent, the category breakdown,
     // recurring detection and the "to categorize" pile skip them; balances,
     // the net-worth trail and the per-account card stats keep them because

@@ -4,7 +4,12 @@ import { getHouseholdContext } from '@/lib/household'
 import { accountTypeLabel, LIABILITY_TYPES, type AccountType } from '@/lib/domain'
 import { monthStartISO } from '@/lib/format'
 import { accountBalanceAt, groupSnapsByAccount, groupTxByAccount } from '@/lib/balances'
-import { getPlaidAttention, plaidReconnectHref, PLAID_ATTENTION_STATUSES } from '@/lib/plaid-attention'
+import {
+  getPlaidAttention,
+  plaidAttentionVisibleTo,
+  plaidReconnectHref,
+  PLAID_ATTENTION_STATUSES,
+} from '@/lib/plaid-attention'
 import { formatSyncedAt } from '@/lib/relative-time'
 import { PageHeader } from '@/components/ui/page-header'
 import { Card } from '@/components/ui/card'
@@ -58,9 +63,9 @@ export default async function AccountsPage({
       // only the unhealthy ones ReauthNotice cares about.
       supabase
         .from('plaid_items')
-        .select('id, institution_name, status, last_synced_at')
+        .select('id, institution_name, status, last_synced_at, linked_by_user_id')
         .eq('household_id', ctx.householdId),
-      getPlaidAttention(supabase, ctx.householdId),
+      getPlaidAttention(supabase, ctx.householdId, ctx.userId),
     ])
 
   const itemById = new Map(
@@ -70,6 +75,7 @@ export default async function AccountsPage({
         institutionName: i.institution_name as string | null,
         status: i.status as string,
         lastSyncedAt: i.last_synced_at as string | null,
+        linkedByUserId: (i.linked_by_user_id as string | null) ?? null,
       },
     ]),
   )
@@ -206,7 +212,13 @@ export default async function AccountsPage({
             {visible.map((a) => {
               const linked = !!a.plaid_account_id
               const item = a.plaid_item_id ? itemById.get(a.plaid_item_id as string) : undefined
-              const needsReconnect = linked && !!item && attentionStatuses.includes(item.status)
+              // Only the member who linked the bank can complete update-mode
+              // Link, so only they are told the row needs reconnecting.
+              const needsReconnect =
+                linked &&
+                !!item &&
+                attentionStatuses.includes(item.status) &&
+                plaidAttentionVisibleTo({ linked_by_user_id: item.linkedByUserId }, ctx.userId)
               return (
                 <AccountRow
                   key={a.id}

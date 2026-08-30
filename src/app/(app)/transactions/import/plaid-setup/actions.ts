@@ -199,6 +199,9 @@ export async function exchangePublicToken(
         institution_name: institution?.name ?? null,
         institution_id: institution?.id ?? null,
         status: 'active',
+        // Whose bank this is. Reconnect prompts go to this login only - the
+        // rest of the household cannot sign in at the bank on their behalf.
+        linked_by_user_id: ctx.userId,
       })
       .select('id')
       .single()
@@ -503,13 +506,25 @@ export async function completeReauth(itemRowId: string | null): Promise<PlaidSyn
 
   let query = service
     .from('plaid_items')
-    .select('id, household_id, item_id, cursor, status')
+    .select('id, household_id, item_id, cursor, status, linked_by_user_id')
     .eq('household_id', ctx.householdId)
     .neq('status', 'removed')
   query = itemRowId ? query.eq('id', itemRowId) : query.in('status', [...PLAID_ATTENTION_STATUSES])
   const { data: items } = await query
   if (!items || items.length === 0) {
     return { error: itemRowId ? 'Bank not found.' : 'No bank was waiting to be reconnected.' }
+  }
+
+  // Banks linked before we recorded an owner still prompt the whole
+  // household. Whoever actually reconnects one just proved they hold its
+  // credentials, so they claim it and the rest stop being nagged.
+  const unowned = items.filter((it) => it.linked_by_user_id === null).map((it) => it.id as string)
+  if (unowned.length > 0) {
+    await service
+      .from('plaid_items')
+      .update({ linked_by_user_id: ctx.userId })
+      .in('id', unowned)
+      .is('linked_by_user_id', null)
   }
 
   let added = 0
