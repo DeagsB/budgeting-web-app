@@ -89,7 +89,7 @@ export function latest(prefix: string, label: string): string | null {
   if (!fs.existsSync(OUT_DIR)) return null
   const files = fs
     .readdirSync(OUT_DIR)
-    .filter((f) => f.startsWith(`${prefix}-${label}-`) && f.endsWith('.json'))
+    .filter((f) => f.startsWith(`${prefix}-${label}-`) && f.endsWith('.json') && !f.includes('.summary.'))
     .sort()
   return files.length ? path.join(OUT_DIR, files[files.length - 1]) : null
 }
