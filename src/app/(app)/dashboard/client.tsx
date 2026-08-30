@@ -78,11 +78,13 @@ function loadLayout(): WidgetId[] {
 }
 
 function loadHideBalances(): boolean {
-  if (typeof window === 'undefined') return false
+  // Balances are hidden by default: only an explicit "show" choice ('0')
+  // reveals them, so a fresh device / cleared storage errs on privacy.
+  if (typeof window === 'undefined') return true
   try {
-    return localStorage.getItem(HIDE_BALANCES_KEY) === '1'
+    return localStorage.getItem(HIDE_BALANCES_KEY) !== '0'
   } catch {
-    return false
+    return true
   }
 }
 
@@ -177,10 +179,10 @@ export function DashboardClient({
   /** Linked banks that need reconnecting, rendered under the greeting. */
   plaidAttention: PlaidAttentionItem[]
 }) {
-  // Hide-balances state: SSR + first paint default to shown; the persisted
-  // choice swaps in after mount so hydration stays clean (same pattern as
-  // the layout below).
-  const [hidden, setHidden] = useState(false)
+  // Hide-balances state: SSR + first paint default to hidden so figures are
+  // never briefly readable before the persisted choice swaps in after mount
+  // (same pattern as the layout below, but erring on privacy).
+  const [hidden, setHidden] = useState(true)
   const [addOpen, setAddOpen] = useState(false)
   // The tab bar's centre "+" opens this sheet while the dashboard is mounted.
   useQuickAddTarget(accounts.length > 0 ? () => setAddOpen(true) : null)
