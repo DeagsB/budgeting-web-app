@@ -22,7 +22,9 @@ async function main() {
     await page.goto(`${BASE_URL}/dashboard`, { waitUntil: 'load', timeout: 120_000 })
     await page.waitForFunction(() => performance.getEntriesByName('maple:dashboard-hydrated').length > 0, null, { timeout: 60_000 })
     await page.waitForTimeout(2500)
-    const svg = page.locator('[data-perf="hero"]').locator('xpath=ancestor::*[contains(@class,"relative")][1]').locator('svg.cursor-crosshair').first()
+    // The net-worth area chart is the only crosshair-cursor svg on the page.
+    const svg = page.locator('svg.cursor-crosshair').first()
+    await svg.waitFor({ timeout: 15_000 })
     const box = await svg.boundingBox()
     if (!box) throw new Error('chart not found')
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: CPU_THROTTLE })
