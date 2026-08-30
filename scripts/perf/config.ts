@@ -3,8 +3,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-export const ROOT = path.resolve(import.meta.dirname, '..', '..')
-export const OUT_DIR = path.join(ROOT, '.perf')
+// PERF_ROOT points bundle.ts at another checkout's .next (e.g. a worktree
+// of the pre-optimisation commit); results still land in this repo's .perf.
+export const ROOT = process.env.PERF_ROOT ?? path.resolve(import.meta.dirname, '..', '..')
+export const OUT_DIR = path.join(path.resolve(import.meta.dirname, '..', '..'), '.perf')
 // One saved login per engine: cookies exported by WebKit carry
 // SameSite=None without Secure, which Chromium refuses to send.
 export const statePath = (engine: string) => path.join(OUT_DIR, `state-${engine}.json`)
