@@ -3,9 +3,14 @@
 import type { ReactNode } from 'react'
 
 /**
- * Wraps sensitive numbers with a blur filter when `hidden` is true. Animated
- * via a 280ms filter transition; can be applied inline without affecting
- * layout (display is inline-block only when hidden).
+ * Wraps sensitive numbers and smudges them out when `hidden` is true.
+ *
+ * Implementation: transparent text fill + a text-shadow in the text's own
+ * color. Reads exactly like the old `filter: blur()` but never creates a
+ * filter layer - the dashboard shows a dozen of these at once and WebKit
+ * pays for every live blur region on scroll and during view transitions.
+ * Only text is hidden, which is fine: every consumer wraps formatted money
+ * strings / <Amount> spans, nothing graphical.
  */
 export function PrivacyBlur({
   hidden,
@@ -20,8 +25,12 @@ export function PrivacyBlur({
 }) {
   return (
     <span
-      className={`inline-block transition-[filter] duration-[280ms] ${className}`}
-      style={{ filter: hidden ? `blur(${strength}px) saturate(0.8)` : 'none' }}
+      className={`inline-block ${className}`}
+      style={
+        hidden
+          ? { WebkitTextFillColor: 'transparent', textShadow: `0 0 ${strength + 2}px currentColor` }
+          : undefined
+      }
     >
       {children}
     </span>
