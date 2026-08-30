@@ -1,6 +1,14 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import { createContext, useContext, type ReactNode } from 'react'
+
+/**
+ * Whether balances are hidden, for PrivacyBlur consumers rendered from
+ * server components (the dashboard's display-only widgets), where threading
+ * the client-side toggle through props is impossible. Defaults to hidden -
+ * the privacy-safe first frame.
+ */
+export const HideBalancesContext = createContext(true)
 
 /**
  * Wraps sensitive numbers and smudges them out when `hidden` is true.
@@ -18,16 +26,19 @@ export function PrivacyBlur({
   strength = 6,
   className = '',
 }: {
-  hidden: boolean
+  /** Omit to follow HideBalancesContext (the dashboard's eye toggle). */
+  hidden?: boolean
   children: ReactNode
   strength?: number
   className?: string
 }) {
+  const contextHidden = useContext(HideBalancesContext)
+  const isHidden = hidden ?? contextHidden
   return (
     <span
       className={`inline-block ${className}`}
       style={
-        hidden
+        isHidden
           ? { WebkitTextFillColor: 'transparent', textShadow: `0 0 ${strength + 2}px currentColor` }
           : undefined
       }

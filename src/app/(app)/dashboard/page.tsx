@@ -14,6 +14,17 @@ import {
   groupSnapsByAccount,
 } from '@/lib/balances'
 import { DashboardClient } from './client'
+import {
+  BudgetLeftWidget,
+  BudgetProgressWidget,
+  GoalsWidget,
+  InboxWidget,
+  MonthStatsWidget,
+  PaceWidget,
+  RecentActivityWidget,
+  RecurringWidget,
+  SpendingWidget,
+} from './widgets'
 import { computeInboxSummary } from './inbox'
 import { categoryBudgetsLeftToSpend } from './category-budgets'
 
@@ -398,6 +409,9 @@ export default async function DashboardPage() {
   const dailyPace = daysElapsed > 0 ? expenses / daysElapsed : 0
   const projectedMonth = Math.round(dailyPace * daysInMonth)
 
+  const net = income - expenses
+  const pace = { dailyPace, projectedMonth, daysElapsed, daysInMonth }
+
   return (
     <DashboardClient
       householdName={household.name}
@@ -407,27 +421,21 @@ export default async function DashboardPage() {
       netWorth={netWorth}
       netWorthDelta={netWorthDelta}
       netWorthTrail={netWorthTrail}
-      income={income}
-      expenses={expenses}
-      net={income - expenses}
       accounts={accountsWithBalance}
-      spendingBreakdown={spendingBreakdown}
-      totalBudget={totalBudget}
-      categoryBudgets={categoryBudgets}
-      goals={goals}
-      recurring={recurring}
-      recurringTotal={recurringTotal}
-      recentActivity={recentActivity}
-      pace={{
-        dailyPace,
-        projectedMonth,
-        daysElapsed,
-        daysInMonth,
-      }}
       categories={categories.map((c) => ({ id: c.id, parent_id: c.parent_id, name: c.name }))}
       hasError={hasError}
-      inbox={inbox}
       plaidAttention={plaidAttentionItems}
+      slots={{
+        inbox: <InboxWidget inbox={inbox} />,
+        'month-stats': <MonthStatsWidget income={income} expenses={expenses} net={net} />,
+        'budget-left': <BudgetLeftWidget categoryBudgets={categoryBudgets} />,
+        'budget-progress': <BudgetProgressWidget totalBudget={totalBudget} expenses={expenses} />,
+        pace: <PaceWidget pace={pace} />,
+        spending: <SpendingWidget spendingBreakdown={spendingBreakdown} />,
+        recurring: <RecurringWidget recurring={recurring} recurringTotal={recurringTotal} />,
+        goals: <GoalsWidget goals={goals} />,
+        'recent-activity': <RecentActivityWidget recentActivity={recentActivity} />,
+      }}
     />
   )
 }
