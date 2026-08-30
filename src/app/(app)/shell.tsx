@@ -14,6 +14,7 @@ import { PullToSync } from '@/components/pull-to-sync'
 import { useScrollLock } from '@/lib/use-scroll-lock'
 import { useOnline } from '@/lib/run-action'
 import { QuickAddProvider, useQuickAdd } from '@/lib/quick-add'
+import { useStoredValue, writeStoredValue } from '@/lib/use-stored-value'
 import { IOSInstallHintGate } from '@/components/pwa/ios-install-hint-gate'
 
 /**
@@ -204,11 +205,10 @@ function normalizeTabs(input: readonly string[]): string[] {
   return out
 }
 
-function loadTabs(): string[] {
-  if (typeof window === 'undefined') return DEFAULT_TABS
+// Pure parser for the persisted tab order (see useStoredValue).
+function parseTabs(raw: string | null): string[] {
+  if (!raw) return DEFAULT_TABS
   try {
-    const raw = localStorage.getItem(TAB_STORAGE_KEY)
-    if (!raw) return DEFAULT_TABS
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) return DEFAULT_TABS
     return normalizeTabs(parsed.filter((h): h is string => typeof h === 'string'))
@@ -309,19 +309,13 @@ function AppShellInner({
       },
     }
   }
-  // Hydrate-safe: render the default order on SSR + first paint, then swap
-  // to the persisted choice once we can read localStorage. Avoids hydration
-  // mismatch warnings.
-  const [tabHrefs, setTabHrefs] = useState<string[]>(DEFAULT_TABS)
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTabHrefs(loadTabs())
-  }, [])
+  // Hydrate-safe: the server snapshot is the default order, the persisted
+  // choice is read synchronously on the client (no second commit, no
+  // hydration mismatch).
+  const tabHrefs = useStoredValue(TAB_STORAGE_KEY, parseTabs, DEFAULT_TABS)
 
   function saveTabs(next: string[]) {
-    const clean = normalizeTabs(next)
-    setTabHrefs(clean)
-    try { localStorage.setItem(TAB_STORAGE_KEY, JSON.stringify(clean)) } catch {}
+    writeStoredValue(TAB_STORAGE_KEY, JSON.stringify(normalizeTabs(next)))
   }
 
   const closeMore = () => setMoreOpen(false)

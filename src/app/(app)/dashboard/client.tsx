@@ -17,6 +17,7 @@ import { useCountUp } from '@/components/ui/count-up'
 import { useQuickAddTarget } from '@/lib/quick-add'
 import { colorForCategory } from '@/lib/category-colors'
 import { DEFAULT_LAYOUT, WIDGETS, type WidgetId } from './layout-config'
+import { useStoredValue, writeStoredValue } from '@/lib/use-stored-value'
 import { ReauthNotice } from '@/components/plaid/reauth-notice'
 import type { PlaidAttentionItem } from '@/lib/plaid-attention'
 
@@ -48,11 +49,10 @@ const DashboardEditor = dynamic(
 const LAYOUT_KEY = 'maple.dashboardLayout.v1'
 const HIDE_BALANCES_KEY = 'maple.hideBalances.v1'
 
-function loadLayout(): WidgetId[] {
-  if (typeof window === 'undefined') return DEFAULT_LAYOUT
+// Pure parsers for the persisted dashboard preferences (see useStoredValue).
+function parseLayout(raw: string | null): WidgetId[] {
+  if (!raw) return DEFAULT_LAYOUT
   try {
-    const raw = localStorage.getItem(LAYOUT_KEY)
-    if (!raw) return DEFAULT_LAYOUT
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) return DEFAULT_LAYOUT
     const valid = parsed.filter((id): id is WidgetId =>
@@ -64,15 +64,10 @@ function loadLayout(): WidgetId[] {
   }
 }
 
-function loadHideBalances(): boolean {
+function parseHideBalances(raw: string | null): boolean {
   // Balances are hidden by default: only an explicit "show" choice ('0')
   // reveals them, so a fresh device / cleared storage errs on privacy.
-  if (typeof window === 'undefined') return true
-  try {
-    return localStorage.getItem(HIDE_BALANCES_KEY) !== '0'
-  } catch {
-    return true
-  }
+  return raw !== '0'
 }
 
 type MemberVM = { id: string; name: string; initial: string }
@@ -166,25 +161,19 @@ export function DashboardClient({
   /** Linked banks that need reconnecting, rendered under the greeting. */
   plaidAttention: PlaidAttentionItem[]
 }) {
-  // Hide-balances state: SSR + first paint default to hidden so figures are
-  // never briefly readable before the persisted choice swaps in after mount
-  // (same pattern as the layout below, but erring on privacy).
-  const [hidden, setHidden] = useState(true)
+  // Hide-balances state: the server snapshot is "hidden" so figures are
+  // never readable before the persisted choice is read on the client.
+  const hidden = useStoredValue(HIDE_BALANCES_KEY, parseHideBalances, true)
   const [addOpen, setAddOpen] = useState(false)
   // The tab bar's centre "+" opens this sheet while the dashboard is mounted.
   useQuickAddTarget(accounts.length > 0 ? () => setAddOpen(true) : null)
   const [range, setRange] = useState<RangeId>('1Y')
   const [scrubIdx, setScrubIdx] = useState<number | null>(null)
   const [flipped, setFlipped] = useState<Record<string, boolean>>({})
-  // Layout state: SSR + first paint use the default order; the persisted
-  // selection swaps in after mount so hydration stays clean.
-  const [layout, setLayout] = useState<WidgetId[]>(DEFAULT_LAYOUT)
+  // Layout state: the server snapshot is the default order; the persisted
+  // selection is read synchronously on the client (no second commit).
+  const layout = useStoredValue(LAYOUT_KEY, parseLayout, DEFAULT_LAYOUT)
   const [editOpen, setEditOpen] = useState(false)
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLayout(loadLayout())
-    setHidden(loadHideBalances())
-  }, [])
   // Perf marker read by scripts/perf (dashboard hydrated + interactive).
   useEffect(() => {
     performance.mark('maple:dashboard-hydrated')
@@ -194,15 +183,10 @@ export function DashboardClient({
     return () => clearTimeout(t)
   }, [])
   function saveLayout(next: WidgetId[]) {
-    setLayout(next)
-    try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(next)) } catch {}
+    writeStoredValue(LAYOUT_KEY, JSON.stringify(next))
   }
   function toggleHidden() {
-    setHidden((h) => {
-      const next = !h
-      try { localStorage.setItem(HIDE_BALANCES_KEY, next ? '1' : '0') } catch {}
-      return next
-    })
+    writeStoredValue(HIDE_BALANCES_KEY, hidden ? '0' : '1')
   }
 
   // Count up from last month's figure so the first frame is a real number,
