@@ -35,11 +35,15 @@ export async function updateSession(request: NextRequest) {
     },
   )
 
-  // Verified user fetch - triggers session refresh if the access token expired.
-  let user = null
+  // Verified claims fetch. With asymmetric JWT signing keys this validates
+  // the token locally against the cached JWKS (no auth-server round trip on
+  // every request); a session close to expiry is refreshed first, and on
+  // symmetric-key projects it falls back to a server-side check exactly like
+  // getUser(). Never trusts the cookie contents unverified.
+  let user: { sub: string } | null = null
   try {
-    const { data } = await supabase.auth.getUser()
-    user = data?.user
+    const { data } = await supabase.auth.getClaims()
+    user = data?.claims ?? null
   } catch (e) {
     console.error('Supabase auth error in proxy:', e)
   }
