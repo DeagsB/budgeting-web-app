@@ -5,11 +5,14 @@ import { ensureState } from './auth.ts'
 import {
   BASE_URL, CPU_THROTTLE, DEVICE, NETWORK, RUNS, arg, round, stamp, summarize, writeJson,
 } from './config.ts'
-import { INIT_SCRIPT, PWA_SCRIPT } from './init-script.ts'
+import { INIT_SCRIPT, NO_VIEW_TRANSITIONS_SCRIPT, PWA_SCRIPT } from './init-script.ts'
 
 const label = arg('label', 'baseline')
 const route = arg('route', '/dashboard')
 const runs = Number(arg('runs', String(RUNS)))
+// --no-vt stubs document.startViewTransition to isolate the cost of the
+// initial Suspense-reveal transition on cold load.
+const noVt = process.argv.includes('--no-vt')
 
 async function measure(page: Page): Promise<Record<string, number>> {
   const cdp = await page.context().newCDPSession(page)
@@ -78,6 +81,7 @@ async function main() {
   const all: Record<string, number>[] = []
   for (let i = 0; i < runs; i++) {
     const context = await browser.newContext({ ...DEVICE, storageState: state })
+    if (noVt) await context.addInitScript(NO_VIEW_TRANSITIONS_SCRIPT)
     await context.addInitScript(PWA_SCRIPT)
     await context.addInitScript(INIT_SCRIPT)
     const page = await context.newPage()
@@ -88,7 +92,7 @@ async function main() {
   }
   await browser.close()
   const result = {
-    label, route, runs, cpuThrottle: CPU_THROTTLE, network: NETWORK,
+    label, route, runs, cpuThrottle: CPU_THROTTLE, network: NETWORK, viewTransitions: !noVt,
     engine: `chromium ${browser.version()}`, summary: summarize(all), raw: all,
   }
   const p = writeJson(`chrome-${label}-${stamp()}.json`, result)
