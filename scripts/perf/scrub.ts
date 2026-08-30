@@ -14,7 +14,8 @@ async function main() {
   const browser = await chromium.launch()
   const all: Record<string, number>[] = []
   for (let i = 0; i < runs; i++) {
-    const context = await browser.newContext({ ...DEVICE, storageState: state })
+    // Cold = true first visit: no service worker, empty HTTP cache.
+    const context = await browser.newContext({ ...DEVICE, storageState: state, serviceWorkers: 'block' })
     await context.addInitScript(PWA_SCRIPT)
     await context.addInitScript(INIT_SCRIPT)
     const page = await context.newPage()
