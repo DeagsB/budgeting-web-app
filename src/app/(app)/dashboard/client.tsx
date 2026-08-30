@@ -412,9 +412,14 @@ export function DashboardClient({
             <svg
               viewBox={`0 0 ${chartW} ${chartH}`}
               preserveAspectRatio="none"
-              className="block h-[150px] w-full cursor-crosshair touch-none"
+              className="block h-[150px] w-full cursor-crosshair touch-pan-y"
               onPointerMove={handleScrub}
               onPointerLeave={() => setScrubIdx(null)}
+              onPointerUp={() => setScrubIdx(null)}
+              // touch-pan-y hands a vertical drag to the page; the browser
+              // then cancels the pointer, so the crosshair is cleared here
+              // instead of being stranded mid-chart.
+              onPointerCancel={() => setScrubIdx(null)}
             >
               <defs>
                 <linearGradient id="netWorthArea" x1="0" x2="0" y1="0" y2="1">

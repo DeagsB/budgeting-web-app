@@ -114,7 +114,7 @@ export function NetWorthHero({
         <svg
           viewBox={`0 0 ${W} ${H}`}
           preserveAspectRatio="none"
-          className="block h-[180px] w-full cursor-crosshair touch-none sm:h-[200px]"
+          className="block h-[180px] w-full cursor-crosshair touch-pan-y sm:h-[200px]"
           role="img"
           aria-label="Net worth trend over the last 24 months"
           onPointerDown={handleScrub}
@@ -123,6 +123,9 @@ export function NetWorthHero({
           }}
           onPointerLeave={() => setScrubIdx(null)}
           onPointerUp={() => setScrubIdx(null)}
+          // The page keeps vertical panning (touch-pan-y); when it takes the
+          // gesture the pointer is cancelled, so drop the crosshair too.
+          onPointerCancel={() => setScrubIdx(null)}
         >
           <defs>
             <linearGradient id="nwFill" x1="0" x2="0" y1="0" y2="1">

@@ -42,7 +42,14 @@ export function seriesToPoints(
 
 /**
  * Smooth cubic-Bezier path through the given points. Uses a Catmull-Rom-style
- * tangent estimate for control points.
+ * tangent estimate for control points, with the tangent flattened at every
+ * local peak and trough so the curve never leaves the data's own y-range.
+ *
+ * Without that flattening a step up to a new plateau (a big deposit landing in
+ * a net-worth trail) overshoots its own maximum by more than the chart's pad
+ * and the peak gets sliced off by the top of the viewBox. Zeroing the vertical
+ * tangent where the series turns is the Fritsch-Carlson monotone rule, and it
+ * keeps the curve smooth everywhere it is genuinely rising or falling.
  */
 export function smoothPath(
   points: [number, number][],
@@ -52,7 +59,15 @@ export function smoothPath(
   const cps = points.map((_, i, a) => {
     const prev = a[Math.max(0, i - 1)]
     const next = a[Math.min(a.length - 1, i + 1)]
-    return [(next[0] - prev[0]) * tension, (next[1] - prev[1]) * tension] as [number, number]
+    const rising = a[i][1] - prev[1]
+    const falling = next[1] - a[i][1]
+    // <= 0 covers a turn, a flat shoulder, and both endpoints (where prev or
+    // next is the point itself) - all the places an overshoot starts.
+    const turns = rising * falling <= 0
+    return [
+      (next[0] - prev[0]) * tension,
+      turns ? 0 : (next[1] - prev[1]) * tension,
+    ] as [number, number]
   })
   let d = `M${points[0][0]},${points[0][1]}`
   for (let i = 1; i < points.length; i += 1) {
