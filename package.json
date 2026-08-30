@@ -9,7 +9,15 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "perf:auth": "node scripts/perf/auth.ts",
+    "perf:bundle": "node scripts/perf/bundle.ts",
+    "perf:webkit": "node scripts/perf/webkit.ts",
+    "perf:chrome": "node scripts/perf/chrome-tbt.ts",
+    "perf:lh": "node scripts/perf/lighthouse.ts",
+    "perf:fonts": "node scripts/perf/font-audit.ts",
+    "perf:report": "node scripts/perf/report.ts",
+    "perf:all": "node scripts/perf/all.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",
@@ -32,7 +40,9 @@
     "@types/web-push": "^3.6.4",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "lighthouse": "^13.4.1",
     "pg": "^8.23.0",
+    "playwright": "^1.62.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.11"

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
+import { perfTimer } from '@/lib/perf-timing'
 import { addMonths, monthStartISO } from '@/lib/format'
 import { type AccountType } from '@/lib/domain'
 import { effectiveBudgets, type BudgetOverride, type StandingBudget } from '@/lib/budget'
@@ -34,9 +35,11 @@ type Snapshot = {
 }
 
 export default async function DashboardPage() {
+  const lap = perfTimer('dashboard')
   const supabase = await createClient()
   const ctx = await getHouseholdContext()
   if (!ctx) return null
+  lap('ctx')
 
   const currentMonth = monthStartISO()
   const monthStart12 = addMonths(currentMonth, -11)
@@ -154,6 +157,7 @@ export default async function DashboardPage() {
     // the money really moved between those accounts.
     loadTransferLegIds(supabase, ctx.householdId),
   ])
+  lap('queries')
 
   // If any query errored, the derived figures below silently read as $0/empty.
   // Surface a flag so the client can warn the user instead of presenting a

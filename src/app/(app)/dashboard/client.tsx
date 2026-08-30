@@ -198,6 +198,10 @@ export function DashboardClient({
     setLayout(loadLayout())
     setHidden(loadHideBalances())
   }, [])
+  // Perf marker read by scripts/perf (dashboard hydrated + interactive).
+  useEffect(() => {
+    performance.mark('maple:dashboard-hydrated')
+  }, [])
   function saveLayout(next: WidgetId[]) {
     setLayout(next)
     try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(next)) } catch {}
@@ -361,7 +365,10 @@ export function DashboardClient({
               <div className="text-[11px] font-bold uppercase tracking-[0.10em] text-white/70">
                 Net worth
               </div>
-              <div className="mt-2 font-serif text-[48px] leading-none tracking-[-0.03em] tabular-nums md:text-[64px]">
+              <div
+                data-perf="hero"
+                className="mt-2 font-serif text-[48px] leading-none tracking-[-0.03em] tabular-nums md:text-[64px]"
+              >
                 <PrivacyBlur hidden={hidden}>{formatMoney(displayedValue)}</PrivacyBlur>
               </div>
               <div className="mt-3 flex items-center gap-2 text-[13px]">

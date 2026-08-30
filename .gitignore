@@ -71,3 +71,7 @@ next-env.d.ts
 /rules-*.png
 /shared-*.png
 /settlements-*.png
+
+# perf harness output (scripts/perf)
+/.perf/
+/.perf-server.log

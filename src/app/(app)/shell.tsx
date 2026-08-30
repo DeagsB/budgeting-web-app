@@ -252,6 +252,11 @@ function AppShellInner({
   const online = useOnline()
   const quickAdd = useQuickAdd()
 
+  // Perf marker read by scripts/perf (hydration of the app chrome).
+  useEffect(() => {
+    performance.mark('maple:shell-hydrated')
+  }, [])
+
   // Mobile top-bar title for this route. The dashboard keeps the wordmark.
   const route = useMemo(() => resolveRoute(pathname), [pathname])
   const isHome = pathname === '/dashboard'
