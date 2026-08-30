@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { getHouseholdContext } from '@/lib/household'
 import { perfTimer } from '@/lib/perf-timing'
+import { withTimeout } from '@/lib/with-timeout'
 import { addMonths, monthStartISO } from '@/lib/format'
 import { type AccountType } from '@/lib/domain'
 import { effectiveBudgets, type BudgetOverride, type StandingBudget } from '@/lib/budget'
@@ -17,6 +18,10 @@ import { computeInboxSummary } from './inbox'
 import { categoryBudgetsLeftToSpend } from './category-budgets'
 
 export const dynamic = 'force-dynamic'
+
+// A stalled Supabase connection must surface the route's error boundary
+// (with its retry) instead of leaving the user on the loading skeleton.
+const QUERY_TIMEOUT_MS = 15_000
 
 type Account = {
   id: string
@@ -63,7 +68,7 @@ export default async function DashboardPage() {
     allSplitsRes,
     plaidAttentionItems,
     legIds,
-  ] = await Promise.all([
+  ] = await withTimeout(Promise.all([
     supabase.from('households').select('name').eq('id', ctx.householdId).maybeSingle(),
     supabase
       .from('members')
@@ -156,7 +161,7 @@ export default async function DashboardPage() {
     // the net-worth trail and the per-account card stats keep them because
     // the money really moved between those accounts.
     loadTransferLegIds(supabase, ctx.householdId),
-  ])
+  ]), QUERY_TIMEOUT_MS, 'dashboard queries')
   lap('queries')
 
   // If any query errored, the derived figures below silently read as $0/empty.
