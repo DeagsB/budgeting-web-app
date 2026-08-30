@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { formatMoney, formatMoneySigned, formatDate, monthLabel } from '@/lib/format'
 import { smoothPath, seriesToPoints } from '@/lib/maple'
 import { accountTypeLabel, LIABILITY_TYPES, type AccountType } from '@/lib/domain'
@@ -9,14 +10,13 @@ import { MapleLabel } from '@/components/ui/label'
 import { Amount } from '@/components/ui/amount'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Sheet } from '@/components/ui/sheet'
 import { StatTile } from '@/components/ui/stat-tile'
 import { Reveal } from '@/components/ui/reveal'
 import { PrivacyBlur } from '@/components/ui/privacy-blur'
 import { useCountUp } from '@/components/ui/count-up'
 import { useQuickAddTarget } from '@/lib/quick-add'
-import { AddTransactionForm } from '@/app/(app)/transactions/add-form'
 import { colorForCategory } from '@/lib/category-colors'
+import { DEFAULT_LAYOUT, WIDGETS, type WidgetId } from './layout-config'
 import { ReauthNotice } from '@/components/plaid/reauth-notice'
 import type { PlaidAttentionItem } from '@/lib/plaid-attention'
 
@@ -34,30 +34,17 @@ const HERO_CHART = '#9ad8b4'
 // Every dashboard section is addressable by id. The user picks which to show
 // and in what order via the Edit modal; their choice persists in localStorage.
 
-const WIDGETS = [
-  { id: 'greeting',        label: 'Greeting',        description: 'Month + name + member chips' },
-  { id: 'inbox',           label: 'To categorize',   description: 'Uncategorized transactions across every account' },
-  { id: 'net-worth',       label: 'Net worth',       description: 'Hero number + chart + range selector' },
-  { id: 'month-stats',     label: 'Month stats',     description: 'Income, Spent, Saved tiles' },
-  { id: 'budget-left',     label: 'Left to spend',   description: 'Per-category budget remaining, worst first' },
-  { id: 'budget-progress', label: 'Budget progress', description: 'This month spent vs budgeted' },
-  { id: 'pace',            label: 'Pace',            description: 'Daily spend + projected month-end' },
-  { id: 'accounts',        label: 'Accounts',        description: 'Horizontal scroll of flippable cards' },
-  { id: 'spending',        label: 'Where it went',   description: 'Top categories breakdown bar' },
-  { id: 'recurring',       label: 'Recurring',       description: 'Subscriptions + bills detected from last 3 months' },
-  { id: 'goals',           label: 'Goals',           description: 'Progress towards your savings goals' },
-  { id: 'recent-activity', label: 'Recent activity', description: 'Latest transactions across all accounts' },
-] as const
-type WidgetId = (typeof WIDGETS)[number]['id']
-const DEFAULT_LAYOUT: WidgetId[] = [
-  'greeting',
-  'inbox',
-  'net-worth',
-  'month-stats',
-  'budget-left',
-  'accounts',
-  'spending',
-]
+// Sheets are loaded on first open so the sheet primitive, the add form and
+// the layout editor stay off the cold-start critical path.
+const AddTransactionSheet = dynamic(
+  () => import('./add-sheet').then((m) => m.AddTransactionSheet),
+  { ssr: false },
+)
+const DashboardEditor = dynamic(
+  () => import('./editor').then((m) => m.DashboardEditor),
+  { ssr: false },
+)
+
 const LAYOUT_KEY = 'maple.dashboardLayout.v1'
 const HIDE_BALANCES_KEY = 'maple.hideBalances.v1'
 
@@ -201,6 +188,10 @@ export function DashboardClient({
   // Perf marker read by scripts/perf (dashboard hydrated + interactive).
   useEffect(() => {
     performance.mark('maple:dashboard-hydrated')
+    // Warm the add-transaction chunk once the page is idle; it's the most
+    // likely next tap and the service worker keeps it for later launches.
+    const t = setTimeout(() => { void import('./add-sheet') }, 2500)
+    return () => clearTimeout(t)
   }, [])
   function saveLayout(next: WidgetId[]) {
     setLayout(next)
@@ -1070,14 +1061,14 @@ export function DashboardClient({
               Add transaction
             </Button>
           </div>
-          <Sheet open={addOpen} onClose={() => setAddOpen(false)} title="Add transaction">
-            <AddTransactionForm
+          {addOpen && (
+            <AddTransactionSheet
+              onClose={() => setAddOpen(false)}
               defaultDate={currentMonthISO}
               accounts={accounts.map((a) => ({ id: a.id, name: a.name }))}
               categories={categories}
-              onSaved={() => setAddOpen(false)}
             />
-          </Sheet>
+          )}
         </>
       )}
 
@@ -1096,163 +1087,6 @@ export function DashboardClient({
         />
       )}
     </div>
-  )
-}
-
-// ─── Editor modal ─────────────────────────────────────────────────────────
-
-/**
- * Built on the shared <Sheet> primitive so it gets aria-modal, Esc-to-close,
- * focus trap, focus return and scroll lock for free. Mounted only while open
- * (the parent gates on `editOpen`), which is what resets the draft.
- */
-function DashboardEditor({
-  current,
-  onCancel,
-  onSave,
-}: {
-  current: WidgetId[]
-  onCancel: () => void
-  onSave: (next: WidgetId[]) => void
-}) {
-  const [draft, setDraft] = useState<WidgetId[]>(current)
-
-  function move(id: WidgetId, dir: -1 | 1) {
-    setDraft((prev) => {
-      const i = prev.indexOf(id)
-      if (i < 0) return prev
-      const j = i + dir
-      if (j < 0 || j >= prev.length) return prev
-      const next = prev.slice()
-      ;[next[i], next[j]] = [next[j], next[i]]
-      return next
-    })
-  }
-  function remove(id: WidgetId) {
-    setDraft((prev) => prev.filter((x) => x !== id))
-  }
-  function add(id: WidgetId) {
-    setDraft((prev) => (prev.includes(id) ? prev : [...prev, id]))
-  }
-
-  const visible = draft
-    .map((id) => WIDGETS.find((w) => w.id === id))
-    .filter((w): w is (typeof WIDGETS)[number] => !!w)
-  const hiddenWidgets = WIDGETS.filter((w) => !draft.includes(w.id))
-
-  const footer = (
-    <div className="flex items-center justify-between gap-3">
-      <button
-        type="button"
-        onClick={() => setDraft(DEFAULT_LAYOUT)}
-        className="-mx-2 inline-flex min-h-[44px] items-center px-2 text-[12.5px] font-semibold text-ink-2 transition-colors hover:text-ink"
-      >
-        Reset to default
-      </button>
-      <div className="flex gap-2">
-        <Button type="button" variant="secondary" size="sm" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="button" variant="primary" size="sm" onClick={() => onSave(draft)}>
-          Save
-        </Button>
-      </div>
-    </div>
-  )
-
-  return (
-    <Sheet open onClose={onCancel} title="Edit dashboard" footer={footer}>
-      <p className="-mt-2 mb-3 text-[12px] text-ink-2">
-        Choose your cards and use the arrows to reorder them.
-      </p>
-
-      <div className="-mx-2">
-          <div className="px-2 pb-1.5 text-[10.5px] font-bold uppercase tracking-[0.10em] text-ink-3">
-            On the dashboard ({visible.length})
-          </div>
-          <ul className="flex flex-col gap-1.5">
-            {visible.length === 0 && (
-              <li className="rounded-md border border-dashed border-hair bg-paper px-3 py-3 text-center text-[12.5px] text-ink-2">
-                Add a widget below to put it on the dashboard.
-              </li>
-            )}
-            {visible.map((w, i) => (
-              <li
-                key={w.id}
-                className="flex items-center gap-2 rounded-md border border-hair bg-paper px-3 py-2.5"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[14px] font-medium text-ink">
-                    {w.label}
-                  </div>
-                  <div className="truncate text-[11.5px] text-ink-3">
-                    {w.description}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => move(w.id, -1)}
-                  disabled={i === 0}
-                  aria-label={`Move ${w.label} up`}
-                  className="flex h-11 w-11 items-center justify-center rounded-full text-ink-2 disabled:opacity-30"
-                >
-                  <ArrowUpGlyph />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => move(w.id, 1)}
-                  disabled={i === visible.length - 1}
-                  aria-label={`Move ${w.label} down`}
-                  className="flex h-11 w-11 items-center justify-center rounded-full text-ink-2 disabled:opacity-30"
-                >
-                  <ArrowDownGlyph />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => remove(w.id)}
-                  aria-label={`Hide ${w.label}`}
-                  className="flex h-11 w-11 items-center justify-center rounded-full text-maple"
-                >
-                  <CloseGlyph />
-                </button>
-              </li>
-            ))}
-          </ul>
-
-          {hiddenWidgets.length > 0 && (
-            <>
-              <div className="mt-4 px-2 pb-1.5 text-[10.5px] font-bold uppercase tracking-[0.10em] text-ink-3">
-                Available widgets
-              </div>
-              <ul className="flex flex-col gap-1.5">
-                {hiddenWidgets.map((w) => (
-                  <li
-                    key={w.id}
-                    className="flex items-center gap-2 rounded-md border border-hair bg-paper-2 px-3 py-2.5"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-[14px] font-medium text-ink-2">
-                        {w.label}
-                      </div>
-                      <div className="truncate text-[11.5px] text-ink-3">
-                        {w.description}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => add(w.id)}
-                      aria-label={`Add ${w.label} to dashboard`}
-                      className="inline-flex min-h-[44px] items-center rounded-full border border-hair bg-paper px-3 text-[12px] font-semibold text-ink"
-                    >
-                      + Add
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-      </div>
-    </Sheet>
   )
 }
 
@@ -1276,27 +1110,6 @@ function AlertIcon() {
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
       <path d="M12 9v4M12 17h.01" />
-    </svg>
-  )
-}
-function CloseGlyph() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
-      <path d="M6 6l12 12M18 6L6 18" />
-    </svg>
-  )
-}
-function ArrowUpGlyph() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M12 19V5M5 12l7-7 7 7" />
-    </svg>
-  )
-}
-function ArrowDownGlyph() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M12 5v14M5 12l7 7 7-7" />
     </svg>
   )
 }

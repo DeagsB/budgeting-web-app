@@ -14,7 +14,7 @@ import { PullToSync } from '@/components/pull-to-sync'
 import { useScrollLock } from '@/lib/use-scroll-lock'
 import { useOnline } from '@/lib/run-action'
 import { QuickAddProvider, useQuickAdd } from '@/lib/quick-add'
-import { IOSInstallHint } from '@/components/pwa/ios-install-hint'
+import { IOSInstallHintGate } from '@/components/pwa/ios-install-hint-gate'
 
 /**
  * Maple shell. Light + dark are driven by the `.dark` class on <html>
@@ -737,7 +737,7 @@ function AppShellInner({
       )}
 
       {!online && <OfflineBanner />}
-      <IOSInstallHint />
+      <IOSInstallHintGate />
     </div>
     </ToastProvider>
     </ShellTitleContext.Provider>
