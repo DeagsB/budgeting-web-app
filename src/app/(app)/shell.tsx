@@ -257,6 +257,25 @@ function AppShellInner({
     performance.mark('maple:shell-hydrated')
   }, [])
 
+  // iOS suspends a backgrounded PWA and hands it back with whatever was on
+  // screen. After a long absence the figures are stale (Plaid syncs, the
+  // other member's entries), so re-run the server render on return; the
+  // shell and scroll position are kept because it is a soft refresh.
+  useEffect(() => {
+    const STALE_AFTER_MS = 5 * 60 * 1000
+    let hiddenAt: number | null = null
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now()
+        return
+      }
+      if (hiddenAt !== null && Date.now() - hiddenAt > STALE_AFTER_MS && navigator.onLine) router.refresh()
+      hiddenAt = null
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [router])
+
   // Mobile top-bar title for this route. The dashboard keeps the wordmark.
   const route = useMemo(() => resolveRoute(pathname), [pathname])
   const isHome = pathname === '/dashboard'
