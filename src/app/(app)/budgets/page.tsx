@@ -4,6 +4,7 @@ import { getHouseholdContext } from '@/lib/household'
 import { addMonths, formatMoney, monthLabel, monthStartISO } from '@/lib/format'
 import { budgetTotals, effectiveBudgets, monthsInRange } from '@/lib/budget'
 import { cleanTitle } from '@/lib/title'
+import { loadTransferLegIds } from '@/lib/transfer-legs'
 import { MapleLabel } from '@/components/ui/label'
 import { PageHeader } from '@/components/ui/page-header'
 import { MonthNav } from '@/components/ui/month-nav'
@@ -49,6 +50,7 @@ export default async function BudgetsPage({
     { data: overrideRows },
     { data: yearTxRows },
     { data: recurringTxRows },
+    legIds,
   ] = await Promise.all([
     supabase.from('households').select('created_at').eq('id', ctx.householdId).maybeSingle(),
     supabase
@@ -63,7 +65,7 @@ export default async function BudgetsPage({
       .eq('household_id', ctx.householdId),
     supabase
       .from('transaction_splits')
-      .select('category_id, amount_cents, transaction:transactions!inner(occurred_on)')
+      .select('transaction_id, category_id, amount_cents, transaction:transactions!inner(occurred_on)')
       .eq('household_id', ctx.householdId)
       .gt('amount_cents', 0)
       .gte('transaction.occurred_on', month)
@@ -76,7 +78,7 @@ export default async function BudgetsPage({
       .lte('month', month),
     supabase
       .from('transaction_splits')
-      .select('category_id, amount_cents, transaction:transactions!inner(occurred_on)')
+      .select('transaction_id, category_id, amount_cents, transaction:transactions!inner(occurred_on)')
       .eq('household_id', ctx.householdId)
       .gt('amount_cents', 0)
       .gte('transaction.occurred_on', yearStart)
@@ -86,12 +88,15 @@ export default async function BudgetsPage({
     // logical merchant lives on a single transaction, not split by category.
     supabase
       .from('transactions')
-      .select('amount_cents, description, occurred_on, account_id')
+      .select('id, amount_cents, description, occurred_on, account_id')
       .eq('household_id', ctx.householdId)
       .gt('amount_cents', 0)
       .gte('occurred_on', recurringStart)
       .lt('occurred_on', month)
       .order('occurred_on'),
+    // Legs of own-account transfers (a card payment, a move into savings)
+    // are not spending: actuals and recurring detection skip them.
+    loadTransferLegIds(supabase, ctx.householdId),
   ])
 
   const categories: Category[] = (catRows ?? []) as Category[]
@@ -99,7 +104,7 @@ export default async function BudgetsPage({
 
   const actualDirect = new Map<string, number>()
   for (const tx of txRows ?? []) {
-    if (!tx.category_id) continue
+    if (!tx.category_id || legIds.has(tx.transaction_id as string)) continue
     actualDirect.set(tx.category_id, (actualDirect.get(tx.category_id) ?? 0) + Number(tx.amount_cents))
   }
   const actualRolled = new Map<string, number>()
@@ -128,7 +133,7 @@ export default async function BudgetsPage({
 
   const ytdActualDirect = new Map<string, number>()
   for (const tx of yearTxRows ?? []) {
-    if (!tx.category_id) continue
+    if (!tx.category_id || legIds.has(tx.transaction_id as string)) continue
     ytdActualDirect.set(tx.category_id, (ytdActualDirect.get(tx.category_id) ?? 0) + Number(tx.amount_cents))
   }
   const ytdActualRolled = new Map<string, number>()
@@ -173,10 +178,12 @@ export default async function BudgetsPage({
   // (normalized description, exact amount) key. Any group that appeared in
   // ≥ 2 distinct months is treated as recurring. We sum one occurrence per
   // group to approximate the monthly recurring outflow.
-  type RecurringRow = { amount_cents: number; description: string | null; occurred_on: string }
+  type RecurringRow = { id: string; amount_cents: number; description: string | null; occurred_on: string }
   const recurringRows = (recurringTxRows ?? []) as RecurringRow[]
   const groups = new Map<string, { description: string; amount: number; months: Set<string> }>()
   for (const tx of recurringRows) {
+    // A monthly card payment repeats like a bill but is a transfer, not spend.
+    if (legIds.has(tx.id)) continue
     const desc = (tx.description ?? '').trim()
     if (!desc) continue
     const norm = desc.toLowerCase().replace(/\s+/g, ' ').replace(/[#0-9]+$/, '').trim()

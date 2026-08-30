@@ -7,6 +7,7 @@ import { computeBalancesByPeriod, computePeriodStatement, nextAutoCloseDate } fr
 import { loadSettlementData } from '@/lib/settlement-data'
 import { buildSettlementMatchContext, candidateMember, decide } from '@/lib/settlement-detect'
 import { ruleMatches, type TransactionRule } from '@/lib/transaction-rules'
+import { loadTransferLegIds } from '@/lib/transfer-legs'
 import { ownershipLabel } from '@/lib/tx-scope'
 import { Sparkline, type SparklinePoint } from '@/components/sparkline'
 import { PageHeader } from '@/components/ui/page-header'
@@ -25,7 +26,7 @@ import { RecordSettlementForm } from './record-form'
 import { AwaitingSettlementCard, OpenPeriodCard, type LineVM } from './period-card'
 import { PeriodHistory, type PeriodVM } from './period-history'
 import { PaymentPrompts, type PaymentPromptVM } from './payment-prompts'
-import { DetectTransfersNudge } from './detect-nudge'
+import { DetectSettlementsNudge } from './detect-nudge'
 
 export const dynamic = 'force-dynamic'
 
@@ -79,6 +80,7 @@ export default async function SharedPage({
     data,
     { data: periodRows },
     { data: recentTx },
+    transferLegIds,
   ] = await Promise.all([
     supabase
       .from('accounts')
@@ -114,6 +116,9 @@ export default async function SharedPage({
       .gte('occurred_on', addMonthsISO(today, -3))
       .order('occurred_on', { ascending: false })
       .limit(2000),
+    // An e-Transfer between two of the household's own accounts is a
+    // transfer, never a payment between members - keep it out of the prompts.
+    loadTransferLegIds(supabase, ctx.householdId),
   ])
 
   const accountRows = (accounts ?? []) as Account[]
@@ -239,7 +244,7 @@ export default async function SharedPage({
       }
       if (!settlementRules.some((r) => ruleMatches(r, tx))) continue
       const member = candidateMember(tx, accountOwner)
-      if (!member || matchCtx.linkedTxIds.has(tx.id)) continue
+      if (!member || matchCtx.linkedTxIds.has(tx.id) || transferLegIds.has(tx.id)) continue
       const m = decide(matchCtx, { transaction_id: tx.id, member_id: member, amount_cents: tx.amount_cents, occurred_on: t.occurred_on as string })
       const others = memberRows.filter((x) => x.id !== member).map((x) => ({ id: x.id, name: x.display_name }))
       // Auto-placeable rows (rule created without a retro-apply, say) are
@@ -362,7 +367,7 @@ export default async function SharedPage({
           closeDay={data.closeDay}
         />
       )}
-      {settlementRules.length === 0 && <DetectTransfersNudge />}
+      {settlementRules.length === 0 && <DetectSettlementsNudge />}
 
       {/* 2. Statements waiting to be paid. */}
       {awaiting.map((p) => {

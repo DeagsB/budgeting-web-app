@@ -1,8 +1,10 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { updateTransaction, deleteTransaction, setTransactionCategory } from './actions'
+import { updateTransaction, deleteTransaction, setTransactionCategory, unlinkTransfer } from './actions'
 import { toggleShared } from '@/app/(app)/shared/actions'
+import { transferNoun } from '@/lib/transfer-label'
+import type { TransferKind } from '@/lib/transfer-match'
 import { useToast } from '@/components/ui/toast'
 import { CategorySelect } from './category-select'
 import { QuickCategorize } from './quick-categorize'
@@ -39,6 +41,13 @@ type TransactionVM = {
    * the server would reject them anyway.
    */
   canEdit?: boolean
+  /**
+   * Set when this row is one leg of a transfer between the household's own
+   * accounts. The leg is neither income nor expense: it reads as the label
+   * ("Card payment to Visa") instead of a category, never asks to be
+   * categorized, and offers "Not a transfer" instead of sharing.
+   */
+  transfer?: { transferId: string; label: string; kind: TransferKind } | null
 }
 
 export function TransactionRow({
@@ -97,11 +106,15 @@ export function TransactionRow({
     setCategorizeError(null)
   }
 
-  const effectiveUncategorized = isUncategorized && optimisticCategoryId === null
+  // A transfer leg is never "to categorize": the pair is what explains it.
+  const effectiveUncategorized = isUncategorized && optimisticCategoryId === null && !t.transfer
   const effectiveCategorySummary =
     optimisticCategoryId !== null
       ? (categoryById.get(optimisticCategoryId)?.name ?? t.categorySummary)
       : t.categorySummary
+  // What the meta line says about the row: the transfer label on a leg (the
+  // category underneath is cosmetic there), the category summary otherwise.
+  const metaLabel = t.transfer ? t.transfer.label : effectiveCategorySummary
 
   function handleQuickPick(categoryId: string) {
     setCategorizeError(null)
@@ -131,6 +144,19 @@ export function TransactionRow({
       if (res && 'error' in res) toast({ title: res.error, tone: 'ink' })
       else toast({ title: t.isShared ? 'No longer shared.' : 'Shared with the household.', tone: 'leaf' })
     })
+  }
+
+  // "Not a transfer": both legs go back to plain rows. The page revalidates
+  // (pill and label drop on both), and the legs that are uncategorized again
+  // are pushed into the header count right away so it never lags the list.
+  async function onUnlinkTransfer(fd: FormData) {
+    const res = await unlinkTransfer(fd)
+    if ('error' in res) {
+      toast({ title: res.error, tone: 'ink' })
+      return
+    }
+    uncategorizedCount?.markRequeued(res.requeued)
+    toast({ title: 'No longer a transfer.', tone: 'leaf' })
   }
 
   // ───────── EDIT MODE ─────────
@@ -248,16 +274,19 @@ export function TransactionRow({
   // ───────── DISPLAY MODE ─────────
   // Sign convention: positive cents = outflow (spent), negative = inflow.
   // Non-color cue: a leading '-' on outflow, '+' on inflow, so direction is
-  // legible without relying on the maple/leaf tint alone.
+  // legible without relying on the maple/leaf tint alone. A transfer leg
+  // keeps the glyph (the money did leave / land on this account) but drops
+  // the tint: it is neither spending nor income.
   const isExpense = t.amount_cents > 0
-  const amountTone = isExpense ? 'maple' : 'leaf'
+  const amountTone = t.transfer ? 'ink' : isExpense ? 'maple' : 'leaf'
   const sign = isExpense ? '-' : '+'
   const totalAbs = Math.abs(t.amount_cents)
 
-  // Small color disc derived from category name (stable, brand-safe palette).
-  // Uses the effective (optimistic) summary so the disc and initial update
-  // the instant a quick-categorize chip lands, alongside the badge below.
-  const disc = discColorFor(effectiveCategorySummary)
+  // Small color disc derived from the meta label (stable, brand-safe
+  // palette). Uses the effective (optimistic) summary so the disc and initial
+  // update the instant a quick-categorize chip lands, alongside the badge
+  // below.
+  const disc = discColorFor(metaLabel)
 
   return (
     <li className="flex flex-col">
@@ -267,26 +296,34 @@ export function TransactionRow({
           style={{ background: disc.bg, color: disc.fg }}
           aria-hidden
         >
-          {initialFor(effectiveCategorySummary, t.description)}
+          {initialFor(metaLabel, t.description)}
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-3">
-            <div className="min-w-0 truncate font-medium text-ink">
-              {t.description ?? '-'}
+            {/* The title truncates on its own; the pills never do - a long
+                merchant name must not swallow the Split / Transfer / Shared
+                badge that says what kind of row this is. */}
+            <div className="flex min-w-0 items-center gap-1.5 font-medium text-ink">
+              <span className="min-w-0 truncate">{t.description ?? '-'}</span>
               {t.isSplit && (
-                <span className="ml-2 inline-flex items-center rounded-full bg-paper-2 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-ink-2">
+                <span className="inline-flex shrink-0 items-center rounded-full bg-paper-2 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-ink-2">
                   Split
                 </span>
               )}
+              {t.transfer && (
+                <span className="inline-flex shrink-0 items-center rounded-full bg-paper-2 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-ink-2">
+                  {transferNoun(t.transfer.kind)}
+                </span>
+              )}
               {t.isShared && (
-                <span className="ml-1.5 inline-flex items-center rounded-full bg-leaf-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-leaf">
+                <span className="inline-flex shrink-0 items-center rounded-full bg-leaf-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-leaf">
                   {t.isRuleShared ? 'Auto-shared' : 'Shared'}
                 </span>
               )}
             </div>
             <div className="shrink-0 text-[17px] tracking-[-0.01em]">
-              <span className={isExpense ? 'text-maple' : 'text-leaf'} aria-hidden>
+              <span className={t.transfer ? 'text-ink' : isExpense ? 'text-maple' : 'text-leaf'} aria-hidden>
                 {sign}
               </span>
               <Amount cents={totalAbs} tone={amountTone} className="text-[17px]" />
@@ -305,7 +342,7 @@ export function TransactionRow({
                 Uncategorized
               </span>
             ) : (
-              <span className="truncate">{effectiveCategorySummary}</span>
+              <span className="truncate">{metaLabel}</span>
             )}
             <span>·</span>
             <span>{t.accountName}</span>
@@ -362,31 +399,51 @@ export function TransactionRow({
             >
               Edit
             </button>
-            <button
-              type="button"
-              onClick={onToggleShare}
-              disabled={sharePending}
-              aria-pressed={t.isShared}
-              className={
-                'inline-flex min-h-[44px] items-center gap-1 rounded-md px-1 font-semibold transition-colors disabled:opacity-50 ' +
-                (t.isShared ? 'text-ink-2 hover:bg-cream-2 hover:text-ink' : 'text-leaf-deep hover:bg-leaf-soft')
-              }
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <circle cx="9" cy="8" r="3" />
-                <circle cx="17" cy="9" r="2.4" />
-                <path d="M3 19c0-3.3 2.7-6 6-6s6 2.7 6 6" />
-                <path d="M15 19c0-2 1.5-4 4-4" />
-              </svg>
-              {sharePending ? (t.isShared ? 'Unsharing…' : 'Sharing…') : t.isShared ? 'Unshare' : 'Share'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setRuleOpen(true)}
-              className="inline-flex min-h-[44px] items-center rounded-md px-1 font-semibold text-leaf-deep transition-colors hover:bg-leaf-soft"
-            >
-              Auto-share
-            </button>
+            {/* Sharing a transfer leg is meaningless (nobody spent anything),
+                and dropping Share / Auto-share is also what keeps the rail on
+                one line at 390px once "Not a transfer" joins it. ConfirmButton
+                renders its own <form>; this rail is a plain div, so that is
+                fine here. */}
+            {t.transfer ? (
+              <ConfirmButton
+                action={onUnlinkTransfer}
+                formData={{ transfer_id: t.transfer.transferId }}
+                prompt="Not a transfer?"
+                description="Both sides go back to being a normal expense and income, and Maple won't pair them again."
+                confirmLabel="Not a transfer"
+                className="inline-flex min-h-[44px] items-center rounded-md px-1 font-semibold text-ink-2 transition-colors hover:bg-cream-2 hover:text-ink disabled:opacity-50"
+              >
+                Not a transfer
+              </ConfirmButton>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={onToggleShare}
+                  disabled={sharePending}
+                  aria-pressed={t.isShared}
+                  className={
+                    'inline-flex min-h-[44px] items-center gap-1 rounded-md px-1 font-semibold transition-colors disabled:opacity-50 ' +
+                    (t.isShared ? 'text-ink-2 hover:bg-cream-2 hover:text-ink' : 'text-leaf-deep hover:bg-leaf-soft')
+                  }
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <circle cx="9" cy="8" r="3" />
+                    <circle cx="17" cy="9" r="2.4" />
+                    <path d="M3 19c0-3.3 2.7-6 6-6s6 2.7 6 6" />
+                    <path d="M15 19c0-2 1.5-4 4-4" />
+                  </svg>
+                  {sharePending ? (t.isShared ? 'Unsharing…' : 'Sharing…') : t.isShared ? 'Unshare' : 'Share'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRuleOpen(true)}
+                  className="inline-flex min-h-[44px] items-center rounded-md px-1 font-semibold text-leaf-deep transition-colors hover:bg-leaf-soft"
+                >
+                  Auto-share
+                </button>
+              </>
+            )}
             </div>
           )}
         </div>

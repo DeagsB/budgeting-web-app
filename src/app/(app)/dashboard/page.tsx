@@ -4,6 +4,7 @@ import { addMonths, monthStartISO } from '@/lib/format'
 import { type AccountType } from '@/lib/domain'
 import { effectiveBudgets, type BudgetOverride, type StandingBudget } from '@/lib/budget'
 import { getPlaidAttention } from '@/lib/plaid-attention'
+import { loadTransferLegIds } from '@/lib/transfer-legs'
 import {
   netWorthTrail as computeTrail,
   accountBalanceAt,
@@ -58,6 +59,7 @@ export default async function DashboardPage() {
     balanceTxRes,
     allSplitsRes,
     plaidAttentionItems,
+    legIds,
   ] = await Promise.all([
     supabase.from('households').select('name').eq('id', ctx.householdId).maybeSingle(),
     supabase
@@ -86,7 +88,7 @@ export default async function DashboardPage() {
       .lt('occurred_on', currentMonthEnd),
     supabase
       .from('transaction_splits')
-      .select('category_id, amount_cents, transaction:transactions!inner(occurred_on)')
+      .select('transaction_id, category_id, amount_cents, transaction:transactions!inner(occurred_on)')
       .eq('household_id', ctx.householdId)
       .gte('transaction.occurred_on', currentMonth)
       .lt('transaction.occurred_on', currentMonthEnd),
@@ -114,7 +116,7 @@ export default async function DashboardPage() {
     // Prior 3 months for recurring detection.
     supabase
       .from('transactions')
-      .select('amount_cents, description, occurred_on')
+      .select('id, amount_cents, description, occurred_on')
       .eq('household_id', ctx.householdId)
       .gt('amount_cents', 0)
       .gte('occurred_on', recurringStart)
@@ -146,6 +148,11 @@ export default async function DashboardPage() {
     // Linked banks that have stopped feeding transactions/balances and need
     // reconnecting - rendered as a notice under the greeting.
     getPlaidAttention(supabase, ctx.householdId),
+    // Legs of own-account transfers. Income / Spent, the category breakdown,
+    // recurring detection and the "to categorize" pile skip them; balances,
+    // the net-worth trail and the per-account card stats keep them because
+    // the money really moved between those accounts.
+    loadTransferLegIds(supabase, ctx.householdId),
   ])
 
   // If any query errored, the derived figures below silently read as $0/empty.
@@ -185,6 +192,7 @@ export default async function DashboardPage() {
     account_id: t.account_id,
   }))
   const splits = (splitsRes.data ?? []).map((s) => ({
+    transaction_id: s.transaction_id as string,
     category_id: s.category_id,
     amount_cents: Number(s.amount_cents),
   }))
@@ -250,10 +258,13 @@ export default async function DashboardPage() {
     month_tx_count: monthCountByAccount.get(a.id) ?? 0,
   }))
 
-  // Month totals: income (negative txns), expenses (positive), net.
+  // Month totals: income (negative txns), expenses (positive), net. Transfer
+  // legs are neither - unlike the per-account stats above, where the Visa's
+  // "Paid" really is the inflow leg.
   let income = 0
   let expenses = 0
   for (const tx of transactions) {
+    if (legIds.has(tx.id)) continue
     if (tx.amount_cents < 0) income += -tx.amount_cents
     else if (tx.amount_cents > 0) expenses += tx.amount_cents
   }
@@ -263,7 +274,7 @@ export default async function DashboardPage() {
   // mirrors transactions/page.tsx exactly).
   const accountVisibleIds = new Set(accounts.map((a) => a.id))
   const allSplits = (allSplitsRes.data ?? []) as Array<{ transaction_id: string; category_id: string | null }>
-  const inbox = computeInboxSummary(balanceTx, allSplits, accountVisibleIds, ctx.memberId, currentMonth)
+  const inbox = computeInboxSummary(balanceTx, allSplits, accountVisibleIds, ctx.memberId, currentMonth, legIds)
 
   // Spending breakdown by category. Splits only on positive amounts (outflows).
   // Roll child category spend into the parent so the breakdown bar shows
@@ -273,7 +284,7 @@ export default async function DashboardPage() {
 
   const spendByCategory = new Map<string, number>()
   for (const s of splits) {
-    if (s.amount_cents <= 0 || !s.category_id) continue
+    if (s.amount_cents <= 0 || !s.category_id || legIds.has(s.transaction_id)) continue
     const parentId = parentOf.get(s.category_id) ?? s.category_id
     const rootId = parentId ?? s.category_id
     spendByCategory.set(rootId, (spendByCategory.get(rootId) ?? 0) + s.amount_cents)
@@ -324,9 +335,10 @@ export default async function DashboardPage() {
     }))
 
   // Recurring detection - same algorithm as the budgets page.
-  type RecurRow = { amount_cents: number | string; description: string | null; occurred_on: string }
+  type RecurRow = { id: string; amount_cents: number | string; description: string | null; occurred_on: string }
   const recGroups = new Map<string, { description: string; amount: number; months: Set<string> }>()
   for (const tx of (recurringTxRes.data ?? []) as RecurRow[]) {
+    if (legIds.has(tx.id)) continue
     const desc = (tx.description ?? '').trim()
     if (!desc) continue
     const norm = desc.toLowerCase().replace(/\s+/g, ' ').replace(/[#0-9]+$/, '').trim()

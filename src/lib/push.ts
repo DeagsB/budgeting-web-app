@@ -11,6 +11,7 @@ import webpush from 'web-push'
 import { createServiceClient } from '@/lib/supabase/service'
 import { formatMoney } from '@/lib/format'
 import { effectiveBudgets } from '@/lib/budget'
+import { loadTransferLegIds } from '@/lib/transfer-legs'
 
 export type PushPayload = { title: string; body: string; url?: string; tag?: string }
 
@@ -218,14 +219,23 @@ export async function notifyBudgetOverspendIfCrossed(
     .eq('parent_id', budgetCatId)
   const spendCatIds = [budgetCatId, ...((children ?? []).map((c) => c.id as string))]
 
-  const { data: splits } = await service
-    .from('transaction_splits')
-    .select('amount_cents, transaction:transactions!inner(occurred_on)')
-    .eq('household_id', householdId)
-    .in('category_id', spendCatIds)
-    .gte('transaction.occurred_on', month)
-    .lt('transaction.occurred_on', nextMonth)
-  const spend = (splits ?? []).reduce((s, r) => s + Math.max(0, Number(r.amount_cents)), 0)
+  // Transfer legs are skipped here too, even though callers already hold
+  // pushes for legs: a leg that carries a category (a rule fired on it, or a
+  // user picked one before the pair formed) must not count as spend.
+  const [{ data: splits }, legIds] = await Promise.all([
+    service
+      .from('transaction_splits')
+      .select('transaction_id, amount_cents, transaction:transactions!inner(occurred_on)')
+      .eq('household_id', householdId)
+      .in('category_id', spendCatIds)
+      .gte('transaction.occurred_on', month)
+      .lt('transaction.occurred_on', nextMonth),
+    loadTransferLegIds(service, householdId),
+  ])
+  const spend = (splits ?? []).reduce(
+    (s, r) => (legIds.has(r.transaction_id as string) ? s : s + Math.max(0, Number(r.amount_cents))),
+    0,
+  )
   const prevSpend = spend - tx.amountCents
 
   // Only when THIS transaction crossed the line.

@@ -15,6 +15,8 @@ import { UncategorizedReview, type TriageTxn } from './uncategorized-review'
 import { UncategorizedCountProvider, UncategorizedCountLine } from './uncategorized-count'
 import { isUncategorizedSplitSet } from '@/lib/tx-uncategorized'
 import { classifyTx, isTxEditable, parseScope } from '@/lib/tx-scope'
+import { loadTransfers } from '@/lib/transfer-legs'
+import { transferMeta } from '@/lib/transfer-label'
 
 type Txn = {
   id: string
@@ -69,6 +71,7 @@ export default async function TransactionsPage({
     { data: recentSplits },
     { data: allTxLite },
     { count: plaidItemCount },
+    transfers,
   ] = await Promise.all([
     supabase
       .from('accounts')
@@ -115,11 +118,18 @@ export default async function TransactionsPage({
       .select('id', { count: 'exact', head: true })
       .eq('household_id', ctx.householdId)
       .neq('status', 'removed'),
+    // Transfer pairs between the household's own accounts. A leg is neither
+    // spending nor income, so it stays out of the pile and the tiles and
+    // reads as "Card payment to Visa" instead of a category.
+    loadTransfers(supabase, ctx.householdId),
   ])
   const hasSyncUrl = !!household?.gmail_sync_url
   const hasPlaidItem = (plaidItemCount ?? 0) > 0
+  const transferLegIds = transfers.legIds
+  const transferByTx = transfers.byTx
 
   const accountName = new Map((accounts ?? []).map((a) => [a.id, a.name]))
+  const accountType = new Map((accounts ?? []).map((a) => [a.id, a.type as string]))
   const categoryName = new Map((categories ?? []).map((c) => [c.id, c.name]))
   const memberName = new Map((members ?? []).map((m) => [m.id, m.display_name]))
 
@@ -136,11 +146,13 @@ export default async function TransactionsPage({
   // backlog. A transaction is uncategorized when it has at most one split and
   // that split's category is null - reused from `@/lib/tx-uncategorized` so
   // this can never drift from the per-row check below. A title is never
-  // required to clear the queue.
+  // required to clear the queue. A transfer leg counts as sorted without a
+  // category being written: the pair is what explains it.
   const allUncategorizedIds = new Set<string>()
   let uncategorizedThisMonth = 0
   let uncategorizedEarlier = 0
   for (const t of (allTxLite ?? []) as unknown as TxLite[]) {
+    if (transferLegIds.has(t.id)) continue
     if (!canEditRow(t.account_id, t.member_id)) continue
     if (!isUncategorizedSplitSet(t.transaction_splits ?? [])) continue
     allUncategorizedIds.add(t.id)
@@ -183,23 +195,54 @@ export default async function TransactionsPage({
   }
 
   const txIds = transactions.map((t) => t.id)
+  // The other leg of every listed transfer leg, so the label can name the
+  // counterpart account. Fetched through RLS on purpose: a leg on another
+  // member's private account comes back missing and the row just says
+  // "Transfer" rather than leaking where the money went.
+  const counterpartIds = transactions
+    .map((t) => transferByTx.get(t.id)?.counterpartTxId)
+    .filter((id): id is string => !!id)
   let splitsList: Split[] = []
   const shareCountByTx = new Map<string, number>()
   const ruleSharedTxIds = new Set<string>()
+  const counterpartAccountByTx = new Map<string, string>()
   if (txIds.length > 0) {
-    const [{ data: sp }, { data: sh }] = await Promise.all([
+    const [{ data: sp }, { data: sh }, { data: cp }] = await Promise.all([
       supabase
         .from('transaction_splits')
         .select('transaction_id, category_id, amount_cents, sort_order')
         .in('transaction_id', txIds)
         .order('sort_order'),
       supabase.from('transaction_shares').select('transaction_id, rule_id').in('transaction_id', txIds),
+      counterpartIds.length > 0
+        ? supabase.from('transactions').select('id, account_id').in('id', counterpartIds).eq('household_id', ctx.householdId)
+        : Promise.resolve({ data: [] as { id: string; account_id: string }[] }),
     ])
     splitsList = (sp ?? []) as Split[]
     for (const r of sh ?? []) {
       shareCountByTx.set(r.transaction_id, (shareCountByTx.get(r.transaction_id) ?? 0) + 1)
       if (r.rule_id) ruleSharedTxIds.add(r.transaction_id)
     }
+    for (const r of (cp ?? []) as { id: string; account_id: string }[]) {
+      counterpartAccountByTx.set(r.id, r.account_id)
+    }
+  }
+
+  // How a transfer leg reads on its row, or null for an ordinary row. The
+  // kind keys on where the money landed (the in leg's account), which is this
+  // row for an inflow and the counterpart for an outflow. Archived accounts
+  // are not in `accountName`, so a leg against one reads as a bare "Transfer".
+  const transferFor = (t: Txn) => {
+    const leg = transferByTx.get(t.id)
+    if (!leg) return null
+    const counterpartAccountId = counterpartAccountByTx.get(leg.counterpartTxId) ?? null
+    const inAccountId = leg.side === 'in' ? t.account_id : counterpartAccountId
+    const meta = transferMeta({
+      side: leg.side,
+      counterpartName: counterpartAccountId ? (accountName.get(counterpartAccountId) ?? null) : null,
+      inAccountType: inAccountId ? (accountType.get(inAccountId) ?? null) : null,
+    })
+    return { transferId: leg.transferId, label: meta.label, kind: meta.kind }
   }
 
   const canEdit = (t: Txn) => canEditRow(t.account_id, t.member_id)
@@ -226,6 +269,7 @@ export default async function TransactionsPage({
   // exactly what was fetched.
   const uncategorizedIds = new Set<string>()
   for (const t of transactions) {
+    if (transferLegIds.has(t.id)) continue
     if (!canEdit(t)) continue
     if (isUncategorizedSplitSet(splitsByTx.get(t.id) ?? [])) uncategorizedIds.add(t.id)
   }
@@ -233,8 +277,12 @@ export default async function TransactionsPage({
   // Totals computed from the *filtered* set (account + search applied in the
   // query, category + scope applied above) so the summary always matches the
   // visible list. Sign convention: positive cents = outflow, negative = inflow.
-  const outflow = transactions.filter((t) => t.amount_cents > 0).reduce((s, t) => s + t.amount_cents, 0)
-  const inflow = transactions.filter((t) => t.amount_cents < 0).reduce((s, t) => s - t.amount_cents, 0)
+  // Transfer legs are money moved, not spent or earned, so they stay out of
+  // all three tiles; the per-day total below keeps them, since it is the
+  // day's cashflow rather than its spending.
+  const flowTxs = transactions.filter((t) => !transferLegIds.has(t.id))
+  const outflow = flowTxs.filter((t) => t.amount_cents > 0).reduce((s, t) => s + t.amount_cents, 0)
+  const inflow = flowTxs.filter((t) => t.amount_cents < 0).reduce((s, t) => s - t.amount_cents, 0)
   const net = inflow - outflow
 
   // "To categorize" - this month's uncategorized rows, hoisted to the top of
@@ -361,6 +409,7 @@ export default async function TransactionsPage({
           member_id: t.member_id,
           payerName: t.member_id ? (memberName.get(t.member_id) ?? null) : null,
           isMine: t.member_id !== null && t.member_id === ctx.memberId,
+          transfer: transferFor(t),
         }}
         accounts={accountOptions}
         categories={categoryOptions}
@@ -415,9 +464,11 @@ export default async function TransactionsPage({
           instead of carrying stale local state across it. */}
       <UncategorizedCountProvider
         key={month}
+        month={month}
         initialThisMonth={uncategorizedThisMonth}
         earlier={uncategorizedEarlier}
         earlierHref={uncategorizedHref}
+        countedIds={Array.from(allUncategorizedIds)}
       >
         {/* Household-wide "to categorize" count + secondary one-by-one review
             - hidden on the uncategorized-scope view itself, since its own

@@ -111,4 +111,44 @@ describe('computeInboxSummary', () => {
     const summary = computeInboxSummary([], [], VISIBLE, 'me', '2026-08-01')
     expect(summary).toEqual({ count: 0, amountCents: 0, accountCount: 0, hasEarlierMonths: false })
   })
+
+  describe('transfer legs', () => {
+    it('does not count a transfer leg even when its only split has a null category', () => {
+      const splits: InboxSplit[] = [{ transaction_id: 't1', category_id: null }]
+      const summary = computeInboxSummary(
+        [tx({ id: 't1' })],
+        splits,
+        VISIBLE,
+        'me',
+        '2026-08-01',
+        new Set(['t1']),
+      )
+      expect(summary.count).toBe(0)
+    })
+
+    it('contributes nothing to amountCents or accountCount from a leg', () => {
+      const txs = [
+        tx({ id: 't1', account_id: 'acc-1', amount_cents: 100000 }),
+        tx({ id: 't2', account_id: 'acc-2', amount_cents: -100000 }),
+        tx({ id: 't3', account_id: 'acc-1', amount_cents: 2500 }),
+      ]
+      const summary = computeInboxSummary(txs, [], VISIBLE, 'me', '2026-08-01', new Set(['t1', 't2']))
+      expect(summary.count).toBe(1)
+      expect(summary.amountCents).toBe(2500)
+      expect(summary.accountCount).toBe(1)
+    })
+
+    it('does not set hasEarlierMonths for a leg in an earlier month', () => {
+      const summary = computeInboxSummary(
+        [tx({ id: 't1', occurred_on: '2026-07-15' })],
+        [],
+        VISIBLE,
+        'me',
+        '2026-08-01',
+        new Set(['t1']),
+      )
+      expect(summary.hasEarlierMonths).toBe(false)
+      expect(summary.count).toBe(0)
+    })
+  })
 })

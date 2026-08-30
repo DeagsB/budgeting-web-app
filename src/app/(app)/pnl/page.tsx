@@ -10,6 +10,7 @@ import { Amount } from '@/components/ui/amount'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { colorForCategory } from '@/lib/category-colors'
+import { loadTransferLegIds } from '@/lib/transfer-legs'
 import Link from 'next/link'
 
 /**
@@ -30,15 +31,15 @@ export default async function PnlPage({
   if (!ctx) return null
   const supabase = await createClient()
 
-  const [{ data: splits }, { data: txs }, { data: cats }] = await Promise.all([
+  const [{ data: splits }, { data: txs }, { data: cats }, legIds] = await Promise.all([
     supabase
       .from('transaction_splits')
-      .select('category_id, amount_cents, transaction:transactions!inner(occurred_on)')
+      .select('transaction_id, category_id, amount_cents, transaction:transactions!inner(occurred_on)')
       .eq('household_id', ctx.householdId)
       .gte('transaction.occurred_on', yearStart),
     supabase
       .from('transactions')
-      .select('amount_cents, occurred_on')
+      .select('id, amount_cents, occurred_on')
       .eq('household_id', ctx.householdId)
       .gte('occurred_on', yearStart),
     supabase
@@ -47,6 +48,9 @@ export default async function PnlPage({
       .eq('household_id', ctx.householdId)
       .is('archived_at', null)
       .order('sort_order'),
+    // Legs of own-account transfers (chequing -> Visa, chequing -> TFSA) are
+    // neither income nor expense; every figure on this page skips them.
+    loadTransferLegIds(supabase, ctx.householdId),
   ])
 
   // Build month buckets (selected year, Jan–Dec)
@@ -59,8 +63,10 @@ export default async function PnlPage({
     buckets.findIndex((b) => b.month.slice(0, 7) === iso.slice(0, 7))
 
   // No `direction` column - sign convention is amount_cents > 0 means an
-  // outflow (expense) and amount_cents < 0 means an inflow (income).
+  // outflow (expense) and amount_cents < 0 means an inflow (income). A
+  // transfer leg is neither: the money stayed in the household.
   for (const t of txs ?? []) {
+    if (legIds.has(t.id as string)) continue
     const i = idx(t.occurred_on as string)
     if (i < 0) continue
     const raw = Number(t.amount_cents)
@@ -75,6 +81,7 @@ export default async function PnlPage({
   const nameOf = new Map<string, string>((cats ?? []).map((c) => [c.id, c.name]))
   const catTotals = new Map<string, number>()
   for (const s of splits ?? []) {
+    if (legIds.has(s.transaction_id as string)) continue
     const occ = (s.transaction as { occurred_on?: string } | null)?.occurred_on
     if (!occ || occ.slice(0, 7) !== selected.slice(0, 7)) continue
     const cents = Number(s.amount_cents)

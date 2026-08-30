@@ -44,6 +44,9 @@ function isUncategorized(splits: { category_id: string | null }[]): boolean {
  * @param accountVisibleIds  Ids of accounts visible to this login (own + joint).
  * @param myMemberId     The signed-in member, for the "I paid it" editability carve-out.
  * @param currentMonth   YYYY-MM-01 - transactions dated before this count as "earlier".
+ * @param transferLegIds Legs of own-account transfers. They count as categorized
+ *                       without a category (the pair, not a category, explains
+ *                       them), so they never enter the pile.
  */
 export function computeInboxSummary(
   transactions: InboxTx[],
@@ -51,6 +54,7 @@ export function computeInboxSummary(
   accountVisibleIds: Set<string>,
   myMemberId: string | null,
   currentMonth: string,
+  transferLegIds: Set<string> = new Set(),
 ): InboxSummary {
   const splitsByTx = new Map<string, { category_id: string | null }[]>()
   for (const s of splits) {
@@ -65,6 +69,7 @@ export function computeInboxSummary(
   const accountIds = new Set<string>()
 
   for (const t of transactions) {
+    if (transferLegIds.has(t.id)) continue
     const editable = isTxEditable({
       accountVisible: accountVisibleIds.has(t.account_id),
       payerId: t.member_id,
