@@ -1,19 +1,24 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { getHouseholdContext } from '@/lib/household'
+import { getHouseholdContext, getSessionUser } from '@/lib/household'
+import { perfTimer } from '@/lib/perf-timing'
 import { nextOnboardingStep, onboardingPath } from '@/lib/onboarding'
 import { AppShell } from './shell'
 
 export const dynamic = 'force-dynamic'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient()
-  const { data } = await supabase.auth.getUser()
-  const user = data?.user
+  const lap = perfTimer('layout')
+  // One auth round trip per request: getHouseholdContext() (also called by
+  // every page) reuses this cached user instead of asking Supabase again.
+  const user = await getSessionUser()
   if (!user) redirect('/sign-in')
 
   const ctx = await getHouseholdContext()
   if (!ctx) redirect('/onboarding')
+  lap('ctx')
+
+  const supabase = await createClient()
 
   const [{ data: household }, { data: me }, { count: accountCount }] = await Promise.all([
     supabase.from('households').select('name, onboarding_completed_at').eq('id', ctx.householdId).single(),
@@ -33,6 +38,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     memberOnboardedAt: (me?.onboarded_at as string | null) ?? null,
     hasMember: ctx.memberId !== null,
   })
+  lap('queries')
   if (step !== 'done') redirect(onboardingPath(step))
 
   return (
