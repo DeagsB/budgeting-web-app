@@ -10,7 +10,7 @@ import { ensureState } from './auth.ts'
 import {
   BASE_URL, DEVICE, RUNS, arg, kb, round, stamp, summarize, writeJson,
 } from './config.ts'
-import { INIT_SCRIPT, NO_VIEW_TRANSITIONS_SCRIPT } from './init-script.ts'
+import { INIT_SCRIPT, PWA_SCRIPT, NO_VIEW_TRANSITIONS_SCRIPT } from './init-script.ts'
 import { throttle } from './throttle.ts'
 
 type Bytes = { count: number; raw: number; gzip: number }
@@ -136,6 +136,7 @@ async function main() {
     const context = await browser.newContext({ ...DEVICE, storageState: state, serviceWorkers: 'block' })
     if (!noThrottle) await throttle(context)
     if (!keepVt) await context.addInitScript(NO_VIEW_TRANSITIONS_SCRIPT)
+    await context.addInitScript(PWA_SCRIPT)
     await context.addInitScript(INIT_SCRIPT)
     const page = await context.newPage()
     const bytes = trackBytes(page)
@@ -172,6 +173,7 @@ async function main() {
     const wctx = await browser.newContext({ ...DEVICE, storageState: state })
     if (!noThrottle) await throttle(wctx)
     if (!keepVt) await wctx.addInitScript(NO_VIEW_TRANSITIONS_SCRIPT)
+    await wctx.addInitScript(PWA_SCRIPT)
     await wctx.addInitScript(INIT_SCRIPT)
     const wpage = await wctx.newPage()
     await wpage.goto(url, { waitUntil: 'load', timeout: 120_000 })

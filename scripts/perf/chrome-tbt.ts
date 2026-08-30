@@ -5,7 +5,7 @@ import { ensureState } from './auth.ts'
 import {
   BASE_URL, CPU_THROTTLE, DEVICE, NETWORK, RUNS, arg, round, stamp, summarize, writeJson,
 } from './config.ts'
-import { INIT_SCRIPT } from './init-script.ts'
+import { INIT_SCRIPT, PWA_SCRIPT } from './init-script.ts'
 
 const label = arg('label', 'baseline')
 const route = arg('route', '/dashboard')
@@ -78,6 +78,7 @@ async function main() {
   const all: Record<string, number>[] = []
   for (let i = 0; i < runs; i++) {
     const context = await browser.newContext({ ...DEVICE, storageState: state })
+    await context.addInitScript(PWA_SCRIPT)
     await context.addInitScript(INIT_SCRIPT)
     const page = await context.newPage()
     const r = await measure(page)

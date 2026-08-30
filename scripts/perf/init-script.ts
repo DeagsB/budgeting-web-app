@@ -120,3 +120,8 @@ export const INIT_SCRIPT = `(() => {
 // before the page (dashboard, accounts). Stub it for WebKit runs so the rest
 // of the page can be measured; Chrome runs keep View Transitions on.
 export const NO_VIEW_TRANSITIONS_SCRIPT = `delete Document.prototype.startViewTransition;`
+
+// The target is the installed Home Screen app. Safari exposes that through
+// navigator.standalone (and display-mode: standalone, which cannot be
+// emulated here); the shell gates install-hint work on it.
+export const PWA_SCRIPT = `Object.defineProperty(navigator, 'standalone', { value: true, configurable: true });`
